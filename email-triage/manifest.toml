@@ -1,0 +1,46 @@
+id = "email-triage"
+version = "0.1.0"
+name = "Email Triage"
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app, the triage engine knowhow, and the per-account intent. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
+categories = ["productivity", "communication", "automation"]
+
+setup = """
+Email Triage needs one connected mailbox, one rule chain, and one schedule per
+account. None of that ships with the plugin — it's all workspace state. Walk the
+user through it conversationally.
+
+**Read `knowhow/email-triage.md` first.** It has the `config.json` schema, the
+rule-chain semantics, the notified-ledger dedup, and the shared-account fetch
+state. Everything below assumes you've read it.
+
+Then, per account the user wants triaged:
+
+1. **Connect the mailbox** if it isn't already. Most providers need OAuth now —
+   look up the provider's IMAP/SMTP hosts, then `configure_email`. Check the
+   already-configured accounts first; don't re-do one that's connected.
+
+2. **Build a starting rule chain.** Don't ask them to write rules — ask what
+   they want gone (`delete`), what they want silenced but kept (`read`), and
+   what should always escalate (`notify` / `flag`), then turn the answers into
+   rules. A first chain of 2–5 rules is plenty; the app's Rules tab is where
+   they'll grow it.
+
+3. **Ask what happens to mail the AI judges as needing nothing** — the account's
+   `no_action_clear`: `read` (mark read, keep), `delete` (Trash), or `keep`.
+   Recommend `read` for a shared or work mailbox where deleting could bury
+   someone else's mail, `delete` for a personal one that gets a lot of noise.
+
+4. **Ask for a schedule and create the cron trigger.** Cron is workspace state,
+   so it is deliberately not shipped — you create it. A good default is hourly
+   during waking hours plus one early-morning run; offer that, let them adjust.
+   Each account gets its OWN trigger running the intent at
+   `triggers/email-triage/intents/triage.md` for that account.
+
+Write the accounts into `artifacts/email-triage/config.json`. The app reads that
+file, so it flips from its setup screen to the real dashboard as soon as the
+first account lands.
+
+Finally, tell them the first run is silent unless something actually needs them —
+that's the design, not a failure. Point them at the Email Triage app to watch it.
+"""

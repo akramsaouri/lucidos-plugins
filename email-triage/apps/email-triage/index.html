@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Email Triage</title>
+    <script src="/api/v1/sdk-prefs.js"></script>
+    <link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+    <script src="/api/v1/sdk.js"></script>
+    <style>
+      body { margin: 0; }
+      .wrap {
+        max-width: 62rem;
+        margin: 0 auto;
+        padding: var(--space-xl) var(--space-lg) calc(var(--space-xl) * 2);
+      }
+
+      /* ---- first-run setup ---- */
+      .setup { padding: var(--space-xl); }
+      .setup h2 {
+        margin: 0 0 var(--space-md);
+        font-size: var(--font-size-2xl);
+        color: var(--text-primary);
+      }
+      .setup p {
+        margin: 0 0 var(--space-lg);
+        max-width: 46rem;
+        font-size: var(--font-size-md);
+        line-height: 1.6;
+        color: var(--text-secondary);
+      }
+      .setup-list {
+        margin: 0 0 var(--space-lg);
+        padding-left: var(--space-lg);
+        max-width: 46rem;
+        font-size: var(--font-size-md);
+        line-height: 1.6;
+        color: var(--text-secondary);
+      }
+      .setup-list li { margin-bottom: var(--space-sm); }
+      .setup-need {
+        font-size: var(--font-size-sm);
+        color: var(--text-muted);
+      }
+
+      /* ---- header ---- */
+      .head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-lg);
+        margin-bottom: var(--space-lg);
+        flex-wrap: wrap;
+      }
+      .head h1 {
+        margin: 0;
+        font-size: var(--font-size-3xl);
+        color: var(--text-primary);
+      }
+      .head .sub {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+      }
+
+      /* The header aligns on baseline; an icon button has none worth using. */
+      .head .icon-btn {
+        align-self: center;
+        padding: var(--space-sm);
+      }
+      .head .icon-btn svg {
+        width: var(--icon-size-lg);
+        height: var(--icon-size-lg);
+      }
+      /* The label is gone, so the spin is the only "it's working" feedback. */
+      .head .icon-btn.spinning svg {
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .tabs { margin-bottom: var(--space-xl); }
+
+      /* ---- generic ---- */
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-md);
+        margin: var(--space-xl) 0 var(--space-md);
+      }
+      .section-head:first-child { margin-top: 0; }
+      .section-head h2 {
+        margin: 0;
+        font-size: var(--font-size-xl);
+        color: var(--text-primary);
+      }
+      .hint { font-size: var(--font-size-xs); color: var(--text-muted); }
+
+      .card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-lg);
+      }
+
+      /* ---- account grid ---- */
+      .accounts {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+        gap: var(--space-md);
+      }
+      .acct-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-sm);
+      }
+      .acct-name {
+        font-size: var(--font-size-lg);
+        color: var(--text-primary);
+        font-weight: 600;
+      }
+      .acct-addr {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+        margin-top: var(--space-xs);
+        word-break: break-all;
+      }
+      .acct-count {
+        font-size: var(--font-size-3xl);
+        line-height: 1;
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+      }
+      .acct-count.zero { color: var(--text-muted); }
+      .acct-count-label {
+        font-size: var(--font-size-3xs);
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        text-align: right;
+        margin-top: var(--space-xs);
+      }
+      .acct-meta {
+        margin-top: var(--space-lg);
+        padding-top: var(--space-md);
+        border-top: 1px solid var(--border-color);
+        display: grid;
+        gap: var(--space-xs);
+      }
+      .kv {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        font-size: var(--font-size-xs);
+      }
+      .kv dt { color: var(--text-muted); }
+      .kv dd { margin: 0; color: var(--text-secondary); text-align: right; }
+
+      .chips { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-md); }
+      .chip {
+        font-size: var(--font-size-3xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0.15rem var(--space-sm);
+        border-radius: var(--radius-sm);
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        white-space: nowrap;
+      }
+      .chip.warn { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+      .chip.bad  { color: var(--accent-red);    border-color: var(--accent-red); }
+      .chip.ok   { color: var(--accent-green);  border-color: var(--accent-green); }
+
+      /* ---- actionable list ---- */
+      .item {
+        display: flex;
+        gap: var(--space-md);
+        padding: var(--space-md) 0;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .item:last-child { border-bottom: none; }
+      .item-body { flex: 1; min-width: 0; }
+      .item-subject {
+        font-size: var(--font-size-md);
+        color: var(--text-primary);
+        margin-bottom: var(--space-xs);
+      }
+      .item-from { font-size: var(--font-size-xs); color: var(--text-muted); }
+      .item-summary {
+        font-size: var(--font-size-sm);
+        color: var(--text-secondary);
+        margin-top: var(--space-sm);
+        line-height: 1.5;
+      }
+
+      /* ---- rules ---- */
+      .rule-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+        flex-wrap: wrap;
+        margin-bottom: var(--space-lg);
+      }
+      .toolbar-sep {
+        width: 1px;
+        align-self: stretch;
+        background: var(--border-color);
+        margin: 0 var(--space-xs);
+      }
+      .run-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+        margin-bottom: var(--space-lg);
+      }
+      /* ---- rule-chain flow explainer ---- */
+      .flow {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        background: var(--bg-secondary);
+        padding: var(--space-lg);
+        margin-bottom: var(--space-xl);
+        display: grid;
+        gap: var(--space-lg);
+      }
+      .flow-step {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-md);
+        position: relative;
+      }
+      /* connector line between the numbered bullets */
+      .flow-step:not(:last-child)::before {
+        content: '';
+        position: absolute;
+        left: 0.6875rem;
+        top: 1.625rem;
+        bottom: calc(var(--space-lg) * -1);
+        width: 1px;
+        background: var(--border-color);
+      }
+      .flow-n {
+        flex: none;
+        width: 1.375rem;
+        height: 1.375rem;
+        border-radius: 50%;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        font-size: var(--font-size-xs);
+        font-variant-numeric: tabular-nums;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 1;
+      }
+      .flow-body { min-width: 0; flex: 1; }
+      .flow-title {
+        font-size: var(--font-size-md);
+        color: var(--text-primary);
+        line-height: 1.45;
+      }
+      .flow-title b { font-weight: 600; }
+      .flow-title.with-control {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+      }
+      .flow-sub {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+        line-height: 1.55;
+        margin-top: var(--space-xs);
+      }
+      .flow-sub b { color: var(--text-secondary); font-weight: 600; }
+      .rule {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--bg-secondary);
+        margin-bottom: var(--space-sm);
+      }
+      .rule.dead { border-style: dashed; opacity: 0.75; }
+      .rule-n {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+        min-width: 1.5rem;
+        text-align: right;
+      }
+      .rule-expr {
+        flex: 1;
+        min-width: 0;
+        font-size: var(--font-size-md);
+        color: var(--text-secondary);
+        overflow-wrap: anywhere;
+      }
+      .rule-expr b { color: var(--text-primary); font-weight: 600; }
+      .rule-expr code {
+        font-family: var(--font-mono);
+        font-size: var(--font-size-sm);
+        color: var(--text-primary);
+      }
+      .rule-act {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-xs);
+        font-size: var(--font-size-sm);
+        color: var(--text-primary);
+        white-space: nowrap;
+      }
+      .dot {
+        width: 0.5rem; height: 0.5rem;
+        border-radius: 50%;
+        background: var(--text-muted);
+        flex: none;
+      }
+      .dot.delete { background: var(--accent-red); }
+      .dot.flag, .dot.notify { background: var(--accent-yellow); }
+      .dot.triage { background: var(--accent); }
+      .dot.todo { background: var(--accent-green); }
+      /* triage-output actions (respond | act | review) */
+      .dot.respond { background: var(--accent-red); }
+      .dot.act { background: var(--accent-yellow); }
+      .dot.review { background: var(--accent); }
+      .rule-tools { display: flex; gap: var(--space-xs); flex: none; }
+
+      .editor {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+        gap: var(--space-md);
+        padding: var(--space-lg);
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-md);
+        background: var(--bg-secondary);
+        margin-bottom: var(--space-sm);
+      }
+      .editor label {
+        display: block;
+        font-size: var(--font-size-3xs);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        margin-bottom: var(--space-xs);
+      }
+      .editor input, .editor select { width: 100%; box-sizing: border-box; }
+      .editor .wide { grid-column: 1 / -1; }
+      .editor-actions { grid-column: 1 / -1; display: flex; gap: var(--space-sm); }
+
+      .warn-note {
+        font-size: var(--font-size-xs);
+        color: var(--accent-yellow);
+        margin-top: var(--space-xs);
+      }
+
+      /* ---- activity ---- */
+      .run {
+        padding: var(--space-md) 0;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .run:last-child { border-bottom: none; }
+      .run-when { font-size: var(--font-size-xs); color: var(--text-muted); }
+      .run-summary {
+        font-size: var(--font-size-md);
+        color: var(--text-secondary);
+        margin-top: var(--space-xs);
+        line-height: 1.55;
+      }
+      .counts { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); }
+      .count {
+        font-size: var(--font-size-3xs);
+        color: var(--text-muted);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 0.1rem var(--space-xs);
+        font-variant-numeric: tabular-nums;
+      }
+      .suggestion {
+        border-left: 2px solid var(--accent-yellow);
+        padding: var(--space-sm) 0 var(--space-sm) var(--space-md);
+        margin-bottom: var(--space-md);
+      }
+      .suggestion p {
+        margin: 0;
+        font-size: var(--font-size-md);
+        color: var(--text-secondary);
+        line-height: 1.55;
+      }
+      .suggestion .run-when { margin-bottom: var(--space-xs); }
+
+      .pager {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-md);
+        margin-top: var(--space-md);
+      }
+      .pager .hint { font-variant-numeric: tabular-nums; }
+      .pager button[disabled] { opacity: 0.4; pointer-events: none; }
+
+      .foot {
+        margin-top: calc(var(--space-xl) * 1.5);
+        padding-top: var(--space-lg);
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        gap: var(--space-lg);
+        flex-wrap: wrap;
+        font-size: var(--font-size-xs);
+      }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <h1>Email Triage</h1>
+          <div class="sub" id="subhead">Loading…</div>
+        </div>
+        <button class="icon-btn" id="refresh" title="Refresh" aria-label="Refresh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 9 15 9" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="segmented-control tabs" id="tabs">
+        <button class="segmented-btn active" data-tab="overview">Overview</button>
+        <button class="segmented-btn" data-tab="rules">Rules</button>
+        <button class="segmented-btn" data-tab="activity">Activity</button>
+      </div>
+
+      <div id="view-overview"></div>
+      <div id="view-rules" hidden></div>
+      <div id="view-activity" hidden></div>
+
+      <div id="view-setup" hidden>
+        <div class="card setup">
+          <h2>No mailboxes wired up yet</h2>
+          <p>
+            Email Triage reads each of your mailboxes on a schedule and decides what
+            actually needs you. Your own rules run first — top to bottom, first match
+            wins — and anything they don't catch falls through to AI triage, which
+            sorts it into <b>needs you</b>, FYI, or noise. Only the first bucket ever
+            reaches you, as a single consolidated push.
+          </p>
+          <ul class="setup-list">
+            <li>One rule chain and one schedule <b>per account</b>, so a work inbox
+              and a personal one can behave completely differently.</li>
+            <li>A notified-ledger per account, so a message that already pinged you
+              never pings you twice — however many times it resurfaces.</li>
+            <li>Runs are silent by default. No new mail that needs you means no
+              notification.</li>
+          </ul>
+          <p class="setup-need">
+            Setting this up needs a connected mailbox, a rule chain, and a schedule
+            for each account — Lucidos can walk you through all three.
+          </p>
+          <button class="action-btn" id="setup-start">Set up Email Triage</button>
+        </div>
+      </div>
+
+      <div class="foot">
+        <a class="accent-link" href="#" data-file="artifacts/email-triage/config.json">config.json</a>
+        <a class="accent-link" href="#" data-file="knowhow/email-triage.md">Triage knowhow</a>
+        <a class="accent-link" href="#" data-file="triggers/email-triage/intents/triage.md">Triage intent</a>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
