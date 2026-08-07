@@ -1,6 +1,6 @@
 # lucidos-plugins
 
-Plugins for [Lucidos](https://lucidos.dev/), by [@akramsaouri](https://github.com/akramsaouri).
+Plugins for [Lucidos](https://lucidos.dev/).
 
 Register this repo as a marketplace in Lucidos (**Settings → Marketplaces**) to
 browse and install these from the Plugins panel:
