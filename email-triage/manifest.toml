@@ -6,6 +6,16 @@ source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 categories = ["productivity", "communication", "automation"]
 
 setup = """
+**Already running Email Triage? (updating from 0.1.0)** Nothing below needs
+redoing — your mailboxes, rules, and cron triggers all carry over untouched.
+What's new in 0.2.0: a per-account "Triage now" button in the app, plus the
+on-demand trigger that button fires (auto-registered by this update). Tell the
+user that in one line and stop — do NOT re-run the steps below, and do NOT
+create another on-demand trigger. Only continue if they ask you to add a new
+account.
+
+---
+
 Email Triage needs one connected mailbox, one rule chain, and one schedule per
 account. None of that ships with the plugin — it's all workspace state. Walk the
 user through it conversationally.
