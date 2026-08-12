@@ -1,7 +1,7 @@
 id = "email-triage"
-version = "0.1.0"
+version = "0.2.0"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app, the triage engine knowhow, and the per-account intent. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with a per-account “Triage now” button, the triage engine knowhow, the per-account intent, and the on-demand trigger that button fires. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 categories = ["productivity", "communication", "automation"]
 
@@ -36,6 +36,11 @@ Then, per account the user wants triaged:
    during waking hours plus one early-morning run; offer that, let them adjust.
    Each account gets its OWN trigger running the intent at
    `triggers/email-triage/intents/triage.md` for that account.
+
+   The **on-demand** trigger is already live — it ships with the plugin and was
+   registered at install. It listens for `EmailTriageRequested` and is what the
+   app's per-account "Triage now" button fires, running the same intent your
+   cron triggers run. Do NOT create a second one.
 
 Write the accounts into `artifacts/email-triage/config.json`. The app reads that
 file, so it flips from its setup screen to the real dashboard as soon as the

@@ -148,6 +148,30 @@
         display: grid;
         gap: var(--space-xs);
       }
+      .acct-actions {
+        margin-top: var(--space-md);
+        display: flex;
+        justify-content: flex-end;
+      }
+      .acct-actions .action-btn,
+      .section-head .action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+      }
+      /* The head aligns on baseline; a button has none worth using. */
+      .section-head .action-btn { align-self: center; flex: none; }
+      /* Reuses the @keyframes spin declared for the header refresh icon. */
+      .spin {
+        width: var(--icon-size-sm);
+        height: var(--icon-size-sm);
+        flex: none;
+        border: 2px solid var(--border-color);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.5s; } }
       .kv {
         display: flex;
         justify-content: space-between;
@@ -476,6 +500,6 @@
       </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
   </body>
 </html>

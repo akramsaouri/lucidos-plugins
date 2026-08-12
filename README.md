@@ -15,4 +15,4 @@ Or install one directly by pasting its tree URL.
 
 | Plugin | What it does |
 |---|---|
-| [email-triage](./email-triage) | Per-account email triage that only interrupts you when mail genuinely needs you. Your rules run first (first-match-wins); the rest falls through to AI triage. Ships a control-panel app, the engine knowhow, and the per-account intent. |
+| [email-triage](./email-triage) | Per-account email triage that only interrupts you when mail genuinely needs you. Your rules run first (first-match-wins); the rest falls through to AI triage. Ships a control-panel app with a per-account “Triage now” button, the engine knowhow, the per-account intent, and the on-demand trigger. |

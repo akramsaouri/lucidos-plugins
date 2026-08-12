@@ -38,6 +38,42 @@ const RUN_WINDOW_DAYS = 14;
 /** Runs shown per page in the Activity tab. */
 const RUNS_PER_PAGE = 15;
 
+/* ---------- manual run state ----------
+ *
+ * A manual run is fire-and-forget: the app emits `EmailTriageRequested` and the
+ * on-demand trigger picks it up. The ONLY completion signal is the run's own
+ * `EmailTriageCompleted` arriving over SSE — which may never come. The trigger
+ * can sit behind other work in the thread queue, Gmail can be down, or the run
+ * can fail before it emits. A spinner with no clock is a lie the moment any of
+ * those happens, so each in-flight run carries a give-up timer.
+ *
+ * Keyed by account NAME, because that is what the completion event resolves to
+ * (see accountsInPayload). "Run all" is N independent per-account entries
+ * rather than one aggregate: the four triggers finish minutes apart, and a
+ * single combined spinner would keep spinning for the slowest account long
+ * after the first three had visibly landed.
+ */
+const running = new Map();  // account name -> timeout id
+const RUN_TIMEOUT_MS = 300000;  // 5 min — an AI triage pass over a full inbox is slow
+
+function startRun(name) {
+  clearTimeout(running.get(name));
+  running.set(name, setTimeout(() => {
+    running.delete(name);
+    render();
+    lucidos.ui.toast(
+      `No result came back for ${shortName(name)} — the run may still be queued`,
+      'warning', { key: `run-${name}` });
+  }, RUN_TIMEOUT_MS));
+}
+
+function finishRun(name) {
+  if (!running.has(name)) return false;
+  clearTimeout(running.get(name));
+  running.delete(name);
+  return true;
+}
+
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => lucidos.utils.escapeHtml(String(s ?? ''));
 
@@ -51,13 +87,18 @@ const shortName = (name) => String(name).replace(/^Gmail\s*-\s*/i, '');
  * Fall back to name-matching so those still land under the right account
  * instead of vanishing from a filtered view.
  */
-function accountsInRun(ev) {
-  const keys = Object.keys(ev.payload?.account_results || {});
+function accountsInPayload(payload) {
+  const keys = Object.keys(payload?.account_results || {});
   if (keys.length) return keys;
-  const hay = `${ev.payload?.summary || ''} ${ev.payload?.run?.trigger || ''}`;
+  const hay = `${payload?.summary || ''} ${payload?.run?.trigger || ''}`;
   return state.accounts
     .filter((a) => hay.toLowerCase().includes(shortName(a.name).toLowerCase()))
     .map((a) => a.name);
+}
+
+/** Same question, asked of a stored event rather than a live SSE payload. */
+function accountsInRun(ev) {
+  return accountsInPayload(ev.payload);
 }
 
 
@@ -256,6 +297,8 @@ function renderOverview() {
       `<span class="chip">${b.rules?.length || 0} rule${b.rules?.length === 1 ? '' : 's'}</span>`,
     ].join('');
 
+    const busy = running.has(a.name);
+
     return `
       <div class="card">
         <div class="acct-top">
@@ -275,6 +318,13 @@ function renderOverview() {
           <div class="kv"><dt>Last triaged</dt><dd>${triaged ? esc(lucidos.utils.timeAgo(triaged)) : '—'}</dd></div>
           <div class="kv"><dt>Notify ledger</dt><dd>${a.ledger?.notified?.length || 0} ids</dd></div>
         </dl>
+        <div class="acct-actions">
+          <button class="action-btn action-btn-secondary" data-run="${esc(a.name)}"
+            ${busy ? 'disabled' : ''}
+            title="Run this account's triage now, without waiting for its schedule">
+            ${busy ? '<span class="spin"></span>Triaging…' : 'Triage now'}
+          </button>
+        </div>
       </div>`;
   }).join('');
 
@@ -293,7 +343,18 @@ function renderOverview() {
         </div>`).join('')
     : `<div class="empty-state">Nothing needs you. Every account is clear.</div>`;
 
+  const anyRunning = running.size > 0;
+
   $('#view-overview').innerHTML = `
+    <div class="section-head">
+      <h2>Accounts</h2>
+      <button class="action-btn" id="run-all" ${anyRunning ? 'disabled' : ''}
+        title="Run every account's triage now, in parallel">
+        ${anyRunning
+          ? `<span class="spin"></span>Triaging ${running.size} account${running.size === 1 ? '' : 's'}…`
+          : 'Triage all accounts'}
+      </button>
+    </div>
     <div class="accounts">${cards}</div>
     <div class="section-head">
       <h2>Waiting on you</h2>
@@ -585,6 +646,47 @@ function currentAccount() {
   return state.accounts.find((a) => a.name === name);
 }
 
+/* ---------- manual triage ----------
+ *
+ * An iframe can't read a mailbox, so the app asks rather than does: it emits
+ * `EmailTriageRequested` and the "Email Triage — on demand" trigger runs the
+ * SAME intent the four cron triggers run. One procedure, two callers — the
+ * button can't drift from the schedule the way a second implementation would.
+ *
+ * One event PER ACCOUNT even for "run all": the intent is written per-account
+ * (it reads one config block, one state file, one ledger), and four parallel
+ * runs finish sooner than one serial pass over four inboxes.
+ */
+async function requestRun(names) {
+  const fresh = names.filter((n) => !running.has(n));
+  if (!fresh.length) return;
+
+  for (const name of fresh) startRun(name);
+  render();
+
+  const failed = [];
+  for (const name of fresh) {
+    try {
+      await lucidos.events.emit('EmailTriageRequested', {
+        summary: `Manual triage run for ${shortName(name)}`,
+        account: name,
+        source: 'email-triage-app',
+      });
+    } catch (e) {
+      finishRun(name);
+      failed.push(shortName(name));
+    }
+  }
+
+  if (failed.length) {
+    render();
+    lucidos.ui.toast(`Could not start triage for ${failed.join(', ')}`, 'error',
+      { key: 'run-fail' });
+  }
+  /* No "started" toast on success — the button's own spinner already says it,
+   * and a banner repeating the control under the cursor is noise. */
+}
+
 /* ---------- events ---------- */
 
 $('#tabs').addEventListener('click', (e) => {
@@ -609,6 +711,14 @@ $('#refresh').addEventListener('click', async () => {
   } finally {
     btn.classList.remove('spinning');
     btn.disabled = false;
+  }
+});
+
+$('#view-overview').addEventListener('click', (e) => {
+  const one = e.target.closest('[data-run]');
+  if (one) return requestRun([one.dataset.run]);
+  if (e.target.closest('#run-all')) {
+    return requestRun(state.accounts.map((a) => a.name));
   }
 });
 
@@ -714,10 +824,23 @@ $('#setup-start').addEventListener('click', () => {
 lucidos.ui.applyPreferences();
 lucidos.ui.watchPreferences();
 lucidos.sse.connect();
-lucidos.sse.on('EmailTriageCompleted', () => {
+lucidos.sse.on('EmailTriageCompleted', (data) => {
+  /* Clear the spinner for whichever account this run belongs to. Do it BEFORE
+   * the mid-edit bail below: a run that finishes while the user is editing a
+   * rule must still release its button, or it spins until the 5-minute timer
+   * fires and then lies about having timed out. */
+  const done = accountsInPayload(data).filter(finishRun);
+  if (done.length) {
+    const counts = data?.account_results?.[done[0]] || {};
+    const n = counts.actionable ?? 0;
+    lucidos.ui.toast(
+      `${shortName(done[0])}: ${data?.summary || 'triage finished'}`,
+      n ? 'info' : 'success',
+      { key: `run-${done[0]}`, durationMs: 6000 });
+  }
   // A run just finished. Refresh unless the user is mid-edit — reloading
   // would discard the open editor and any typed value.
-  if (state.editing) return;
+  if (state.editing) return render();
   load();
 });
 load();
