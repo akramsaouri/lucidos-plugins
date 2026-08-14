@@ -12,6 +12,23 @@ Automated email triage system. Each Gmail account has its own schedule and rule 
 1. **Read config** — load `artifacts/email-triage/config.json`
 2. **Fetch emails** — depends on account type:
    - **Personal (non-shared)**: `read_emails(account, search="UNSEEN", limit=50)`
+   - **Plain-IMAP accounts (Outlook/Exchange, Fastmail, self-hosted) — NOT
+     `read_emails`.** The `read_emails` / `read_email` tools fetch with `RFC822`,
+     and a non-peek IMAP body fetch sets `\Seen` on every message it touches. So
+     the act of reading a message to decide whether it needs the user marks it
+     read — including mail the user has never opened. (Observed against Exchange
+     Online: a single `read_emails(limit=50)` cleared the unread state of all 50
+     fetched messages, 13 of them genuine unreads, which had to be restored with
+     `STORE -FLAGS \Seen`.) Instead, **run the snapshot script first** and drive
+     the whole run off its output:
+     ```bash
+     python apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50
+     ```
+     The unseen set is `[m for m in snapshot["messages"] if m["unread"]]`, and each
+     message already carries `uid`, headers and `body_text` / `body_html` — so
+     rules, AI categorization and the ledger all key off the snapshot with zero
+     extra IMAP reads. Mark the account `"fetch": "imap-peek"` in config and see
+     "Inbox Snapshot (plain-IMAP accounts)" below.
    - **Shared accounts** (`"shared": true`): Use date-based fetch with state file:
      1. Load state file (e.g. `artifacts/email-triage/state-<slug>.json`)
      2. Fetch with `read_emails(account, since=<last_run - 1 day>, limit=50)` — 1-day overlap for safety
@@ -153,6 +170,100 @@ Write actionable results to `artifacts/email-triage/triage-<account-slug>.json` 
 **Every email entry MUST carry `id`** — the stable message id (Gmail API message id for OAuth accounts, IMAP UID for non-OAuth), the same identity used in the notified-ledger and state files. Downstream consumers key their persistent "done"/resolved state on `email:<slug>:<id>`, so a missing or unstable id means either (a) resolved items re-surface, or (b) a genuinely new email that happens to reuse a subject gets wrongly hidden. Never omit it.
 
 **The output file is a fresh snapshot, not an append log.** On every run, rewrite `emails` to contain *only the items that are still actionable right now*. Do NOT carry forward stale entries. This matters most for shared accounts: their `state.processed` list stops old UIDs being re-fetched, but that also means an item that has aged out of the fetch window will never be re-evaluated — so if you append instead of replacing, the output file keeps advertising items that are long gone and downstream consumers keep showing them. Concretely: build the new `emails` array from this run's fetch window, and for shared accounts also drop any prior entry whose id is no longer within the current window. When nothing is actionable, write `"emails": []` (do not leave the previous run's list in place).
+
+## Inbox Snapshot (plain-IMAP accounts)
+
+Gmail accounts are read over the Gmail HTTP API, where fetching a message body is
+a pure read. **Plain-IMAP accounts are not** — Outlook/Exchange Online, Fastmail,
+a self-hosted dovecot — and that difference is the single easiest way to damage a
+mailbox with this plugin.
+
+### Build it with the script, never with `read_email`
+
+```bash
+python apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50
+```
+
+**Do not hand-roll this by looping `read_email` over the inbox.** A plain IMAP
+`FETCH BODY[]` / `RFC822` sets the `\Seen` flag as a side effect, so building the
+snapshot that way marks every message it touches as read — including mail the user
+has never opened, which then shows up read in their phone client. This was a real
+bug in a live workspace: the snapshot step was quietly clearing the whole inbox's
+unread state on every run.
+
+The script avoids it two ways: it opens INBOX with `EXAMINE` (`readonly=True`), so
+the server is not permitted to change a flag at all, and it fetches bodies with
+`BODY.PEEK[]` instead of `BODY[]`. Keep both. If a future edit needs read-write
+access for something else, it must still peek.
+
+The same rule applies to triage itself: **reading a message's body to categorize
+it must not mark it read.** Take bodies from the snapshot the script produced
+(run it first, categorize from its `body_text` / `body_html`) rather than calling
+`read_email` per message. `\Seen` is only ever set deliberately, by the `read`
+action or a `no_action_clear: "read"` verdict.
+
+Write the snapshot at the **start** of the run — it is the run's only read of the
+mailbox, and everything downstream (rules, categorization, the ledger, the
+actionable output file) works from it. If the run then changes flags via a `read`
+action or a `no_action_clear: "read"` verdict, patch those `unread` values in the
+snapshot before writing it out, so the file reflects the post-triage state rather
+than the state the run walked in on.
+
+Include the most recent 50 inbox messages **regardless of read state**. A consumer
+that offers an "All" view would otherwise be shown a filtered mailbox and lie
+about it; filtering to unread is the consumer's job, not the snapshot's.
+
+### Account config
+
+```json
+{
+  "name": "Outlook",
+  "slug": "outlook",
+  "address": "someone@example.com",
+  "fetch": "imap-peek",
+  "imap_host": "outlook.office365.com",
+  "imap_port": 993,
+  "oauth_provider": "microsoft"
+}
+```
+
+- **`fetch: "imap-peek"`** is the marker the intent keys off to route this account
+  through the script instead of `read_emails`.
+- **`oauth_provider`** — omit for password auth, where the script falls back to
+  `CRED_<NAME>_PASSWORD` / `CRED_<NAME>`. With it set, the script uses XOAUTH2
+  with `OAUTH_<PROVIDER>_ACCESS_TOKEN`, which the engine injects and refreshes.
+- **`imap_host`** is required; `imap_port` defaults to 993.
+
+### Snapshot file
+
+`artifacts/email-triage/inbox-<slug>.json`, newest message first:
+
+```json
+{
+  "account": "Outlook",
+  "synced_at": "2026-08-08T05:40:00Z",
+  "messages": [
+    {
+      "uid": 4821,
+      "from_name": "School Portal",
+      "from_addr": "noreply@example.com",
+      "subject": "Message from school",
+      "date": "2026-08-08T05:12:00Z",
+      "preview": "First ~200 chars of the plain-text body",
+      "unread": true,
+      "body_text": "Full plain-text body",
+      "body_html": "<html>…</html>"
+    }
+  ]
+}
+```
+
+- **`uid`** is the IMAP UID — the same identity the notified-ledger and
+  `triage-<slug>.json` use, so downstream "done" state keys line up.
+- **`body_html` / `body_text`** — both when present; a renderer should prefer HTML
+  and fall back to text. Anything rendering this must sandbox it (iframe, remote
+  images blocked until the user opts in).
+- **Bodies are capped** at ~100 KB each and attachments are dropped entirely.
 
 ## Operational Notes
 
