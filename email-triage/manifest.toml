@@ -1,18 +1,29 @@
 id = "email-triage"
-version = "0.2.0"
+version = "0.3.0"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with a per-account “Triage now” button, the triage engine knowhow, the per-account intent, and the on-demand trigger that button fires. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with a per-account “Triage now” button, the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and a peek-based IMAP snapshot script so triaging a plain-IMAP mailbox (Outlook/Exchange, Fastmail) never marks unread mail read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 categories = ["productivity", "communication", "automation"]
 
 setup = """
-**Already running Email Triage? (updating from 0.1.0)** Nothing below needs
-redoing — your mailboxes, rules, and cron triggers all carry over untouched.
-What's new in 0.2.0: a per-account "Triage now" button in the app, plus the
-on-demand trigger that button fires (auto-registered by this update). Tell the
-user that in one line and stop — do NOT re-run the steps below, and do NOT
-create another on-demand trigger. Only continue if they ask you to add a new
-account.
+**Already running Email Triage? (updating)** Nothing below needs redoing — your
+mailboxes, rules, and cron triggers all carry over untouched. What's new:
+a per-account "Triage now" button in the app plus the on-demand trigger it fires
+(0.2.0, auto-registered), and a peek-based IMAP snapshot script (0.3.0) so a
+plain-IMAP mailbox never gets its unread state wiped by triage.
+
+Do NOT re-run the steps below and do NOT create another on-demand trigger. Two
+things ARE worth doing on an update, both one-liners:
+
+- If any account is a **plain-IMAP** mailbox (Outlook/Exchange, Fastmail,
+  self-hosted) still on `"fetch": "read_emails"`, migrate it now — add
+  `"fetch": "imap-peek"`, `"imap_host"`, and `"oauth_provider"` (omit for
+  password auth) to its block in `artifacts/email-triage/config.json`. Until you
+  do, every run keeps marking unread mail read. See the "Inbox Snapshot" section
+  of `knowhow/email-triage.md`.
+- Then tell the user what changed in one line and stop.
+
+Only continue past here if they ask you to add a new account.
 
 ---
 
@@ -29,6 +40,13 @@ Then, per account the user wants triaged:
 1. **Connect the mailbox** if it isn't already. Most providers need OAuth now —
    look up the provider's IMAP/SMTP hosts, then `configure_email`. Check the
    already-configured accounts first; don't re-do one that's connected.
+
+   **Gmail reads over the Gmail API; everything else is plain IMAP, and plain
+   IMAP needs the peek path.** For an Outlook/Exchange, Fastmail or self-hosted
+   account, set `"fetch": "imap-peek"` on its config block along with
+   `"imap_host"` (and `"oauth_provider"` when it authenticates with OAuth) — the
+   run then snapshots the inbox with `BODY.PEEK[]` instead of calling
+   `read_emails`, which would mark every message it read as read.
 
 2. **Build a starting rule chain.** Don't ask them to write rules — ask what
    they want gone (`delete`), what they want silenced but kept (`read`), and
