@@ -1,18 +1,27 @@
 id = "email-triage"
-version = "0.2.0"
+version = "0.2.1"
 name = "Email Triage"
 description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with a per-account “Triage now” button, the triage engine knowhow, the per-account intent, and the on-demand trigger that button fires. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 categories = ["productivity", "communication", "automation"]
 
 setup = """
-**Already running Email Triage? (updating from 0.1.0)** Nothing below needs
-redoing — your mailboxes, rules, and cron triggers all carry over untouched.
-What's new in 0.2.0: a per-account "Triage now" button in the app, plus the
-on-demand trigger that button fires (auto-registered by this update). Tell the
-user that in one line and stop — do NOT re-run the steps below, and do NOT
-create another on-demand trigger. Only continue if they ask you to add a new
-account.
+**Already running Email Triage?** Nothing below needs redoing — your mailboxes,
+rules, and cron triggers all carry over untouched. Tell the user what changed in
+one line and stop. Do NOT re-run the steps below and do NOT create another
+on-demand trigger. Only continue if they ask you to add a new account.
+
+- **Updating to 0.2.1:** the on-demand trigger now runs at `low` reasoning effort
+  (it fires while the user is watching the app, so latency is the feature), and
+  the triage knowhow gained two hazards worth knowing — a mixed-id-scheme bug
+  that breaks notification dedup when IMAP falls back to the provider API
+  mid-run, and a wrong-mailbox trap where an un-scoped API call silently reads
+  the default account's inbox. Both are in `knowhow/email-triage.md`. If the
+  user already has cron triggers per account, offer to pin those too: `low` for
+  most, `medium` for any account whose `no_action_clear` is `delete`, since a
+  wrong call there trashes mail.
+- **Updating from 0.1.0:** you also gain a per-account "Triage now" button in the
+  app and the on-demand trigger it fires, auto-registered by this update.
 
 ---
 
@@ -46,6 +55,13 @@ Then, per account the user wants triaged:
    during waking hours plus one early-morning run; offer that, let them adjust.
    Each account gets its OWN trigger running the intent at
    `triggers/email-triage/intents/triage.md` for that account.
+
+   **Pin the trigger's `reasoning_effort` to `low`.** The rule chain is
+   first-match-wins and already written down, so the only judgement left is a
+   three-way classification against a rubric — deep reasoning mostly invents
+   exceptions to a decision the rules already made, and costs latency. The one
+   exception is an account whose `no_action_clear` is `delete`: use `medium`
+   there, because a wrong call trashes mail rather than merely marking it read.
 
    The **on-demand** trigger is already live — it ships with the plugin and was
    registered at install. It listens for `EmailTriageRequested` and is what the

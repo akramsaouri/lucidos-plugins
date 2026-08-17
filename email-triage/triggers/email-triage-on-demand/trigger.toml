@@ -1,6 +1,7 @@
 name = "Email Triage — on demand"
 slug = "email-triage-on-demand"
 app_id = "email-triage"
+reasoning_effort = "low"
 
 [[on]]
 event_type = "EmailTriageRequested"

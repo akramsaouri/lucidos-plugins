@@ -88,7 +88,18 @@ This setting governs only the AI's no-action verdict (FYI / noise) — author-wr
     ]
   }
   ```
-- **Key (`id`):** the stable message id — Gmail API message id for OAuth accounts, IMAP UID for non-OAuth accounts. This is the *same* identity used elsewhere, so it stays stable across runs as long as the email exists.
+- **Key (`id`):** the stable message id. **For an OAuth-connected account, always use the provider's API message id — never the IMAP UID**, even when that particular run fetched over IMAP. The API id is the only identity that survives a transport switch.
+
+  ⚠️ **Mixed-id-scheme hazard.** It is tempting to write "API id for OAuth accounts, IMAP UID otherwise" and key on whatever the run happened to have. That breaks, because the IMAP-timeout fallback below silently switches a run to the API mid-flight: the same email then gets two different identities depending on which transport that run used, and the ledger's dedup check misses.
+
+  Observed in the wild: a ledger holding UID `999` for an item whose API id was `19ff420f49286535`, so the next API-transport run pushed it again. The state file showed the same drift — a block of numeric UIDs with one API-style id in the middle, marking the exact run where IMAP timed out.
+
+  It is easy to miss, because the duplicate push only happens when an actionable item is *still inside the fetch window* AND the transport flips between runs. Shared accounts re-fetch by date, so a long-lived alert is exactly the shape that gets pushed twice.
+
+  **Rules:**
+  1. Key the ledger and `triage-<slug>.json` on the API message id. If a run fetched over IMAP, resolve the API id before writing (for Gmail: `GET /gmail/v1/users/me/messages?q=rfc822msgid:<Message-ID>`) rather than persisting a bare UID.
+  2. Treat a purely-numeric `id` in either file as **legacy**. Never write a new one.
+  3. The dedup check must tolerate legacy entries: an item counts as already-notified if *either* its API id or its IMAP UID is present. Do not delete the old numeric entries — they are still load-bearing for mail inside the 30-day window.
 - **Notification step:**
   1. After rules + AI categorization, build the set of items that *would* notify (actionable + flagged).
   2. Drop any whose `id` is already in `notified`.
@@ -155,6 +166,23 @@ Write actionable results to `artifacts/email-triage/triage-<account-slug>.json` 
 **The output file is a fresh snapshot, not an append log.** On every run, rewrite `emails` to contain *only the items that are still actionable right now*. Do NOT carry forward stale entries. This matters most for shared accounts: their `state.processed` list stops old UIDs being re-fetched, but that also means an item that has aged out of the fetch window will never be re-evaluated — so if you append instead of replacing, the output file keeps advertising items that are long gone and downstream consumers keep showing them. Concretely: build the new `emails` array from this run's fetch window, and for shared accounts also drop any prior entry whose id is no longer within the current window. When nothing is actionable, write `"emails": []` (do not leave the previous run's list in place).
 
 ## Operational Notes
+
+- **Fetching over the provider API: pass the account's OWN token explicitly.** `http_request` auto-injects the workspace's *default* credential for a provider's domain, whichever account the run is for. On Gmail that means a call to `gmail.googleapis.com` returns HTTP 200 with a perfectly plausible message list — from the wrong inbox. Message ids are per-mailbox, so those ids then 404 against the intended account, and that 404 is the *only* reason the swap gets caught: a run that stopped at the list step would have triaged one mailbox's mail into another's output file and ledger.
+
+  For any account that is not the default connection, fetch via `run_python` with that account's own token from the environment:
+
+  ```python
+  tok = os.environ["OAUTH_<PROVIDER>_ACCESS_TOKEN"]   # the account's own connection name
+  req = urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"})
+  ```
+
+  **Verify the mailbox before triaging a single message** — for Gmail, `GET /gmail/v1/users/me/profile` returns `emailAddress`; assert it matches the account's configured `address`. One cheap call, and a token mix-up becomes impossible to act on.
+
+- **IMAP can time out — fall back to the provider API for OAuth accounts.** `read_emails` connects over IMAP (Gmail: `imap.gmail.com:993`) and sometimes fails with `IMAP connect ... timed out after 30s`. An OAuth-connected account does **not** have to abort the run — fetch the same mail over REST instead, which is the transport already used for the `read`/`delete` actions. For Gmail:
+  1. List: `GET https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread%20in:inbox&maxResults=50` (for shared accounts use `q=in:inbox after:YYYY/MM/DD` to mirror the `since` window).
+  2. Per message: `GET .../messages/{id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To` — which returns `snippet` too, usually enough to categorize without pulling the body.
+
+  Reach for `format=full` only when a rule matches on the `body` field or the snippet is too thin to judge. Note the id consequence: this path yields API message ids, which is why the ledger must key on those uniformly — see the mixed-id-scheme hazard above.
 
 - **Empty inboxes are normal.** Most hourly runs find 0 unseen emails — exit silently.
 - When all accounts report 0 unseen, do not emit an event or send any notification.
