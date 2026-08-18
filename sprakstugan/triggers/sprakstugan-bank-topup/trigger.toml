@@ -1,0 +1,10 @@
+name = "Språkstugan — fyll på ordbanken"
+slug = "sprakstugan-bank-topup"
+app_id = "sprakstugan"
+
+[[on]]
+event_type = "SprakstuganBankRunningLow"
+
+[run]
+type = "intent"
+intent = "When Språkstugan says my word bank is running low, write me a fresh batch of cards pitched at my level and add them to the bank, then tell me they're ready."

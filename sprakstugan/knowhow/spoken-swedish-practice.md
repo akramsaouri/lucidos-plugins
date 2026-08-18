@@ -42,10 +42,16 @@ memories" below — that cleanup step is required at the end of every session.
 
 ## Level — read the learner profile first
 
-Pitch every scene at the **spoken** level in `apps/sprakstugan/knowhow/learner-profile.md`.
+Pitch every scene at the **spoken** level in `artifacts/sprakstugan/learner-profile.md`.
 That file tracks written and spoken as **separate** axes precisely because they diverge —
 do not apply the app's written calibration to a conversation. If they say a session was
 too easy or too hard, recalibrate and **update that file**.
+
+It is an *artifact*, not plugin content, on purpose: it is the learner's own state, so it
+survives plugin updates and editing it never marks the plugin Modified. The method behind
+it — the two axes and the tier mapping — lives in `apps/sprakstugan/knowhow/calibration.md`,
+which the plugin owns and you never edit. If the artifact is missing, setup was never
+finished: say so rather than guessing a level.
 
 ## Today's prepared scenario — the file
 

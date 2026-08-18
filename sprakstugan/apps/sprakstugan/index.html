@@ -51,6 +51,18 @@
   .stat-value { font-size: var(--font-size-2xl); font-weight: 700; color: var(--text-primary); }
   .stat-label { font-size: var(--font-size-2xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.025rem; }
 
+  /* Low-water banner — shown only when the bank is close to running dry */
+  .bank-banner {
+    display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap;
+    margin-bottom: var(--space-lg); padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+    background: var(--tint-yellow); font-size: var(--font-size-md); line-height: 1.45;
+  }
+  .bank-banner[hidden] { display: none; }
+  .bank-banner.pending { background: var(--tint-accent); }
+  .bank-banner .bank-text { flex: 1 1 14rem; color: var(--text-primary); }
+  .bank-banner .action-btn { width: auto; flex: 0 0 auto; }
+
   /* Card */
   .card {
     background: var(--bg-secondary);
@@ -193,6 +205,8 @@
     </div>
   </div>
 
+  <div id="bank-banner" class="bank-banner" hidden></div>
+
   <div id="card" class="card">
     <div class="empty-state">Laddar…</div>
   </div>
@@ -219,6 +233,7 @@ let prog = {
   bestStreak: 0,
   items: {},             // id -> { strength, seen, correct, lastSeen }
   lastPlayed: null,
+  topup: null,            // { requestedAt, bankSize, source } — see bank health below
 };
 
 let current = null;      // current card descriptor
@@ -340,6 +355,7 @@ async function loadAll() {
   } catch (e) { /* first run */ }
 
   refreshStats();
+  checkBank();
 }
 
 async function save() {
@@ -354,6 +370,81 @@ function refreshStats() {
   document.getElementById('s-seen').textContent = seen;
   const acc = prog.totalSeen ? Math.round(prog.totalCorrect / prog.totalSeen * 100) + '%' : '—';
   document.getElementById('s-acc').textContent = acc;
+}
+
+// ============================================================
+//  Bank health — ask for a refill BEFORE the bank runs dry
+// ============================================================
+// A fixed bank stops teaching well before it stops serving cards: once almost
+// everything is at full strength the drip is just review. Both conditions below
+// mean "this bank is done", and either one asks Lucidos for a new batch.
+const LOW_WATER_UNSEEN  = 12;    // fresh cards left
+const MASTERED_SHARE    = 0.75;  // ...or three quarters of the bank at strength 5
+const TOPUP_RETRY_HOURS = 72;    // don't re-ask while a batch is presumably being written
+
+function bankHealth() {
+  const total = ITEMS.length;
+  let unseen = 0, mastered = 0, weak = 0;
+  const weakCats = {};
+  for (const it of ITEMS) {
+    const rec = prog.items[it.id];
+    if (!rec) { unseen++; continue; }
+    if (rec.strength >= 5) { mastered++; continue; }
+    weak++;
+    if (it.cat) weakCats[it.cat] = (weakCats[it.cat] || 0) + 1;
+  }
+  const low = total > 0 && (unseen <= LOW_WATER_UNSEEN || mastered >= total * MASTERED_SHARE);
+  return { total, unseen, mastered, weak, weakCats, low };
+}
+
+// A top-up is "in flight" until the bank actually grows, or the wait times out.
+function topUpPending(h) {
+  const t = prog.topup;
+  if (!t || !t.requestedAt) return false;
+  if (t.bankSize !== h.total) return false;
+  return (Date.now() - Date.parse(t.requestedAt)) < TOPUP_RETRY_HOURS * 3.6e6;
+}
+
+function renderBankBanner(h) {
+  const el = document.getElementById('bank-banner');
+  if (!el) return;
+  if (!h.low) { el.hidden = true; return; }
+  el.hidden = false;
+  const pending = topUpPending(h);
+  el.className = 'bank-banner' + (pending ? ' pending' : '');
+  el.innerHTML = pending
+    ? `<div class="bank-text">Påfyllning beställd — Lucidos skriver nya kort åt dig. De dyker upp här av sig själva.</div>`
+    : `<div class="bank-text"><b>Banken börjar ta slut.</b> ${h.unseen} nya kort kvar av ${h.total}.</div>
+       <button class="action-btn" id="topup-now" type="button">Fyll på nu</button>`;
+  const btn = el.querySelector('#topup-now');
+  if (btn) btn.addEventListener('click', () => requestTopUp('manual'));
+}
+
+async function requestTopUp(source) {
+  const h = bankHealth();
+  prog.topup = { requestedAt: new Date().toISOString(), bankSize: h.total, source };
+  await save();
+  renderBankBanner(h);
+  try {
+    await lucidos.events.emit('SprakstuganBankRunningLow', {
+      summary: `Språkstugan bank running low — ${h.unseen} unseen and ${h.mastered} mastered of ${h.total}`,
+      total: h.total,
+      unseen: h.unseen,
+      mastered: h.mastered,
+      weak: h.weak,
+      accuracy: prog.totalSeen ? Math.round(prog.totalCorrect / prog.totalSeen * 100) : null,
+      weakest_categories: Object.entries(h.weakCats)
+        .sort((a, b) => b[1] - a[1]).slice(0, 6)
+        .map(([cat, n]) => ({ cat, weak: n })),
+      requested: source,
+    });
+  } catch (e) { console.error('top-up request failed', e); }
+}
+
+function checkBank() {
+  const h = bankHealth();
+  renderBankBanner(h);
+  if (h.low && !topUpPending(h)) requestTopUp('auto');
 }
 
 // ============================================================
@@ -433,6 +524,7 @@ function applyResult(item, correct) {
 
   refreshStats();
   save();
+  checkBank();
 }
 
 function toast(correct, msg) {
