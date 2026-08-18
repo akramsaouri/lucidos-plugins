@@ -25,12 +25,43 @@ const state = {
   config: null,
   accounts: [],   // [{ name, slug, block, triage, ledger, fetchState }]
   runs: [],
+  triggers: [],   // workspace triggers, to pause/resume each account's cron
   tab: 'overview',
   selectedAccount: null,  // account name shown in the Rules tab
   runFilter: 'all',       // account name shown in the Activity tab, or 'all'
   runPage: 0,             // zero-based page of the Activity run history
   editing: null,  // { account, index | null, draft }
 };
+
+/* ---------- paused accounts ----------
+ *
+ * `paused: true` on an account's config block is the source of truth, and it
+ * is the ONLY place that can be, because triage has two callers: the account's
+ * own cron trigger, and the on-demand trigger the "Triage now" button fires.
+ * A flag in the config is read by the intent both callers run, so one switch
+ * stops both.
+ *
+ * Pausing the cron trigger as well is a second, best-effort layer — it stops a
+ * paused account from even spawning a thread that would read the flag and exit.
+ * It is deliberately not the source of truth: the trigger is workspace state a
+ * plugin never ships, the user may have named or deleted it, and the on-demand
+ * trigger is shared by all four accounts so it can never be paused per-account.
+ */
+
+/** Does this account's cron trigger look like it belongs to that account? */
+function triggerFor(name) {
+  const short = shortName(name).toLowerCase();
+  return state.triggers.find((t) => {
+    const n = String(t.name || '').toLowerCase();
+    if (!n.includes('triage')) return false;
+    // Skip the shared on-demand trigger — it serves every account, so pausing
+    // it for one would silence "Triage now" for all four.
+    if (!(t.cron_expressions || []).length) return false;
+    return n.includes(short);
+  });
+}
+
+const isPaused = (a) => a.block?.paused === true;
 
 /** How far back the Activity tab pulls run history. */
 const RUN_WINDOW_DAYS = 14;
@@ -228,11 +259,18 @@ async function load() {
   // `limit: 40` only reaches back about a day. Ask for a real window and
   // raise the cap so the whole window actually arrives.
   const since = new Date(Date.now() - RUN_WINDOW_DAYS * 864e5).toISOString();
-  state.runs = await lucidos.events.query({
-    event_type: 'EmailTriageCompleted',
-    since,
-    limit: 200,
-  });
+  const [runs, triggers] = await Promise.all([
+    lucidos.events.query({
+      event_type: 'EmailTriageCompleted',
+      since,
+      limit: 200,
+    }),
+    // Best-effort: pausing the cron trigger is a bonus layer, so a workspace
+    // that refuses this call still gets a fully working config-level pause.
+    lucidos.triggers.list().catch(() => []),
+  ]);
+  state.runs = runs;
+  state.triggers = triggers;
   render();
 }
 
@@ -272,6 +310,7 @@ Write the result to artifacts/email-triage/config.json.`;
 
 function renderOverview() {
   const actionable = state.accounts.reduce((n, a) => n + (a.triage?.emails?.length || 0), 0);
+  const paused = state.accounts.filter(isPaused);
   const last = state.runs[0];
   // Runs are single-account, so "last run 48m ago" was ambiguous across four
   // accounts. Name the account when we can resolve it from the payload.
@@ -279,8 +318,9 @@ function renderOverview() {
   const lastTxt = last
     ? ` · last run ${lastWho ? `(${esc(lastWho)}) ` : ''}${esc(lucidos.utils.timeAgo(last.created))}`
     : '';
+  const pausedTxt = paused.length ? ` · ${paused.length} paused` : '';
   $('#subhead').innerHTML =
-    `${state.accounts.length} accounts · ${actionable} awaiting you` + lastTxt;
+    `${state.accounts.length} accounts · ${actionable} awaiting you` + pausedTxt + lastTxt;
 
   const cards = state.accounts.map((a) => {
     const b = a.block;
@@ -289,8 +329,10 @@ function renderOverview() {
     const n = a.triage?.emails?.length || 0;
     const clear = b.no_action_clear || 'legacy';
     const triaged = a.triage?.triaged_at;
+    const off = isPaused(a);
 
     const chips = [
+      off ? '<span class="chip warn">paused</span>' : '',
       b.shared ? '<span class="chip">shared</span>' : '',
       `<span class="chip ${clear === 'delete' ? 'warn' : ''}">clears: ${esc(clear)}</span>`,
       b.no_auto_delete ? '<span class="chip ok">no auto-delete</span>' : '',
@@ -300,7 +342,7 @@ function renderOverview() {
     const busy = running.has(a.name);
 
     return `
-      <div class="card">
+      <div class="card ${off ? 'is-paused' : ''}">
         <div class="acct-top">
           <div>
             <div class="acct-name">${esc(a.name.replace(/^Gmail\s*-\s*/i, ''))}</div>
@@ -314,16 +356,26 @@ function renderOverview() {
         <div class="chips">${chips}</div>
         <dl class="acct-meta">
           <div class="kv"><dt>Schedule</dt><dd>${esc(crons.map(cronLabel).join(' · ') || '—')}</dd></div>
-          <div class="kv"><dt>Next run</dt><dd>${esc(untilLabel(next))}</dd></div>
+          <div class="kv"><dt>Next run</dt><dd>${off ? 'paused' : esc(untilLabel(next))}</dd></div>
           <div class="kv"><dt>Last triaged</dt><dd>${triaged ? esc(lucidos.utils.timeAgo(triaged)) : '—'}</dd></div>
           <div class="kv"><dt>Notify ledger</dt><dd>${a.ledger?.notified?.length || 0} ids</dd></div>
         </dl>
         <div class="acct-actions">
-          <button class="action-btn action-btn-secondary" data-run="${esc(a.name)}"
-            ${busy ? 'disabled' : ''}
-            title="Run this account's triage now, without waiting for its schedule">
-            ${busy ? '<span class="spin"></span>Triaging…' : 'Triage now'}
-          </button>
+          <div class="button-group">
+            <button class="action-btn action-btn-secondary" data-pause="${esc(a.name)}"
+              title="${off
+                ? 'Resume this account — its schedule starts firing again'
+                : 'Stop this account being triaged, on a schedule or on demand. Mail is left untouched.'}">
+              ${off ? 'Resume' : 'Pause'}
+            </button>
+            <button class="action-btn action-btn-secondary" data-run="${esc(a.name)}"
+              ${busy || off ? 'disabled' : ''}
+              title="${off
+                ? 'Paused — resume this account to triage it'
+                : "Run this account's triage now, without waiting for its schedule"}">
+              ${busy ? '<span class="spin"></span>Triaging…' : 'Triage now'}
+            </button>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -344,16 +396,31 @@ function renderOverview() {
     : `<div class="empty-state">Nothing needs you. Every account is clear.</div>`;
 
   const anyRunning = running.size > 0;
+  const active = state.accounts.filter((a) => !isPaused(a));
+  // One button, and its verb is whatever would change something. All paused
+  // means the only useful action is Resume all; anything still live means
+  // Pause all. A pair of buttons where one is always a no-op reads worse.
+  const allOff = state.accounts.length > 0 && active.length === 0;
 
   $('#view-overview').innerHTML = `
     <div class="section-head">
       <h2>Accounts</h2>
-      <button class="action-btn" id="run-all" ${anyRunning ? 'disabled' : ''}
-        title="Run every account's triage now, in parallel">
-        ${anyRunning
-          ? `<span class="spin"></span>Triaging ${running.size} account${running.size === 1 ? '' : 's'}…`
-          : 'Triage all accounts'}
-      </button>
+      <div class="button-group">
+        <button class="action-btn action-btn-secondary" id="pause-all"
+          title="${allOff
+            ? 'Resume every account'
+            : 'Stop every account being triaged, on a schedule or on demand'}">
+          ${allOff ? 'Resume all' : 'Pause all'}
+        </button>
+        <button class="action-btn" id="run-all" ${anyRunning || !active.length ? 'disabled' : ''}
+          title="${active.length
+            ? 'Run every unpaused account\u2019s triage now, in parallel'
+            : 'Every account is paused'}">
+          ${anyRunning
+            ? `<span class="spin"></span>Triaging ${running.size} account${running.size === 1 ? '' : 's'}…`
+            : 'Triage all accounts'}
+        </button>
+      </div>
     </div>
     <div class="accounts">${cards}</div>
     <div class="section-head">
@@ -628,6 +695,8 @@ function render() {
 
 /* ---------- persistence ---------- */
 
+/** Returns true when the write landed. Callers with a follow-up step (pausing
+ *  a trigger) must bail on false, or they act on state that was rolled back. */
 async function saveConfig(mutate, message) {
   mutate();
   try {
@@ -636,14 +705,76 @@ async function saveConfig(mutate, message) {
   } catch (e) {
     lucidos.ui.toast(`Could not save: ${e.message}`, 'error');
     await load();
-    return;
+    return false;
   }
   render();
+  return true;
 }
 
 function currentAccount() {
   const name = state.selectedAccount || state.accounts[0]?.name;
   return state.accounts.find((a) => a.name === name);
+}
+
+/* ---------- pause / resume ----------
+ *
+ * Writes `paused` into each named account's config block, then tries to
+ * pause/resume that account's cron trigger to match. The config write is what
+ * matters and is reported on; the trigger half is best-effort and only
+ * surfaces when it fails, since a workspace can legitimately have no trigger
+ * for an account (a fresh install, or one the user runs by hand).
+ */
+async function setPaused(names, paused) {
+  // Resolve against known accounts first: an unknown name would sail through
+  // the state check below and then throw on `state.config.accounts[n]`.
+  const targets = names
+    .map((n) => state.accounts.find((a) => a.name === n))
+    .filter((a) => a && isPaused(a) !== paused)
+    .map((a) => a.name);
+  if (!targets.length) return;
+
+  // A paused account must not be left with a spinner that can never clear:
+  // its run will never arrive, so drop the in-flight entry now.
+  if (paused) for (const n of targets) finishRun(n);
+
+  const verb = paused ? 'Paused' : 'Resumed';
+  const what = targets.length === 1
+    ? shortName(targets[0])
+    : `${targets.length} accounts`;
+
+  const saved = await saveConfig(
+    () => {
+      for (const n of targets) {
+        if (paused) state.config.accounts[n].paused = true;
+        // Absent means running — don't leave a `false` littering the config.
+        else delete state.config.accounts[n].paused;
+      }
+    },
+    `${verb} ${what}`);
+  // The write was rolled back and reloaded — pausing the schedule now would
+  // leave the two halves disagreeing, which is worse than not pausing at all.
+  if (!saved) return;
+
+  // Second layer: stop the cron firing at all. Never blocks the config write
+  // above, and a missing trigger is silence rather than an error.
+  const stuck = [];
+  for (const n of targets) {
+    const t = triggerFor(n);
+    if (!t || t.paused === paused) continue;
+    try {
+      const res = await lucidos.triggers.update(t.id, { paused });
+      if (!res?.success) stuck.push(shortName(n));
+    } catch {
+      stuck.push(shortName(n));
+    }
+  }
+  if (stuck.length) {
+    lucidos.ui.toast(
+      `${verb} in config, but couldn't ${paused ? 'pause' : 'resume'} the schedule for ${
+        stuck.join(', ')} — the run will start and exit instead`,
+      'warning', { key: 'pause-trigger' });
+  }
+  await load();
 }
 
 /* ---------- manual triage ----------
@@ -658,7 +789,14 @@ function currentAccount() {
  * runs finish sooner than one serial pass over four inboxes.
  */
 async function requestRun(names) {
-  const fresh = names.filter((n) => !running.has(n));
+  // A paused account never runs, however the request arrives. Filtering here
+  // as well as disabling the button covers "Triage all", which is handed the
+  // full list, and any future caller.
+  const allowed = names.filter((n) => {
+    const a = state.accounts.find((x) => x.name === n);
+    return a && !isPaused(a);
+  });
+  const fresh = allowed.filter((n) => !running.has(n));
   if (!fresh.length) return;
 
   for (const name of fresh) startRun(name);
@@ -714,7 +852,27 @@ $('#refresh').addEventListener('click', async () => {
   }
 });
 
-$('#view-overview').addEventListener('click', (e) => {
+$('#view-overview').addEventListener('click', async (e) => {
+  const pause = e.target.closest('[data-pause]');
+  if (pause) {
+    const name = pause.dataset.pause;
+    const acct = state.accounts.find((a) => a.name === name);
+    return setPaused([name], !isPaused(acct));
+  }
+
+  if (e.target.closest('#pause-all')) {
+    const allOff = state.accounts.length > 0 && state.accounts.every(isPaused);
+    if (!allOff) {
+      const ok = await lucidos.ui.confirm({
+        title: 'Pause every account?',
+        message: 'No mailbox gets triaged until you resume — not on a schedule, not with "Triage now".\n\nNothing is lost: mail piles up unread and the next run works through it.',
+        okLabel: 'Pause all',
+      });
+      if (!ok) return;
+    }
+    return setPaused(state.accounts.map((a) => a.name), !allOff);
+  }
+
   const one = e.target.closest('[data-run]');
   if (one) return requestRun([one.dataset.run]);
   if (e.target.closest('#run-all')) {

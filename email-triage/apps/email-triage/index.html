@@ -153,6 +153,9 @@
         display: flex;
         justify-content: flex-end;
       }
+      /* Two buttons now live here, so the row is a .button-group that wraps
+         rather than a bare flex row that would slice a long label. */
+      .acct-actions .button-group { justify-content: flex-end; }
       .acct-actions .action-btn,
       .section-head .action-btn {
         display: inline-flex;
@@ -160,7 +163,17 @@
         gap: var(--space-sm);
       }
       /* The head aligns on baseline; a button has none worth using. */
-      .section-head .action-btn { align-self: center; flex: none; }
+      .section-head .action-btn,
+      .section-head .button-group { align-self: center; flex: none; }
+
+      /* A paused account still shows its numbers — they are the last thing
+         triage found — but stops advertising a next run it will not make.
+         Only the informational half dims: the buttons stay at full strength,
+         since Resume is the one thing the user opened this card to do. */
+      .card.is-paused { border-style: dashed; }
+      .card.is-paused .acct-top,
+      .card.is-paused .chips,
+      .card.is-paused .acct-meta { opacity: 0.6; }
       /* Reuses the @keyframes spin declared for the header refresh icon. */
       .spin {
         width: var(--icon-size-sm);
@@ -500,6 +513,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
   </body>
 </html>

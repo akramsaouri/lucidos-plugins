@@ -9,6 +9,8 @@ Automated email triage system. Each Gmail account has its own schedule and rule 
 
 ## Triage Flow
 
+0. **Check `paused` before anything else** — if the account's config block has
+   `"paused": true`, stop the run immediately. See "Paused Accounts" below.
 1. **Read config** — load `artifacts/email-triage/config.json`
 2. **Fetch emails** — depends on account type:
    - **Personal (non-shared)**: `read_emails(account, search="UNSEEN", limit=50)`
@@ -33,6 +35,36 @@ Automated email triage system. Each Gmail account has its own schedule and rule 
    - `flag` — add to high-priority list in summary
    - `triage` — AI reads the email and categorizes as actionable / FYI / noise. **Anything that needs no action (both FYI and noise) is "cleared" according to the account's `no_action_clear` setting** (see below): `read` (mark read, keep), `delete` (trash it), or `keep` (leave untouched, count only). Only `actionable` items survive to the summary. The legacy `no_auto_delete` flag is subsumed by `no_action_clear: "read"`. Note: explicit `delete` **rules** still fire regardless.
 5. **Summary notification** — collect all actionable + flagged items, then **filter out any already in the notified-ledger** (see "Notification Dedup" below). Send one consolidated push notification **only if new (not-yet-notified) actionable/flagged items remain**, then append their ids to the ledger. If every actionable item was already notified on a prior run, **stay silent** — do not re-notify. If nothing is actionable, stay silent (exception-based alerting).
+
+## Paused Accounts (`paused`)
+
+Set `"paused": true` on an account block to switch that account off. A paused account is
+**skipped entirely**: no fetch, no rule evaluation, no AI categorization, no clearing, no
+notification, and **no `EmailTriageCompleted` event** (a run that did nothing should not
+appear in the app's run history as if it had). Absent means running — the app deletes the
+key on resume rather than writing `false`.
+
+**The config flag is the source of truth, and it has to be.** Triage has two callers: each
+account's own cron trigger, and the shared on-demand trigger that the app's "Triage now"
+button fires by emitting `EmailTriageRequested`. Both run the same intent, so a flag the
+intent reads is the only switch that stops both. The on-demand trigger in particular is
+shared by every account — pausing that trigger would silence the button for all of them.
+
+**Pausing the account's cron trigger is a second, best-effort layer.** The app also tries
+to pause that account's own cron trigger, matching it by name (a trigger whose name
+mentions triage and the account, and that actually has a cron schedule — which is what
+keeps it from grabbing the shared on-demand trigger). That layer is allowed to fail: a
+fresh install has no cron triggers yet, and the user may have renamed or deleted one. The
+app warns and carries on; the run still exits at step 0. Never treat a trigger's paused
+state as the source of truth, and never leave the two disagreeing in the "config running,
+cron paused" direction — that is an account that looks live in the app and silently never
+runs.
+
+**Nothing is lost while paused.** Mail simply accumulates unread. For a shared account,
+`state.last_run` is not advanced (the run never reaches that step), so the `since` window
+naturally widens and the first run after resuming picks up everything from the pause. Watch
+for one edge: the mail fetch caps at 50 messages, so a shared account paused for a long
+stretch may need more than one run to work through the backlog.
 
 ## Rule Evaluation
 

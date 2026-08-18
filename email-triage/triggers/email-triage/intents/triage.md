@@ -6,6 +6,10 @@ knowhow:
 
 Triage unseen emails for the specified account.
 
+0. **Check `paused` first.** If the account's config block has `"paused": true`, stop
+   immediately: fetch nothing, change nothing, notify nothing, and emit no
+   `EmailTriageCompleted` event. A paused account is off, whether this run came from its
+   cron trigger or from the app's "Triage now" button.
 1. Load config from `artifacts/email-triage/config.json` for this account
 2. Fetch emails:
    - Non-shared accounts: search `UNSEEN`

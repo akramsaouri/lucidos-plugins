@@ -1,7 +1,7 @@
 id = "email-triage"
-version = "0.2.1"
+version = "0.3.0"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with a per-account “Triage now” button, the triage engine knowhow, the per-account intent, and the on-demand trigger that button fires. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, and the on-demand trigger that button fires. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 categories = ["productivity", "communication", "automation"]
 
@@ -11,6 +11,15 @@ rules, and cron triggers all carry over untouched. Tell the user what changed in
 one line and stop. Do NOT re-run the steps below and do NOT create another
 on-demand trigger. Only continue if they ask you to add a new account.
 
+- **Updating to 0.3.0:** each account can now be **paused** from the app — per account,
+  or all at once from the Accounts header. Pause writes `"paused": true` into that
+  account's block in `artifacts/email-triage/config.json`, and the triage intent now
+  checks that flag before fetching anything, so a paused account is skipped whether the
+  run came from its cron trigger or from "Triage now". The app also pauses that account's
+  own cron trigger as a second layer, best-effort — it matches the trigger by name, so if
+  yours are named something other than "Email Triage — <Account>" the config flag still
+  stops the run and the app will say the schedule could not be paused. Nothing about
+  existing accounts changes: no `paused` key means running, as before.
 - **Updating to 0.2.1:** the on-demand trigger now runs at `low` reasoning effort
   (it fires while the user is watching the app, so latency is the feature), and
   the triage knowhow gained two hazards worth knowing — a mixed-id-scheme bug
