@@ -1,0 +1,114 @@
+id = "sprakstugan"
+version = "0.1.0"
+name = "Språkstugan — Swedish Practice"
+description = "Daily Swedish practice on two fronts: a card-stream app for written vocabulary, particle verbs and sentence structures with a spaced-repetition strength brain and Swedish speech synthesis, plus a spoken-conversation loop where Lucidos roleplays real-life Swedish situations (Försäkringskassan, a reklamation, a salary chat), corrects every reply in full, and chases you if you skip a day. Content is generated at YOUR level at setup — nothing ships pre-filled. Runs on a schedule you choose: ask Lucidos to set up the morning prep, midday nudge and afternoon chase triggers after install."
+source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/sprakstugan"
+categories = ["lifestyle", "productivity"]
+
+setup = """
+Språkstugan ships deliberately empty: no vocabulary, no learner level, no schedule.
+All three are workspace state, and content pitched at someone else's Swedish is worse
+than no content. Walk the user through it conversationally — this should feel like a
+short interview, not a form.
+
+**Read `knowhow/spoken-swedish-practice.md` first**, and note that
+`apps/sprakstugan/knowhow/learner-profile.md` is the file you will be *writing to* in
+step 1. Everything below assumes you've read both.
+
+### 1. Interview for their level — TWO separate axes
+
+The single most important step. Ask about **written** and **spoken** Swedish separately,
+because they diverge, often by two CEFR bands: reading is usually well ahead of speaking.
+Don't ask for a CEFR letter — most people don't know theirs. Ask what they can actually do:
+
+- **Written:** can they read a Swedish news article? A contract from their landlord?
+  Do they know particle verbs (`ge upp`, `råka ut för`)? Compound nouns? Idioms?
+- **Spoken:** can they hold a phone call with a myndighet? Order and handle a complication?
+  Do they freeze when someone answers faster than expected? Do they speak daily at work?
+
+Map the answers onto A2 / B1 / B2 / C1 / C2 per axis, tell them what you concluded and why,
+and let them correct you. Then **write both values into the table in
+`apps/sprakstugan/knowhow/learner-profile.md`**, replacing the placeholders. That file is
+what every later session reads — leaving the placeholders in means everything after this
+is calibrated to nobody.
+
+### 2. Generate the vocabulary bank
+
+The app reads `artifacts/sprakstugan/content.json`, which does not exist yet — until it
+does, the app shows a "no content yet" screen with instructions. Generate it now, using the
+**written** level and the tier-mapping table in the learner profile.
+
+Schema — three arrays, `version: 2`:
+
+```json
+{
+  "version": 2,
+  "words": [
+    { "sv": "kvitto", "en": "receipt", "cat": "Butik", "diff": "medium",
+      "ex": { "sv": "Har du kvittot kvar?", "en": "Do you still have the receipt?" },
+      "gender": "ett" }
+  ],
+  "particles": [
+    { "id": "p:ge_upp", "prompt": "Du får inte ge ___ nu, vi är nästan klara.",
+      "answer": "upp", "options": ["upp", "av", "till", "bort"],
+      "en": "You mustn't give up now, we're almost done.",
+      "cat": "Partikelverb", "diff": "expert" }
+  ],
+  "structures": [
+    { "id": "s:konditionalis", "prompt": "Säg: \"I would have come if I had had time.\"",
+      "model": "Jag hade kommit om jag hade haft tid.",
+      "modelEn": "(past conditional — 'hade' + supine in both clauses)",
+      "cat": "Konditionalis", "diff": "expert" }
+  ]
+}
+```
+
+Rules that matter:
+
+- `diff` is one of `easy` / `medium` / `hard` / `expert` / `master` — the app's five tiers.
+  Centre the bank on their level and include a thin tail one tier **above**; see the
+  mapping table in the learner profile.
+- `gender` is `"en"` / `"ett"` / `null` (null for verbs, adjectives, phrases).
+- `id` on particles and structures must be unique and prefixed `p:` / `s:` — progress is
+  keyed on it, so an id that changes later loses that item's history. Words are keyed
+  `w:<sv>` automatically.
+- Every word needs a natural example sentence in `ex` — that's what the 🔊 button speaks.
+- **Aim for ~120–200 words, ~25 particles, ~20 structures.** Enough that it doesn't repeat
+  within a week. If that's too much to write in one pass, write a solid first batch and
+  offer to extend it later — a bank that exists beats a perfect one that doesn't.
+- Bias `cat` toward situations in *their* life: ask what they need Swedish FOR (work,
+  myndigheter, a partner's family, a child's förskola) and weight the categories to match.
+
+Write it with a data write, then tell them to open the app and reload.
+
+### 3. Offer the three cron triggers — they choose the times
+
+Cron is workspace state, so it's deliberately not shipped. Create them yourself, and let
+them pick the hours; the defaults below are a starting point, not a prescription. All
+three should be created with `app_id = "sprakstugan"`.
+
+- **Scenario prep** — default `0 0 6 * * *` (06:00 daily). Intent, in their voice:
+  prepare today's spoken-Swedish scenario in advance, deliberately picking a category not
+  practiced recently, save it plus a couple of alternates, don't notify.
+  *Silent — it must never send a notification.*
+- **Midday nudge** — default `0 30 11 * * *` (11:30 daily). Intent: nudge them to practice,
+  with a tap that opens a fresh chat primed to start today's prepared scenario, keeping the
+  scene a surprise, and NOT starting the conversation in the trigger thread.
+- **Afternoon chase** — default `0 30 16 * * 1-5` (16:30 weekdays). Intent: check whether
+  they practiced today; stay silent if they did, chase them if they didn't.
+
+Ask before creating each one — some people want the app and the conversation but no
+notifications at all, and that's a perfectly good configuration. If they decline the
+nudge and chase, say plainly that they lose the streak accountability and can add them
+later.
+
+Weekdays-only for the chase is deliberate (weekends off). If they want a 7-day habit,
+use `0 30 16 * * *` instead.
+
+### 4. Tell them how to start a session
+
+Sessions run in a **normal chat thread**, not in the app: they say "let's talk in Swedish"
+or "dags att prata svenska", or tap the nudge notification. The app is for written
+vocabulary drilling; the conversation is where speaking gets practiced. People miss this —
+say it explicitly.
+"""
