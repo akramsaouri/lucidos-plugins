@@ -1,12 +1,12 @@
 id = "trigger-timeline"
-version = "0.1.0"
-name = "Trigger Timeline"
+version = "0.1.1"
+name = "⏰ Cadence"
 description = "An agenda for your scheduled triggers that stays readable when you have a lot of them. Triggers that fire on a steady cadence collapse into a 'Running on a loop' band — one row each with a 24-hour density sparkline — instead of flooding the agenda with a row per fire, so only genuinely punctual triggers get timeline entries. Same-minute fires stack into one row, days fold to a named preview with a density strip, failed runs get an attention rail at the top, and there's a name filter plus sticky group filters. Read-only: it projects your existing cron expressions forward and writes nothing."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/trigger-timeline"
 categories = ["productivity", "automation", "developer-tools"]
 
 setup = """
-Trigger Timeline needs no setup — it reads the workspace's existing triggers
+Cadence needs no setup — it reads the workspace's existing triggers
 through the engine API and writes nothing. Open it and it works.
 
 Two things worth telling the user once, and then stop:

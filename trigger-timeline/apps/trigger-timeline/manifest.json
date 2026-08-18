@@ -1,4 +1,4 @@
 {
   "description": "Agenda for your scheduled triggers that stays readable at volume — steady-cadence triggers collapse into a \"Running on a loop\" band with 24h density sparklines instead of one row per fire, same-minute fires stack, days fold to a named preview, and failed runs get an attention rail. Plus event-driven and paused sections, name search and a group filter sheet.",
-  "name": "⏰ Trigger Timeline"
+  "name": "⏰ Cadence"
 }
