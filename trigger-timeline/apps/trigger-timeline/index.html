@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trigger Timeline</title>
+  <script src="/api/v1/sdk-prefs.js"></script>
+  <link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+  <script src="/api/v1/sdk.js"></script>
+  <style>
+    :root {
+      /* Calendar-style category hues for group dots/chips. Decorative only —
+         everything structural uses theme variables. Chosen to read on light + dark. */
+      --gc-0: hsl(210 70% 55%);
+      --gc-1: hsl(150 60% 45%);
+      --gc-2: hsl(35 85% 52%);
+      --gc-3: hsl(350 72% 58%);
+      --gc-4: hsl(265 65% 62%);
+      --gc-5: hsl(178 60% 42%);
+      --gc-6: hsl(305 55% 58%);
+      --gc-7: hsl(95 55% 45%);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      padding: var(--space-lg);
+      max-width: 54rem;
+      margin: 0 auto;
+    }
+
+    /* ---- Header ---- */
+    .head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: var(--space-md); margin-bottom: var(--space-md); flex-wrap: wrap;
+    }
+    .head h1 { font-size: var(--font-size-2xl); margin: 0 0 var(--space-xs); }
+    .head .sub { color: var(--text-muted); font-size: var(--font-size-sm); }
+    /* stretch, not center: the icon buttons then take the segmented control's
+       height exactly, at any font scale, instead of floating as short glyphs
+       beside a taller pill. aspect-ratio squares them off that height. */
+    .head-controls { display: flex; align-items: stretch; gap: var(--space-sm); flex-shrink: 0; }
+    .segmented-control { flex-shrink: 0; }
+    .head-actions { display: flex; align-items: stretch; gap: var(--space-xs); flex-shrink: 0; }
+    .head-actions .icon-btn {
+      justify-content: center; aspect-ratio: 1; padding: 0;
+      border: 1px solid transparent;
+    }
+    .head-actions .icon-btn:hover { border-color: var(--border-color); }
+    .head-actions .icon-btn svg { width: var(--icon-size-md); height: var(--icon-size-md); }
+
+    /* ---- Filter bar: search + group filter sheet ---- */
+    .filterbar {
+      display: flex; align-items: stretch; gap: var(--space-sm);
+      margin-bottom: var(--space-lg);
+    }
+    .searchbar { position: relative; flex: 1; min-width: 0; }
+    .searchbar svg {
+      position: absolute; left: var(--space-md); top: 50%; transform: translateY(-50%);
+      width: 0.95rem; height: 0.95rem; color: var(--text-muted); pointer-events: none;
+    }
+    .search-input {
+      width: 100%; font: inherit; font-size: var(--font-size-sm);
+      padding: 0.45rem var(--space-md) 0.45rem 2.2rem;
+      border-radius: var(--radius-md); border: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-primary);
+    }
+    .search-input:focus { outline: none; border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-clear {
+      position: absolute; right: var(--space-sm); top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: var(--font-size-md); line-height: 1; padding: 0.2rem 0.4rem;
+    }
+
+    /* Group filter: a trigger button that opens an anchored sheet, so a workspace
+       with a dozen groups no longer spends a full row of chips above the agenda. */
+    .filter-wrap { position: relative; flex-shrink: 0; }
+    .filter-btn {
+      display: inline-flex; align-items: center; gap: var(--space-sm);
+      height: 100%; font: inherit; font-size: var(--font-size-sm);
+      padding: 0.45rem var(--space-md);
+      border-radius: var(--radius-md); border: 1px solid var(--border-color);
+      background: var(--bg-secondary); color: var(--text-secondary);
+      cursor: pointer; user-select: none; white-space: nowrap;
+      transition: border-color var(--duration-fast), background var(--duration-fast);
+    }
+    .filter-btn:hover { background: var(--bg-hover); }
+    .filter-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--text-primary); }
+    .filter-btn svg { width: 0.95rem; height: 0.95rem; flex-shrink: 0; }
+    .filter-btn .fb-label { overflow: hidden; text-overflow: ellipsis; }
+    .filter-btn .fb-count {
+      display: inline-grid; place-items: center; min-width: 1.1rem; padding: 0 0.25rem;
+      border-radius: 999px; background: var(--accent); color: var(--text-on);
+      font-size: var(--font-size-2xs); line-height: 1.4; font-variant-numeric: tabular-nums;
+    }
+
+    .filter-sheet {
+      position: absolute; top: calc(100% + 0.3rem); right: 0; z-index: 20;
+      min-width: 15rem; max-width: min(22rem, calc(100vw - 2 * var(--space-lg)));
+      max-height: 60vh; overflow-y: auto;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+      padding: var(--space-sm);
+    }
+    .filter-sheet[hidden] { display: none; }
+    .fs-head {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+      padding: 0.1rem var(--space-xs) var(--space-xs);
+      font-size: var(--font-size-2xs); text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); font-weight: 600;
+    }
+    .fs-reset {
+      background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+      font-size: var(--font-size-2xs); text-transform: none; letter-spacing: normal;
+      color: var(--accent);
+    }
+    .fs-reset:disabled { color: var(--text-muted); cursor: default; }
+    .fs-row {
+      display: flex; align-items: center; gap: var(--space-sm); width: 100%;
+      padding: 0.4rem var(--space-sm); border: none; border-radius: var(--radius-sm);
+      background: none; color: var(--text-primary); font: inherit;
+      font-size: var(--font-size-sm); text-align: left; cursor: pointer;
+    }
+    .fs-row:hover { background: var(--bg-hover); }
+    .fs-row .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--dot, var(--text-muted)); flex-shrink: 0; }
+    .fs-row .fs-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .fs-row .n { color: var(--text-muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+    .fs-row .fs-check { width: 0.9rem; height: 0.9rem; flex-shrink: 0; color: var(--accent); }
+    .fs-row.off { color: var(--text-muted); }
+    .fs-row.off .dot { opacity: 0.35; }
+    .fs-row.off .fs-check { visibility: hidden; }
+
+    /* ---- Attention rail ---- */
+    .attention {
+      border: 1px solid var(--accent-red); border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--accent-red) 8%, transparent);
+      padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-lg);
+      display: flex; align-items: flex-start; gap: var(--space-sm); flex-wrap: wrap;
+    }
+    .attention .a-icon { color: var(--accent-red); display: flex; padding-top: 0.1rem; }
+    .attention .a-icon svg { width: 1rem; height: 1rem; }
+    .attention .a-body { flex: 1; min-width: 0; }
+    .attention .a-title { font-size: var(--font-size-sm); font-weight: 600; color: var(--accent-red); }
+    .attention .a-list {
+      margin-top: 0.2rem; display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm);
+      font-size: var(--font-size-xs); color: var(--text-secondary);
+    }
+    .attention .a-list span::after { content: "·"; margin-left: var(--space-sm); color: var(--text-muted); }
+    .attention .a-list span:last-child::after { content: ""; }
+
+    /* ---- Hero: next up ---- */
+    .hero {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      padding: var(--space-xl);
+      margin-bottom: var(--space-lg);
+      display: flex; align-items: center; gap: var(--space-xl);
+    }
+    .hero-bolt {
+      width: 3rem; height: 3rem; flex-shrink: 0;
+      border-radius: var(--radius-md);
+      display: grid; place-items: center;
+      background: var(--accent-light);
+      color: var(--accent);
+    }
+    .hero-bolt svg { width: 1.6rem; height: 1.6rem; }
+    .hero-main { min-width: 0; flex: 1; }
+    .hero-count {
+      font-size: var(--font-size-display); line-height: 1.05; font-weight: 650;
+      letter-spacing: -0.02em; color: var(--text-primary);
+      overflow-wrap: anywhere;
+    }
+    .hero-count.imminent { color: var(--accent); }
+    .hero-name {
+      font-size: var(--font-size-xl); margin-top: var(--space-sm);
+      display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
+      min-width: 0; overflow-wrap: anywhere;
+    }
+    .hero-when { color: var(--text-secondary); font-size: var(--font-size-md); margin-top: var(--space-xs); }
+    .hero.empty .hero-count { font-size: var(--font-size-2xl); color: var(--text-secondary); font-weight: 550; }
+
+    /* ---- Collapsible section shell ---- */
+    .section { margin-bottom: var(--space-lg); }
+    .sec-head {
+      display: flex; align-items: center; gap: var(--space-sm);
+      font-size: var(--font-size-sm); text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); font-weight: 600;
+      padding: var(--space-xs) 0; margin: 0 0 var(--space-sm);
+      cursor: pointer; user-select: none; width: 100%;
+      background: none; border: none; text-align: left; font-family: inherit;
+    }
+    .sec-head:hover { color: var(--text-secondary); }
+    .sec-head .caret {
+      width: 0.7rem; height: 0.7rem; flex-shrink: 0;
+      transition: transform var(--duration-fast); color: var(--text-muted);
+    }
+    .sec-head.open .caret { transform: rotate(90deg); }
+    .sec-head .sec-n {
+      margin-left: auto; text-transform: none; letter-spacing: normal;
+      font-weight: 400; color: var(--text-muted); font-size: var(--font-size-xs);
+    }
+    .sec-head .h-hint {
+      text-transform: none; letter-spacing: normal; font-weight: 400; color: var(--text-muted);
+    }
+    /* Section emoji. Sized in em so it tracks the header's own font-size at any
+       UI scale, and opted out of the header's uppercase/letter-spacing so the
+       glyph is not padded away from its label. */
+    .sec-head .sec-emoji {
+      font-size: 1.1em; line-height: 1; flex-shrink: 0;
+      text-transform: none; letter-spacing: normal;
+      font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    }
+
+    /* ---- Rhythm rows (high-frequency triggers, one row each) ---- */
+    .rhythm {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: center; gap: var(--space-sm) var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border-color); border-radius: var(--radius-md);
+      background: var(--bg-secondary); margin-bottom: var(--space-sm);
+      cursor: pointer;
+    }
+    .rhythm:hover { background: var(--bg-hover); }
+    .rhythm .r-name {
+      font-size: var(--font-size-md); display: flex; align-items: center;
+      gap: var(--space-sm); min-width: 0;
+    }
+    .rhythm .r-name .lead {
+      width: 0.55rem; height: 0.55rem; border-radius: 50%;
+      background: var(--dot, var(--accent)); flex-shrink: 0;
+    }
+    .rhythm .r-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Never nowrap: this sits in the 1fr track, so an unbreakable string here
+       sets the track's min-content width and blows the whole grid past the
+       viewport on narrow screens. */
+    .rhythm .r-cadence {
+      color: var(--text-muted); font-size: var(--font-size-xs);
+      text-align: right; min-width: 0; overflow-wrap: anywhere;
+    }
+    .rhythm .r-next { color: var(--text-secondary); font-size: var(--font-size-xs); }
+    .rhythm .r-count {
+      font-size: var(--font-size-2xs); padding: 0.12rem 0.4rem; border-radius: var(--radius-sm);
+      background: var(--bg-tertiary); color: var(--text-muted); font-variant-numeric: tabular-nums;
+    }
+
+    /* 24-hour density sparkline */
+    .spark {
+      display: flex; align-items: flex-end; gap: 1px;
+      height: 1.1rem; grid-column: 1 / -1;
+    }
+    .spark .s-bar {
+      flex: 1; min-height: 0.1rem; border-radius: 1px;
+      background: var(--dot, var(--accent)); opacity: 0.22;
+    }
+    .spark .s-bar.on { opacity: 0.85; }
+    .spark .s-bar.now { background: var(--accent-red); opacity: 1; }
+    .spark-axis {
+      grid-column: 1 / -1; display: flex; justify-content: space-between;
+      font-size: var(--font-size-2xs); color: var(--text-muted);
+      font-family: var(--font-mono); margin-top: 0.1rem;
+    }
+    .r-fires {
+      grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--space-xs);
+      margin-top: var(--space-xs);
+    }
+    .r-fires .f {
+      font-family: var(--font-mono); font-size: var(--font-size-2xs);
+      padding: 0.1rem 0.35rem; border-radius: var(--radius-sm);
+      background: var(--bg-tertiary); color: var(--text-secondary);
+    }
+
+    /* ---- Day headers + density strip ---- */
+    .day-head {
+      display: flex; align-items: center; gap: var(--space-sm);
+      padding: var(--space-sm) 0; margin: var(--space-md) 0 var(--space-xs);
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer; user-select: none; width: 100%;
+      background: var(--bg-primary); border-top: none; border-left: none; border-right: none;
+      font-family: inherit; text-align: left; color: inherit;
+    }
+    .day-head.sticky { position: sticky; top: 0; z-index: 2; }
+    .day-head .caret {
+      width: 0.7rem; height: 0.7rem; color: var(--text-muted);
+      transition: transform var(--duration-fast); flex-shrink: 0;
+    }
+    .day-head.open .caret { transform: rotate(90deg); }
+    .day-head .d-name { font-size: var(--font-size-lg); font-weight: 600; }
+    .day-head .d-date { color: var(--text-muted); font-size: var(--font-size-sm); }
+    .day-head .d-count { color: var(--text-muted); font-size: var(--font-size-xs); margin-left: auto; flex-shrink: 0; }
+    .day-strip {
+      display: flex; align-items: flex-end; gap: 1px; height: 0.9rem;
+      flex: 1; min-width: 5rem; max-width: 16rem; margin: 0 var(--space-sm);
+    }
+    .day-strip .t {
+      flex: 1; border-radius: 1px; background: var(--border-color); min-height: 0.12rem;
+    }
+    .day-strip .t.hit { background: var(--accent); opacity: 0.55; }
+    .day-strip .t.nowtick { background: var(--accent-red); opacity: 1; }
+    .day-peek {
+      color: var(--text-muted); font-size: var(--font-size-xs);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      padding: 0 0 var(--space-sm) 1.3rem;
+    }
+
+    /* ---- Agenda entries ---- */
+    .entry {
+      display: grid;
+      grid-template-columns: 3.4rem 1.2rem minmax(0, 1fr);
+      gap: var(--space-sm);
+      padding: var(--space-sm) 0;
+      align-items: start;
+    }
+    .entry.stack { cursor: pointer; }
+    .entry .t-time {
+      font-family: var(--font-mono); font-size: var(--font-size-md);
+      color: var(--text-secondary); text-align: right; padding-top: 0.05rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .rail { position: relative; display: flex; justify-content: center; }
+    .rail::before {
+      content: ""; position: absolute; top: 0.55rem; bottom: -0.95rem;
+      width: 2px; background: var(--border-color);
+    }
+    .entry:last-child .rail::before { display: none; }
+    .rail .node {
+      width: 0.7rem; height: 0.7rem; border-radius: 50%;
+      background: var(--dot, var(--accent));
+      margin-top: 0.28rem; z-index: 1;
+      box-shadow: 0 0 0 3px var(--bg-primary);
+    }
+    .rail .node.multi { background: var(--bg-primary); border: 2px solid var(--dot, var(--accent)); }
+    .t-body { min-width: 0; }
+    .t-name {
+      font-size: var(--font-size-md); color: var(--text-primary);
+      display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+      min-width: 0; overflow-wrap: anywhere;
+    }
+    .t-meta {
+      color: var(--text-muted); font-size: var(--font-size-xs);
+      margin-top: 0.1rem; display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
+    }
+    .dots { display: inline-flex; gap: 0.2rem; align-items: center; }
+    .dots i { width: 0.45rem; height: 0.45rem; border-radius: 50%; display: block; }
+    .stack-list { margin-top: var(--space-xs); display: grid; gap: 0.2rem; }
+    .stack-list .sl {
+      font-size: var(--font-size-sm); color: var(--text-secondary);
+      display: flex; align-items: center; gap: var(--space-sm);
+      min-width: 0; overflow-wrap: anywhere;
+    }
+    .stack-list .sl i { width: 0.45rem; height: 0.45rem; border-radius: 50%; flex-shrink: 0; }
+    .g-chip { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--dot, var(--text-muted)); }
+    .g-chip .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+    .t-rel { color: var(--text-secondary); }
+    .warn { color: var(--accent-red); display: inline-flex; align-items: center; }
+    .warn svg { width: 0.85rem; height: 0.85rem; }
+
+    /* ---- Simple rows (event / paused) ---- */
+    .srow {
+      display: flex; align-items: center; gap: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border-color); border-radius: var(--radius-md);
+      background: var(--bg-secondary); margin-bottom: var(--space-sm);
+    }
+    .srow .s-name { font-size: var(--font-size-md); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .srow .s-detail { color: var(--text-muted); font-size: var(--font-size-xs); }
+    .srow.paused .s-name { color: var(--text-secondary); }
+    .pill {
+      font-size: var(--font-size-2xs); text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 0.12rem 0.4rem; border-radius: var(--radius-sm);
+      background: var(--bg-tertiary); color: var(--text-muted); flex-shrink: 0;
+    }
+    .event-section .srow { border-left: 3px solid var(--accent); }
+    .event-section .pill { background: var(--accent-light); color: var(--accent); }
+    .srow .s-ago { flex-shrink: 0; white-space: nowrap; color: var(--text-muted); font-size: var(--font-size-xs); }
+
+    .empty-state { text-align: center; color: var(--text-muted); padding: var(--space-xl); }
+    .error-text { color: var(--accent-red); }
+    .loading { color: var(--text-muted); padding: var(--space-xl); text-align: center; }
+    .mono { font-family: var(--font-mono); }
+
+    /* ---- Narrow screens ---- */
+    @media (max-width: 40rem) {
+      body { padding: var(--space-md); }
+      .hero { padding: var(--space-lg); gap: var(--space-lg); }
+      .head { gap: var(--space-sm); }
+      .head h1 { font-size: var(--font-size-xl); }
+      .head-controls { width: 100%; justify-content: space-between; }
+      .head-actions { margin-left: auto; }
+      .rhythm { grid-template-columns: minmax(0, 1fr) auto; }
+      .rhythm .r-cadence { grid-column: 1 / -1; text-align: left; }
+      /* r-next and r-count share the auto track on two rows otherwise */
+      .rhythm .r-next { grid-column: 1 / -1; }
+      .day-strip { display: none; }
+      .entry { grid-template-columns: 2.9rem 1rem minmax(0, 1fr); gap: var(--space-xs); }
+      .entry .t-time { font-size: var(--font-size-sm); }
+      .day-peek { padding-left: 1.1rem; }
+      .srow { flex-wrap: wrap; }
+    }
+
+    /* Small phones — the display-size countdown is the widest single string
+       in the app and stops fitting around here. */
+    @media (max-width: 25rem) {
+      .hero { padding: var(--space-md); gap: var(--space-md); }
+      .hero-bolt { width: 2.25rem; height: 2.25rem; }
+      .hero-bolt svg { width: 1.2rem; height: 1.2rem; }
+      .hero-count { font-size: var(--font-size-2xl); }
+      .hero-name { font-size: var(--font-size-lg); }
+      .segmented-btn { padding-left: var(--space-sm); padding-right: var(--space-sm); }
+      /* The search field needs the width more than the button needs its label. */
+      .filter-btn .fb-label { display: none; }
+      .filter-btn { padding-left: var(--space-sm); padding-right: var(--space-sm); }
+    }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <div>
+      <h1>Trigger Timeline</h1>
+      <div class="sub" id="summary">Loading…</div>
+    </div>
+    <div class="head-controls">
+      <div class="segmented-control" id="window-seg">
+        <button class="segmented-btn active" data-h="24">24h</button>
+        <button class="segmented-btn" data-h="48">48h</button>
+        <button class="segmented-btn" data-h="168">7d</button>
+      </div>
+      <div class="head-actions">
+        <button class="icon-btn" id="foldall" title="Collapse all sections" aria-label="Collapse all sections">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 9l8-6 8 6M4 15l8 6 8-6"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="filterbar">
+    <div class="searchbar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+      </svg>
+      <input class="search-input" id="search" type="search" autocomplete="off"
+             placeholder="Filter triggers by name…">
+    </div>
+    <div class="filter-wrap" id="filter-wrap" hidden>
+      <button class="filter-btn" id="filter-btn" type="button" aria-expanded="false" aria-haspopup="true" aria-controls="filter-sheet">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 5h18l-7 8v6l-4 2v-8z"/>
+        </svg>
+        <span class="fb-label" id="filter-label">Groups</span>
+      </button>
+      <div class="filter-sheet" id="filter-sheet" role="dialog" aria-label="Filter by group" hidden></div>
+    </div>
+  </div>
+
+  <div id="content"><div class="loading">Loading triggers…</div></div>
+
+  <script>
+    lucidos.ui.applyPreferences();
+    lucidos.ui.watchPreferences();
+
+    const esc = (s) => lucidos.utils.escapeHtml(String(s == null ? '' : s));
+
+    // The viewer's own zone — a trigger without an explicit timezone is projected
+    // against the clock the user is actually reading. (Never hardcode a zone here:
+    // this app ships as a plugin to workspaces in other countries.)
+    const LOCAL_TZ = (() => {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+      catch (e) { return 'UTC'; }
+    })();
+
+    // A trigger firing this often per day is a RHYTHM, not a series of appointments.
+    // Enumerating each fire as its own agenda row is what makes a busy workspace
+    // unreadable (26 scheduled triggers -> 332 rows over 48h, two thirds of them
+    // from six hourly jobs). Rhythms collapse to one row with a density sparkline.
+    const RHYTHM_PER_DAY = 8;
+
+    // ---------- Persistence ----------
+    const LS = {
+      get(k, d) { try { const v = localStorage.getItem('tt:' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+      set(k, v) { try { localStorage.setItem('tt:' + k, JSON.stringify(v)); } catch (e) {} },
+    };
+
+    // ---------- API base detection ----------
+    function apiBase() {
+      try {
+        const u = new URL(lucidos.data.url('__probe__'), location.href);
+        const m = u.pathname.match(/^(.*)\/data\/__probe__$/);
+        if (m) return u.origin + m[1] + '/api/v1';
+      } catch (e) {}
+      const m2 = location.pathname.match(/^(.*)\/app\/[^/]+\//);
+      if (m2) return location.origin + m2[1] + '/api/v1';
+      return location.origin + '/api/v1';
+    }
+
+    // ---------- Cron parsing ----------
+    function parseField(field, min, max, isDow) {
+      if (field === '*' || field === '?') return null; // any
+      const set = new Set();
+      for (let part of field.split(',')) {
+        part = part.trim();
+        let step = 1, range = part;
+        const slash = part.split('/');
+        if (slash.length === 2) { range = slash[0]; step = parseInt(slash[1], 10) || 1; }
+        let lo, hi;
+        if (range === '*') { lo = min; hi = max; }
+        else if (range.includes('-')) { const [a, b] = range.split('-'); lo = parseInt(a, 10); hi = parseInt(b, 10); }
+        else { lo = hi = parseInt(range, 10); }
+        if (isNaN(lo)) continue;
+        if (isNaN(hi)) hi = lo;
+        for (let v = lo; v <= hi; v += step) {
+          let vv = v;
+          if (isDow && vv === 7) vv = 0; // 7 -> Sunday
+          set.add(vv);
+        }
+      }
+      return set.size ? set : null;
+    }
+
+    function parseCron(expr) {
+      const p = expr.trim().split(/\s+/);
+      if (p.length !== 6) return null;
+      return {
+        sec: parseField(p[0], 0, 59, false),
+        min: parseField(p[1], 0, 59, false),
+        hour: parseField(p[2], 0, 23, false),
+        dom: parseField(p[3], 1, 31, false),
+        mon: parseField(p[4], 1, 12, false),
+        dow: parseField(p[5], 0, 6, true),
+        raw: expr.trim(),
+      };
+    }
+
+    // Each cron_expressions entry may itself hold several full expressions joined
+    // by ", " (comma+space). Field-internal commas never carry a trailing space,
+    // so splitting on /,\s+/ is safe.
+    function normalizeExprs(list) {
+      const out = [];
+      for (const e of (list || [])) {
+        for (const piece of String(e).split(/,\s+/)) {
+          const c = parseCron(piece);
+          if (c) out.push(c);
+        }
+      }
+      return out;
+    }
+
+    // ---------- Timezone-aware wall-clock parts ----------
+    const _fmtCache = {};
+    function getFmt(tz) {
+      if (!_fmtCache[tz]) {
+        try {
+          _fmtCache[tz] = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, hourCycle: 'h23',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+          });
+        } catch (e) {
+          // Unknown zone string on this platform — fall back to the viewer's.
+          _fmtCache[tz] = getFmt(LOCAL_TZ);
+        }
+      }
+      return _fmtCache[tz];
+    }
+    function partsAt(fmt, ms) {
+      const map = {};
+      for (const part of fmt.formatToParts(new Date(ms))) {
+        if (part.type !== 'literal') map[part.type] = part.value;
+      }
+      const y = +map.year, mo = +map.month, d = +map.day;
+      const h = +map.hour % 24, mi = +map.minute, s = +map.second;
+      const dow = new Date(Date.UTC(y, mo - 1, d, 12)).getUTCDay();
+      return { y, mo, d, h, mi, s, dow };
+    }
+
+    function matchCron(p, c) {
+      if (c.sec && !c.sec.has(p.s)) return false;
+      if (c.min && !c.min.has(p.mi)) return false;
+      if (c.hour && !c.hour.has(p.h)) return false;
+      if (c.mon && !c.mon.has(p.mo)) return false;
+      const domOk = !c.dom || c.dom.has(p.d);
+      const dowOk = !c.dow || c.dow.has(p.dow);
+      if (c.dom && c.dow) return domOk || dowOk;
+      return domOk && dowOk;
+    }
+
+    // Project one cron's fire times in [startMs, endMs].
+    function fireTimes(c, tz, startMs, endMs, cap) {
+      const fmt = getFmt(tz);
+      const sortedMin = c.min ? [...c.min].sort((a, b) => a - b) : null;
+      const out = [];
+      let t = Math.ceil(startMs / 60000) * 60000;
+      let guard = 0;
+      while (t <= endMs && out.length < cap && guard < 200000) {
+        guard++;
+        const p = partsAt(fmt, t);
+        // Fast-forward to the next allowed minute when minute is constrained.
+        if (sortedMin && !c.min.has(p.mi)) {
+          const nxt = sortedMin.find(v => v > p.mi);
+          const steps = nxt !== undefined ? nxt - p.mi : sortedMin[0] + 60 - p.mi;
+          t += steps * 60000;
+          continue;
+        }
+        if (matchCron(p, c)) out.push(t);
+        t += 60000;
+      }
+      return out;
+    }
+
+    // ---------- Formatting helpers ----------
+    const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const MON_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    function fmtCountdown(ms) {
+      if (ms <= 0) return 'now';
+      const s = Math.floor(ms / 1000);
+      if (s < 60) return 'in ' + s + 's';
+      const m = Math.floor(s / 60);
+      if (m < 60) return 'in ' + m + 'm';
+      const h = Math.floor(m / 60), rm = m % 60;
+      if (h < 24) return 'in ' + h + 'h' + (rm ? ' ' + rm + 'm' : '');
+      const d = Math.floor(h / 24), rh = h % 24;
+      return 'in ' + d + 'd' + (rh ? ' ' + rh + 'h' : '');
+    }
+    function fmtRel(ms) {
+      if (ms <= 0) return 'now';
+      const m = Math.floor(ms / 60000);
+      if (m < 60) return 'in ' + m + 'm';
+      const h = Math.floor(m / 60), rm = m % 60;
+      if (h < 24) return 'in ' + h + 'h' + (rm ? ' ' + rm + 'm' : '');
+      const d = Math.floor(h / 24), rh = h % 24;
+      return 'in ' + d + 'd' + (rh ? ' ' + rh + 'h' : '');
+    }
+    function fmtAgo(ms) {
+      if (ms < 0) ms = 0;
+      const m = Math.floor(ms / 60000);
+      if (m < 1) return 'just now';
+      if (m < 60) return m + 'm ago';
+      const h = Math.floor(m / 60);
+      if (h < 24) return h + 'h ago';
+      const d = Math.floor(h / 24);
+      if (d < 30) return d + 'd ago';
+      return Math.floor(d / 30) + 'mo ago';
+    }
+    function fmtTime(d) {
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    function dayKey(d) { return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+    function dayLabel(d) {
+      const now = new Date();
+      const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diff = Math.round((dd - t0) / 86400000);
+      if (diff === 0) return 'Today';
+      if (diff === 1) return 'Tomorrow';
+      return DOW_NAMES[d.getDay()] + ', ' + d.getDate() + ' ' + MON_NAMES[d.getMonth()];
+    }
+
+    // Human-readable schedule summary.
+    function describeCrons(crons) {
+      if (!crons.length) return '';
+      return crons.map(describeOne).join(' · ');
+    }
+    function fieldToList(set) { return [...set].sort((a, b) => a - b); }
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function describeOne(c) {
+      const dowTxt = c.dow ? dowSummary(fieldToList(c.dow)) : '';
+      let timeTxt;
+      if (c.hour && c.hour.size <= 3 && c.min && c.min.size === 1) {
+        const mi = [...c.min][0];
+        timeTxt = fieldToList(c.hour).map(h => pad(h) + ':' + pad(mi)).join(', ');
+      } else if (c.hour && c.hour.size > 3 && c.min && c.min.size === 1) {
+        const hrs = fieldToList(c.hour), mi = [...c.min][0];
+        timeTxt = 'hourly ' + pad(hrs[0]) + ':' + pad(mi) + '–' + pad(hrs[hrs.length - 1]) + ':' + pad(mi);
+      } else if (!c.hour && c.min && c.min.size === 1) {
+        timeTxt = 'every hour at :' + pad([...c.min][0]);
+      } else {
+        timeTxt = c.raw;
+      }
+      return (dowTxt ? dowTxt + ' ' : '') + timeTxt;
+    }
+    function dowSummary(list) {
+      const s = list.join(',');
+      if (s === '1,2,3,4,5') return 'weekdays';
+      if (s === '0,6') return 'weekends';
+      if (list.length === 7) return '';
+      return list.map(d => DOW_NAMES[d]).join('/');
+    }
+
+    // ---------- State ----------
+    let TRIGGERS = [], GROUPS = {}, GROUP_LIST = [];
+    let OCCURRENCES = [];        // every projected fire {ts, trigger, groupId}
+    let RHYTHMS = [], AGENDA = [];
+    let EVENT_TRIGGERS = [], PAUSED_TRIGGERS = [], FAILING = [];
+    let WINDOW_H = LS.get('window', 24);
+    let QUERY = '';
+    const excluded = new Set(LS.get('excluded', []));
+    // Every section folds, and the fold survives a reload. The agenda is a
+    // section too, so a workspace that lives in the loop band can shut the
+    // per-fire list entirely.
+    const openSec = {
+      rhythms: LS.get('sec.rhythms', true),
+      agenda: LS.get('sec.agenda', true),
+      events: LS.get('sec.events', false),
+      paused: LS.get('sec.paused', false),
+    };
+    const dayState = {};          // dayKey -> bool (undefined = default)
+    const openStacks = new Set(); // ts of expanded same-minute stacks
+    const openRhythms = new Set();// trigger id of expanded rhythm rows
+    const groupColorIdx = {};
+
+    function groupColorVar(gid) {
+      if (!gid) return null;
+      if (!(gid in groupColorIdx)) groupColorIdx[gid] = Object.keys(groupColorIdx).length % 8;
+      return 'var(--gc-' + groupColorIdx[gid] + ')';
+    }
+
+    // ---------- Load + project ----------
+    async function load() {
+      const base = apiBase();
+      let tData, gData;
+      try {
+        const [tRes, gRes] = await Promise.all([
+          fetch(base + '/triggers', { headers: { Accept: 'application/json' }, credentials: 'same-origin' }),
+          fetch(base + '/trigger-groups', { headers: { Accept: 'application/json' }, credentials: 'same-origin' }),
+        ]);
+        if (!tRes.ok) throw new Error('triggers HTTP ' + tRes.status);
+        tData = await tRes.json();
+        gData = gRes.ok ? await gRes.json() : { groups: [] };
+      } catch (e) {
+        document.getElementById('content').innerHTML =
+          '<div class="empty-state error-text">Couldn\'t load triggers: ' + esc(e.message) + '</div>';
+        return;
+      }
+
+      TRIGGERS = tData.triggers || [];
+      GROUP_LIST = gData.groups || [];
+      GROUPS = {};
+      for (const g of GROUP_LIST) { GROUPS[g.id] = g; groupColorVar(g.id); }
+
+      project();
+      render();
+      startTicker();
+    }
+
+    function project() {
+      const now = Date.now();
+      const end = now + WINDOW_H * 3600000;
+      OCCURRENCES = []; EVENT_TRIGGERS = []; PAUSED_TRIGGERS = []; FAILING = [];
+      const seen = new Set();
+
+      for (const tr of TRIGGERS) {
+        const crons = normalizeExprs(tr.cron_expressions);
+        tr._crons = crons;
+        if (tr.last_run_status === 'failed') FAILING.push(tr);
+
+        if (tr.paused) { PAUSED_TRIGGERS.push(tr); continue; }
+        if (!crons.length) { EVENT_TRIGGERS.push(tr); continue; }
+
+        const tz = tr.timezone || LOCAL_TZ;
+        const add = (ms) => {
+          if (ms < now || ms > end) return;
+          const key = tr.id + '@' + Math.floor(ms / 60000);
+          if (seen.has(key)) return;
+          seen.add(key);
+          OCCURRENCES.push({ ts: ms, trigger: tr, groupId: tr.group_id || null });
+        };
+        // Safety net: always include the server-computed next fire.
+        if (tr.next_run) { const ms = Date.parse(tr.next_run); if (!isNaN(ms)) add(ms); }
+        for (const c of crons) for (const ms of fireTimes(c, tz, now, end, 1200)) add(ms);
+      }
+      OCCURRENCES.sort((a, b) => a.ts - b.ts);
+      classify();
+    }
+
+    // Split projected fires into RHYTHMS (one row per trigger) and AGENDA
+    // (one row per fire). This is the whole point of the redesign: a job that
+    // runs hourly is one fact about the day, not 34 separate appointments.
+    function classify() {
+      const days = Math.max(WINDOW_H / 24, 1);
+      const byTrigger = new Map();
+      for (const o of OCCURRENCES) {
+        let l = byTrigger.get(o.trigger.id);
+        if (!l) { l = []; byTrigger.set(o.trigger.id, l); }
+        l.push(o);
+      }
+      RHYTHMS = []; AGENDA = [];
+      for (const list of byTrigger.values()) {
+        const perDay = list.length / days;
+        if (perDay >= RHYTHM_PER_DAY) {
+          RHYTHMS.push({ trigger: list[0].trigger, groupId: list[0].groupId, occ: list, perDay });
+        } else {
+          for (const o of list) AGENDA.push(o);
+        }
+      }
+      AGENDA.sort((a, b) => a.ts - b.ts);
+      RHYTHMS.sort((a, b) => b.perDay - a.perDay);
+    }
+
+    // ---------- Filtering ----------
+    function passes(tr, groupId) {
+      if (excluded.has(groupId || '__none__')) return false;
+      if (QUERY && !String(tr.name || '').toLowerCase().includes(QUERY)) return false;
+      return true;
+    }
+    const visAgenda = () => AGENDA.filter(o => passes(o.trigger, o.groupId));
+    const visRhythms = () => RHYTHMS.filter(r => passes(r.trigger, r.groupId));
+    const visEvents = () => EVENT_TRIGGERS.filter(t => passes(t, t.group_id || null));
+    const visPaused = () => PAUSED_TRIGGERS.filter(t => passes(t, t.group_id || null));
+    // The hero counts down to the very next thing that will run, rhythm or not.
+    function nextUp() {
+      const now = Date.now();
+      let best = null;
+      for (const o of visAgenda()) { if (o.ts > now) { best = o; break; } }
+      for (const r of visRhythms()) {
+        for (const o of r.occ) {
+          if (o.ts > now) { if (!best || o.ts < best.ts) best = o; break; }
+        }
+      }
+      return best;
+    }
+
+    // ---------- Render ----------
+    function windowLabel() { return WINDOW_H === 168 ? '7 days' : WINDOW_H + ' hours'; }
+
+    function render() {
+      const scheduledCount = TRIGGERS.filter(t => !t.paused && (t._crons || []).length).length;
+      document.getElementById('summary').textContent =
+        scheduledCount + ' scheduled · ' + EVENT_TRIGGERS.length + ' event-driven · ' +
+        PAUSED_TRIGGERS.length + ' paused · ' + OCCURRENCES.length + ' fires in ' + windowLabel();
+
+      const c = document.getElementById('content');
+      c.innerHTML = '';
+      if (FAILING.length) c.appendChild(attentionEl());
+      c.appendChild(heroEl());
+      if (RHYTHMS.length) c.appendChild(rhythmSection());
+      if (EVENT_TRIGGERS.length) c.appendChild(eventSection());
+      renderFilter();
+
+      const vis = visAgenda();
+      const agendaSec = document.createElement('div');
+      agendaSec.className = 'section';
+      agendaSec.appendChild(secHead('agenda', 'Agenda',
+        vis.length + (vis.length === 1 ? ' fire' : ' fires'),
+        '— one-off and low-frequency triggers', '🗓️'));
+      if (openSec.agenda) {
+        if (vis.length) {
+          agendaSec.appendChild(timelineEl(vis));
+        } else {
+          const e = document.createElement('div');
+          e.className = 'empty-state';
+          e.textContent = (QUERY || excluded.size)
+            ? 'Nothing matches the current filter.'
+            : (RHYTHMS.length
+                ? 'Nothing one-off in the next ' + windowLabel() + ' — only the loops above.'
+                : 'No scheduled fires in the next ' + windowLabel() + '.');
+          agendaSec.appendChild(e);
+        }
+      }
+      c.appendChild(agendaSec);
+
+      if (PAUSED_TRIGGERS.length) c.appendChild(pausedSection());
+      updateTick();
+    }
+
+    function caretSvg() {
+      return '<svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+    }
+    function boltSvg(cls) {
+      return '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4.5 13.5H11l-1 8.5L19.5 10H13z"/></svg>';
+    }
+    function warnSvg() {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    }
+
+    // Failures used to be a 0.85rem glyph inside a meta line, i.e. invisible in a
+    // list this long. They get the top of the page instead.
+    function attentionEl() {
+      const el = document.createElement('div');
+      el.className = 'attention';
+      el.innerHTML =
+        '<span class="a-icon">' + warnSvg() + '</span>' +
+        '<div class="a-body">' +
+          '<div class="a-title">' + FAILING.length +
+            (FAILING.length === 1 ? ' trigger failed its last run' : ' triggers failed their last run') + '</div>' +
+          '<div class="a-list">' + FAILING.map(t => '<span>' + esc(t.name) + '</span>').join('') + '</div>' +
+        '</div>';
+      return el;
+    }
+
+    function heroEl() {
+      const next = nextUp();
+      const el = document.createElement('div');
+      el.className = 'hero' + (next ? '' : ' empty');
+      if (!next) {
+        el.innerHTML =
+          '<div class="hero-bolt">' + boltSvg() + '</div>' +
+          '<div class="hero-main"><div class="hero-count">Nothing upcoming</div>' +
+          '<div class="hero-when">No scheduled fires in the next ' + windowLabel() + '.</div></div>';
+        return el;
+      }
+      const cv = groupColorVar(next.groupId);
+      const d = new Date(next.ts);
+      el.innerHTML =
+        '<div class="hero-bolt">' + boltSvg() + '</div>' +
+        '<div class="hero-main">' +
+          '<div class="hero-count" id="hero-count"></div>' +
+          '<div class="hero-name">' + esc(next.trigger.name) + groupChipHtml(next.groupId) + '</div>' +
+          '<div class="hero-when">' + dayLabel(d) + ' at ' + fmtTime(d) + '</div>' +
+        '</div>';
+      if (cv) el.style.setProperty('--dot', cv);
+      return el;
+    }
+
+    function groupChipHtml(gid) {
+      const name = gid && GROUPS[gid] ? GROUPS[gid].name : (gid ? gid : 'Ungrouped');
+      const cv = groupColorVar(gid);
+      return '<span class="g-chip"' + (cv ? ' style="--dot:' + cv + '"' : '') + '>' +
+        '<span class="dot"></span>' + esc(name) + '</span>';
+    }
+
+    function secHead(key, label, count, hint, emoji) {
+      const b = document.createElement('button');
+      b.className = 'sec-head' + (openSec[key] ? ' open' : '');
+      b.innerHTML = caretSvg() +
+        (emoji ? '<span class="sec-emoji" aria-hidden="true">' + emoji + '</span>' : '') + label +
+        (hint ? ' <span class="h-hint">' + hint + '</span>' : '') +
+        '<span class="sec-n">' + count + '</span>';
+      b.addEventListener('click', () => {
+        openSec[key] = !openSec[key];
+        LS.set('sec.' + key, openSec[key]);
+        render();
+      });
+      return b;
+    }
+
+    // ---------- Rhythms ----------
+    function rhythmSection() {
+      const sec = document.createElement('div');
+      sec.className = 'section';
+      const rows = visRhythms();
+      sec.appendChild(secHead('rhythms', 'Running on a loop',
+        rows.length + (rows.length === 1 ? ' trigger' : ' triggers'),
+        '— steady cadence, folded out of the agenda', '🔁'));
+      if (!openSec.rhythms) return sec;
+      if (!rows.length) {
+        const e = document.createElement('div');
+        e.className = 'empty-state'; e.style.padding = 'var(--space-md)';
+        e.textContent = 'None match the current filter.';
+        sec.appendChild(e);
+        return sec;
+      }
+      for (const r of rows) sec.appendChild(rhythmEl(r));
+      return sec;
+    }
+
+    function rhythmEl(r) {
+      const el = document.createElement('div');
+      el.className = 'rhythm';
+      const cv = groupColorVar(r.groupId);
+      if (cv) el.style.setProperty('--dot', cv);
+      const now = Date.now();
+      const next = r.occ.find(o => o.ts > now);
+      const failed = r.trigger.last_run_status === 'failed';
+
+      // Bucket the window's fires by local hour-of-day for the sparkline.
+      const buckets = new Array(24).fill(0);
+      for (const o of r.occ) buckets[new Date(o.ts).getHours()]++;
+      const peak = Math.max(...buckets, 1);
+      const nowHour = new Date().getHours();
+      let spark = '';
+      for (let h = 0; h < 24; h++) {
+        const pct = buckets[h] ? Math.max(22, Math.round(buckets[h] / peak * 100)) : 8;
+        const cls = 's-bar' + (buckets[h] ? ' on' : '') + (h === nowHour ? ' now' : '');
+        spark += '<span class="' + cls + '" style="height:' + pct + '%" title="' +
+          pad(h) + ':00 — ' + buckets[h] + ' fire' + (buckets[h] === 1 ? '' : 's') + '"></span>';
+      }
+
+      const open = openRhythms.has(r.trigger.id);
+      el.innerHTML =
+        '<div class="r-name"><span class="lead"></span>' +
+          '<span class="r-label">' + esc(r.trigger.name) + '</span>' +
+          (failed ? '<span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
+        '</div>' +
+        '<div class="r-next">' + (next ? esc(fmtRel(next.ts - now)) : '—') + '</div>' +
+        '<div class="r-count" title="fires in this window">' + r.occ.length + '×</div>' +
+        '<div class="spark">' + spark + '</div>' +
+        '<div class="spark-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>' +
+        '<div class="r-cadence">' + esc(describeCrons(r.trigger._crons || [])) + '</div>' +
+        (open
+          ? '<div class="r-fires">' + r.occ.filter(o => o.ts > now).slice(0, 12)
+              .map(o => '<span class="f">' + fmtTime(new Date(o.ts)) + '</span>').join('') + '</div>'
+          : '');
+
+      el.addEventListener('click', () => {
+        if (openRhythms.has(r.trigger.id)) openRhythms.delete(r.trigger.id);
+        else openRhythms.add(r.trigger.id);
+        render();
+      });
+      return el;
+    }
+
+    // ---------- Group filter sheet ----------
+    // Anchored to the search row rather than rendered inline: the chip legend cost a
+    // full row above the agenda and grew with every group. The button carries the
+    // active-filter count so the state is still visible with the sheet closed.
+    function groupEntries() {
+      const counts = {};
+      for (const o of OCCURRENCES) { const k = o.groupId || '__none__'; counts[k] = (counts[k] || 0) + 1; }
+      const entries = [];
+      for (const g of GROUP_LIST) if (counts[g.id]) entries.push({ id: g.id, name: g.name, n: counts[g.id] });
+      if (counts['__none__']) entries.push({ id: '__none__', name: 'Ungrouped', n: counts['__none__'] });
+      return entries;
+    }
+
+    function renderFilter() {
+      const wrap = document.getElementById('filter-wrap');
+      const sheet = document.getElementById('filter-sheet');
+      const entries = groupEntries();
+      // One group is not a filter — nothing to narrow down to.
+      if (entries.length <= 1) { wrap.hidden = true; closeFilter(); return; }
+      wrap.hidden = false;
+
+      const hidden = entries.filter(e => excluded.has(e.id)).length;
+      const label = document.getElementById('filter-label');
+      label.textContent = hidden ? (entries.length - hidden) + ' of ' + entries.length + ' groups' : 'Groups';
+      const btn = document.getElementById('filter-btn');
+      let badge = btn.querySelector('.fb-count');
+      if (hidden) {
+        if (!badge) { badge = document.createElement('span'); badge.className = 'fb-count'; btn.appendChild(badge); }
+        badge.textContent = hidden;
+        btn.title = hidden + (hidden === 1 ? ' group hidden' : ' groups hidden');
+      } else {
+        if (badge) badge.remove();
+        btn.title = 'Filter by group';
+      }
+
+      sheet.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'fs-head';
+      head.innerHTML = '<span>Show groups</span>';
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'fs-reset';
+      reset.textContent = 'Show all';
+      reset.disabled = !hidden;
+      reset.addEventListener('click', () => {
+        excluded.clear(); LS.set('excluded', []); render();
+      });
+      head.appendChild(reset);
+      sheet.appendChild(head);
+
+      for (const e of entries) {
+        const off = excluded.has(e.id);
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'fs-row' + (off ? ' off' : '');
+        row.setAttribute('aria-pressed', off ? 'false' : 'true');
+        const cv = e.id === '__none__' ? null : groupColorVar(e.id);
+        if (cv) row.style.setProperty('--dot', cv);
+        row.innerHTML =
+          '<span class="dot"></span>' +
+          '<span class="fs-name">' + esc(e.name) + '</span>' +
+          '<span class="n">' + e.n + '</span>' +
+          '<svg class="fs-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" ' +
+          'stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+        row.addEventListener('click', () => {
+          if (excluded.has(e.id)) excluded.delete(e.id); else excluded.add(e.id);
+          LS.set('excluded', [...excluded]);
+          render();
+        });
+        sheet.appendChild(row);
+      }
+    }
+
+    function closeFilter() {
+      const sheet = document.getElementById('filter-sheet');
+      if (sheet.hidden) return;
+      sheet.hidden = true;
+      document.getElementById('filter-btn').setAttribute('aria-expanded', 'false');
+    }
+
+    // ---------- Agenda ----------
+    function timelineEl(vis) {
+      const frag = document.createDocumentFragment();
+      // Group by day, then by exact minute inside each day.
+      const byDay = [];
+      let curKey = null;
+      for (const o of vis) {
+        const d = new Date(o.ts);
+        const k = dayKey(d);
+        if (k !== curKey) { curKey = k; byDay.push({ d, key: k, items: [] }); }
+        byDay[byDay.length - 1].items.push(o);
+      }
+
+      byDay.forEach((grp, idx) => {
+        const open = (grp.key in dayState) ? dayState[grp.key] : (idx === 0);
+        const isToday = dayLabel(grp.d) === 'Today';
+
+        const head = document.createElement('button');
+        head.className = 'day-head' + (open ? ' open' : '') + (open ? ' sticky' : '');
+        head.innerHTML = caretSvg() +
+          '<span class="d-name">' + dayLabel(grp.d) + '</span>' +
+          '<span class="d-date mono">' + pad(grp.d.getDate()) + '/' + pad(grp.d.getMonth() + 1) + '</span>' +
+          dayStripHtml(grp, isToday) +
+          '<span class="d-count">' + grp.items.length + '</span>';
+        head.addEventListener('click', () => { dayState[grp.key] = !open; render(); });
+        frag.appendChild(head);
+
+        if (!open) {
+          // Collapsed days still say what is in them — a bare count is not a preview.
+          const names = [];
+          for (const o of grp.items) {
+            if (!names.includes(o.trigger.name)) names.push(o.trigger.name);
+            if (names.length > 3) break;
+          }
+          const peek = document.createElement('div');
+          peek.className = 'day-peek';
+          const uniq = new Set(grp.items.map(o => o.trigger.name)).size;
+          peek.textContent = names.slice(0, 3).join(' · ') + (uniq > 3 ? ' +' + (uniq - 3) + ' more' : '');
+          frag.appendChild(peek);
+          return;
+        }
+
+        // Same-minute fires collapse into one row.
+        const buckets = [];
+        let last = null;
+        for (const o of grp.items) {
+          if (!last || last.ts !== o.ts) { last = { ts: o.ts, items: [] }; buckets.push(last); }
+          last.items.push(o);
+        }
+        for (const b of buckets) frag.appendChild(b.items.length === 1 ? entryEl(b.items[0]) : stackEl(b));
+      });
+      return frag;
+    }
+
+    function dayStripHtml(grp, isToday) {
+      const hits = new Array(24).fill(0);
+      for (const o of grp.items) hits[new Date(o.ts).getHours()]++;
+      const nowHour = isToday ? new Date().getHours() : -1;
+      let s = '<span class="day-strip" aria-hidden="true">';
+      for (let h = 0; h < 24; h++) {
+        const cls = 't' + (hits[h] ? ' hit' : '') + (h === nowHour ? ' nowtick' : '');
+        const pct = hits[h] ? Math.min(100, 30 + hits[h] * 25) : 14;
+        s += '<span class="' + cls + '" style="height:' + pct + '%"></span>';
+      }
+      return s + '</span>';
+    }
+
+    function entryEl(o) {
+      const d = new Date(o.ts);
+      const row = document.createElement('div');
+      row.className = 'entry';
+      const cv = groupColorVar(o.groupId);
+      if (cv) row.style.setProperty('--dot', cv);
+      const failed = o.trigger.last_run_status === 'failed';
+      row.innerHTML =
+        '<div class="t-time">' + fmtTime(d) + '</div>' +
+        '<div class="rail"><div class="node"></div></div>' +
+        '<div class="t-body">' +
+          '<div class="t-name">' + esc(o.trigger.name) +
+            (failed ? ' <span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
+          '</div>' +
+          '<div class="t-meta">' +
+            groupChipHtml(o.groupId) +
+            '<span class="t-rel" data-ts="' + o.ts + '">' + fmtRel(o.ts - Date.now()) + '</span>' +
+            ((o.trigger._crons && o.trigger._crons.length)
+              ? '<span title="' + esc(o.trigger._crons.map(c => c.raw).join(', ')) + '">' +
+                esc(describeCrons(o.trigger._crons)) + '</span>'
+              : '') +
+          '</div>' +
+        '</div>';
+      return row;
+    }
+
+    // Several triggers firing in the same minute is one moment, not N rows.
+    function stackEl(b) {
+      const d = new Date(b.ts);
+      const row = document.createElement('div');
+      row.className = 'entry stack';
+      const open = openStacks.has(b.ts);
+      const anyFailed = b.items.some(o => o.trigger.last_run_status === 'failed');
+      const dots = b.items.map(o => {
+        const cv = groupColorVar(o.groupId) || 'var(--text-muted)';
+        return '<i style="background:' + cv + '"></i>';
+      }).join('');
+      const names = b.items.map(o => o.trigger.name);
+      row.innerHTML =
+        '<div class="t-time">' + fmtTime(d) + '</div>' +
+        '<div class="rail"><div class="node multi"></div></div>' +
+        '<div class="t-body">' +
+          '<div class="t-name"><span class="dots">' + dots + '</span>' +
+            b.items.length + ' triggers' +
+            (anyFailed ? ' <span class="warn" title="A last run failed">' + warnSvg() + '</span>' : '') +
+          '</div>' +
+          '<div class="t-meta">' +
+            '<span class="t-rel" data-ts="' + b.ts + '">' + fmtRel(b.ts - Date.now()) + '</span>' +
+            '<span>' + esc(open ? 'tap to collapse' : names.slice(0, 2).join(', ') +
+              (names.length > 2 ? ' +' + (names.length - 2) : '')) + '</span>' +
+          '</div>' +
+          (open ? '<div class="stack-list">' + b.items.map(o => {
+            const cv = groupColorVar(o.groupId) || 'var(--text-muted)';
+            return '<div class="sl"><i style="background:' + cv + '"></i>' + esc(o.trigger.name) + '</div>';
+          }).join('') + '</div>' : '') +
+        '</div>';
+      row.addEventListener('click', () => {
+        if (openStacks.has(b.ts)) openStacks.delete(b.ts); else openStacks.add(b.ts);
+        render();
+      });
+      return row;
+    }
+
+    // ---------- Event-driven ----------
+    function eventSection() {
+      const sec = document.createElement('div');
+      sec.className = 'section event-section';
+      const rows = visEvents().slice().sort((a, b) => {
+        const ta = a.last_run ? Date.parse(a.last_run) : 0;
+        const tb = b.last_run ? Date.parse(b.last_run) : 0;
+        return tb - ta;
+      });
+      sec.appendChild(secHead('events', 'Event-driven',
+        rows.length + (rows.length === 1 ? ' trigger' : ' triggers'),
+        '— no fixed time; fire when their event fires', '⚡'));
+      if (!openSec.events) return sec;
+      for (const tr of rows) {
+        const row = document.createElement('div');
+        row.className = 'srow';
+        const subs = (tr.on || []).map(s => {
+          let txt = s.event_type;
+          if (s.condition && Object.keys(s.condition).length) txt += ' · when ' + summarizeCondition(s.condition);
+          return txt;
+        }).join('  |  ');
+        const failed = tr.last_run_status === 'failed';
+        let ago = 'never fired';
+        if (tr.last_run) {
+          const ms = Date.parse(tr.last_run);
+          if (!isNaN(ms)) ago = 'last fired ' + fmtAgo(Date.now() - ms);
+        }
+        row.innerHTML =
+          '<div class="s-name">' + esc(tr.name) +
+            (failed ? ' <span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
+            groupChipHtml(tr.group_id || null) +
+            (subs ? '<div class="s-detail mono">on ' + esc(subs) + '</div>' : '') +
+          '</div>' +
+          '<span class="s-ago">' + esc(ago) + '</span>' +
+          '<span class="pill">event</span>';
+        sec.appendChild(row);
+      }
+      return sec;
+    }
+    function summarizeCondition(cond) {
+      try {
+        return Object.entries(cond).map(([k, v]) => {
+          if (v && typeof v === 'object') {
+            const op = Object.keys(v)[0];
+            return k + ' ' + op.replace('$', '') + ' ' + JSON.stringify(v[op]);
+          }
+          return k + '=' + JSON.stringify(v);
+        }).join(', ');
+      } catch (e) { return JSON.stringify(cond); }
+    }
+
+    function pausedSection() {
+      const sec = document.createElement('div');
+      sec.className = 'section';
+      const rows = visPaused();
+      sec.appendChild(secHead('paused', 'Paused', rows.length, '', '⏸️'));
+      if (!openSec.paused) return sec;
+      for (const tr of rows) {
+        const row = document.createElement('div');
+        row.className = 'srow paused';
+        const crons = normalizeExprs(tr.cron_expressions);
+        row.innerHTML =
+          '<div class="s-name">' + esc(tr.name) +
+            (crons.length ? '<div class="s-detail">' + esc(describeCrons(crons)) + '</div>' : '') +
+          '</div><span class="pill">paused</span>';
+        sec.appendChild(row);
+      }
+      return sec;
+    }
+
+    // ---------- Live ticker ----------
+    let tickTimer = null, reprojectTimer = null;
+    function startTicker() {
+      if (tickTimer) clearInterval(tickTimer);
+      if (reprojectTimer) clearInterval(reprojectTimer);
+      tickTimer = setInterval(updateTick, 1000);
+      reprojectTimer = setInterval(() => { project(); render(); }, 60000);
+    }
+    let lastRelUpdate = 0;
+    function updateTick() {
+      const next = nextUp();
+      const hc = document.getElementById('hero-count');
+      if (hc && next) {
+        const ms = next.ts - Date.now();
+        hc.textContent = fmtCountdown(ms);
+        hc.classList.toggle('imminent', ms < 3600000);
+      } else if (hc && !next) {
+        project(); render(); return;
+      }
+      const now = Date.now();
+      if (now - lastRelUpdate > 10000) {
+        lastRelUpdate = now;
+        document.querySelectorAll('.t-rel[data-ts]').forEach(el => {
+          el.textContent = fmtRel(parseInt(el.dataset.ts, 10) - now);
+        });
+      }
+    }
+
+    // ---------- Controls ----------
+    document.querySelectorAll('#window-seg .segmented-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.h, 10) === WINDOW_H);
+    });
+    document.getElementById('window-seg').addEventListener('click', (e) => {
+      const btn = e.target.closest('.segmented-btn');
+      if (!btn) return;
+      document.querySelectorAll('#window-seg .segmented-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      WINDOW_H = parseInt(btn.dataset.h, 10);
+      LS.set('window', WINDOW_H);
+      for (const k in dayState) delete dayState[k];
+      project(); render();
+    });
+    // Collapse-all doubles as expand-all: if anything is open it shuts
+    // everything (including individual days), otherwise it reopens.
+    document.getElementById('foldall').addEventListener('click', () => {
+      const anyOpen = Object.values(openSec).some(Boolean);
+      for (const k in openSec) { openSec[k] = !anyOpen; LS.set('sec.' + k, openSec[k]); }
+      for (const k in dayState) delete dayState[k];
+      openStacks.clear(); openRhythms.clear();
+      const btn = document.getElementById('foldall');
+      btn.title = anyOpen ? 'Expand all sections' : 'Collapse all sections';
+      render();
+    });
+    let searchDeb = null;
+    document.getElementById('search').addEventListener('input', (e) => {
+      clearTimeout(searchDeb);
+      const v = e.target.value.trim().toLowerCase();
+      searchDeb = setTimeout(() => { QUERY = v; render(); }, 120);
+    });
+
+    document.getElementById('filter-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sheet = document.getElementById('filter-sheet');
+      const open = sheet.hidden;
+      sheet.hidden = !open;
+      e.currentTarget.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    // Toggling a group re-renders the sheet in place, so clicks inside must not dismiss it.
+    document.getElementById('filter-sheet').addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', closeFilter);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (document.getElementById('filter-sheet').hidden) return;
+      closeFilter();
+      document.getElementById('filter-btn').focus();
+    });
+
+    // Returning to the tab re-FETCHES, not just re-projects. This is the only
+    // recovery path left now the manual refresh button is gone: the SSE listener
+    // below covers every trigger mutation while it is connected, but its connect
+    // is best-effort and never reconnects, so a dropped stream would otherwise
+    // leave the view silently stale forever.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+
+    // Best-effort live refresh on trigger-related events.
+    try {
+      lucidos.sse.connect();
+      lucidos.sse.on('*', (data, raw) => {
+        const t = raw && raw.data && raw.data.event && raw.data.event.type;
+        const name = t || (raw && raw.type) || '';
+        if (typeof name === 'string' && /Trigger/i.test(name)) {
+          clearTimeout(window.__sseDeb);
+          window.__sseDeb = setTimeout(load, 800);
+        }
+      });
+    } catch (e) {}
+
+    load();
+  </script>
+</body>
+</html>
