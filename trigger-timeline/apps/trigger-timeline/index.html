@@ -353,8 +353,18 @@
       min-width: 0; overflow-wrap: anywhere;
     }
     .stack-list .sl i { width: 0.45rem; height: 0.45rem; border-radius: 50%; flex-shrink: 0; }
-    .g-chip { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--dot, var(--text-muted)); }
-    .g-chip .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+    .g-chip {
+      display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+      font-size: var(--font-size-xs); line-height: 1.5;
+      padding: 0.1rem 0.45rem; border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      background: color-mix(in srgb, var(--dot, var(--text-muted)) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--dot, var(--text-muted)) 32%, transparent);
+    }
+    .g-chip .dot {
+      width: 0.4rem; height: 0.4rem; border-radius: 50%; flex-shrink: 0;
+      background: var(--dot, var(--text-muted));
+    }
     .t-rel { color: var(--text-secondary); }
     .warn { color: var(--accent-red); display: inline-flex; align-items: center; }
     .warn svg { width: 0.85rem; height: 0.85rem; }
@@ -366,16 +376,26 @@
       border: 1px solid var(--border-color); border-radius: var(--radius-md);
       background: var(--bg-secondary); margin-bottom: var(--space-sm);
     }
-    .srow .s-name { font-size: var(--font-size-md); flex: 1; min-width: 0; overflow-wrap: anywhere; }
-    .srow .s-detail { color: var(--text-muted); font-size: var(--font-size-xs); }
+    .srow .s-name {
+      font-size: var(--font-size-md); flex: 1; min-width: 0; overflow-wrap: anywhere;
+      display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    }
+    .srow .s-name > .s-title { min-width: 0; overflow-wrap: anywhere; }
+    .srow .s-detail { color: var(--text-muted); font-size: var(--font-size-xs); flex: 0 0 100%; margin-top: 0.15rem; }
     .srow.paused .s-name { color: var(--text-secondary); }
     .pill {
-      font-size: var(--font-size-2xs); text-transform: uppercase; letter-spacing: 0.04em;
-      padding: 0.12rem 0.4rem; border-radius: var(--radius-sm);
-      background: var(--bg-tertiary); color: var(--text-muted); flex-shrink: 0;
+      font-size: var(--font-size-2xs); text-transform: uppercase; letter-spacing: 0.06em;
+      font-weight: 600; line-height: 1.6;
+      padding: 0.12rem 0.45rem; border-radius: var(--radius-sm);
+      background: var(--bg-tertiary); color: var(--text-secondary); flex-shrink: 0;
+      border: 1px solid var(--border-color);
     }
     .event-section .srow { border-left: 3px solid var(--accent); }
-    .event-section .pill { background: var(--accent-light); color: var(--accent); }
+    .event-section .pill {
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+      color: color-mix(in srgb, var(--accent) 65%, var(--text-primary));
+    }
     .srow .s-ago { flex-shrink: 0; white-space: nowrap; color: var(--text-muted); font-size: var(--font-size-xs); }
 
     .empty-state { text-align: center; color: var(--text-muted); padding: var(--space-xl); }
@@ -1242,7 +1262,7 @@
           if (!isNaN(ms)) ago = 'last fired ' + fmtAgo(Date.now() - ms);
         }
         row.innerHTML =
-          '<div class="s-name">' + esc(tr.name) +
+          '<div class="s-name"><span class="s-title">' + esc(tr.name) + '</span>' +
             (failed ? ' <span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
             groupChipHtml(tr.group_id || null) +
             (subs ? '<div class="s-detail mono">on ' + esc(subs) + '</div>' : '') +
@@ -1276,7 +1296,7 @@
         row.className = 'srow paused';
         const crons = normalizeExprs(tr.cron_expressions);
         row.innerHTML =
-          '<div class="s-name">' + esc(tr.name) +
+          '<div class="s-name"><span class="s-title">' + esc(tr.name) + '</span>' +
             (crons.length ? '<div class="s-detail">' + esc(describeCrons(crons)) + '</div>' : '') +
           '</div><span class="pill">paused</span>';
         sec.appendChild(row);
