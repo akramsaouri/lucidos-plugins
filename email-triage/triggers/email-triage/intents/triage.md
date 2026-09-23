@@ -12,6 +12,12 @@ Triage unseen emails for the specified account.
    cron trigger or from the app's "Triage now" button.
 1. Load config from `artifacts/email-triage/config.json` for this account
 2. Fetch emails:
+   - **Never read a message with `read_email`** — it marks the message read, wiping
+     genuine unread state. Fetch by the account's `fetch` setting:
+     - `"gmail-api"`: list and read over the Gmail API, which never changes read state.
+     - `"imap-peek"` (Outlook/Exchange and other plain-IMAP mailboxes): run
+       `python apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50`
+       first, then work from `artifacts/email-triage/inbox-<slug>.json`.
    - Non-shared accounts: search `UNSEEN`
    - Shared accounts (`"shared": true`): load state file, fetch with `since` (last_run - 1 day), filter out already-processed UIDs
 3. Apply rules in order — first match wins
@@ -19,7 +25,9 @@ Triage unseen emails for the specified account.
 5. Clear no-action emails (FYI + noise) per the account's `no_action_clear` setting: `read` (mark read, keep), `delete` (trash), or `keep` (leave, count only). Explicit `delete` rules always fire regardless.
 6. Of the actionable/flagged items, drop any already in the notified-ledger (`artifacts/email-triage/notified-<slug>.json`). If new ones remain, send one consolidated push notification covering only those, then append them to the ledger. If all were already notified, stay silent.
 7. If nothing noteworthy, stay silent — exception-based alerting
-8. Emit an EmailTriageCompleted event with per-account counts
+8. For `imap-peek` accounts, patch the `unread` values the run changed into the snapshot
+   before writing it out, so the file reflects the post-triage state
+9. Emit an EmailTriageCompleted event with per-account counts
 
 ## Never ask questions — this run is unattended
 

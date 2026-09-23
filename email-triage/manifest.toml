@@ -1,7 +1,7 @@
 id = "email-triage"
-version = "0.3.0"
+version = "0.4.0"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, and the on-demand trigger that button fires. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and a peek-based inbox snapshot so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 categories = ["productivity", "communication", "automation"]
 
@@ -11,6 +11,15 @@ rules, and cron triggers all carry over untouched. Tell the user what changed in
 one line and stop. Do NOT re-run the steps below and do NOT create another
 on-demand trigger. Only continue if they ask you to add a new account.
 
+- **Updating to 0.4.0:** triage no longer marks unread mail read just by looking at it.
+  Opening a message with `read_email` sets IMAP's `\Seen` flag, so every run was
+  quietly clearing the unread state of whatever it inspected — on Gmail too, not only
+  Outlook. Gmail accounts now fetch bodies over the Gmail API (a pure read); plain-IMAP
+  accounts (Outlook/Exchange, Fastmail, self-hosted) use the new peek-based snapshot
+  script. On update, migrate each account block in `artifacts/email-triage/config.json`:
+  Gmail → `"fetch": "gmail-api"` plus `"oauth_provider"`; plain IMAP → `"fetch":
+  "imap-peek"`, `"imap_host"`, and `"oauth_provider"` (omit for password auth). Details in
+  the "Fetching Without Marking Read" section of `knowhow/email-triage.md`.
 - **Updating to 0.3.0:** each account can now be **paused** from the app — per account,
   or all at once from the Accounts header. Pause writes `"paused": true` into that
   account's block in `artifacts/email-triage/config.json`, and the triage intent now
@@ -47,6 +56,12 @@ Then, per account the user wants triaged:
 1. **Connect the mailbox** if it isn't already. Most providers need OAuth now —
    look up the provider's IMAP/SMTP hosts, then `configure_email`. Check the
    already-configured accounts first; don't re-do one that's connected.
+
+   **Never let triage read message bodies with `read_email` — it marks them read.**
+   Set the account's fetch path: a Gmail account gets `"fetch": "gmail-api"` and its
+   `"oauth_provider"`; an Outlook/Exchange, Fastmail or self-hosted account gets
+   `"fetch": "imap-peek"` with `"imap_host"` (and `"oauth_provider"` when it uses
+   OAuth), which snapshots the inbox with `BODY.PEEK[]`.
 
 2. **Build a starting rule chain.** Don't ask them to write rules — ask what
    they want gone (`delete`), what they want silenced but kept (`read`), and
