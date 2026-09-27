@@ -1,13 +1,13 @@
 id = "trigger-timeline"
-version = "0.1.3"
+version = "0.1.4"
 name = "⏰ Cadence"
-description = "An agenda for your scheduled triggers that stays readable when you have a lot of them. Triggers that fire on a steady cadence collapse into a 'Running on a loop' band — one row each with a 24-hour density sparkline — instead of flooding the agenda with a row per fire, so only genuinely punctual triggers get timeline entries. Same-minute fires stack into one row, days fold to a named preview with a density strip, failed runs get an attention rail at the top, and there's a name filter plus sticky group filters. Read-only: it projects your existing cron expressions forward and writes nothing."
+description = "An agenda for your scheduled triggers that stays readable when you have a lot of them. Triggers that fire on a steady cadence collapse into a 'Running on a loop' band — one row each with a 24-hour density sparkline — instead of flooding the agenda with a row per fire, so only genuinely punctual triggers get timeline entries. Same-minute fires stack into one row, days fold to a named preview with a density strip, failed runs get an attention rail at the top, and there's a name filter plus sticky group filters. Read-only: it projects your existing cron expressions forward and never changes a trigger."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/trigger-timeline"
 categories = ["productivity", "automation", "developer-tools"]
 
 setup = """
 Cadence needs no setup — it reads the workspace's existing triggers
-through the engine API and writes nothing. Open it and it works.
+through the SDK and writes nothing but its own view state. Open it and it works.
 
 Two things worth telling the user once, and then stop:
 
@@ -16,9 +16,10 @@ Two things worth telling the user once, and then stop:
   sparkline, because a job that runs hourly is one fact about the day, not
   thirty appointments. If they wonder where an hourly trigger went, it's there.
   Clicking a row reveals its next fire times.
-- **View state is per-browser.** The window (24h / 48h / 7d), which group
-  filters are off, and which sections are folded persist in localStorage, so
-  they survive reloads but don't sync across devices.
+- **View state follows the workspace.** The window (24h / 48h / 7d), which
+  group filters are off, and which sections are folded are saved to
+  artifacts/trigger-timeline/state.json, so they survive reloads and are the
+  same on every device.
 
 Do NOT create any triggers for this plugin — it observes them, it doesn't need
 one of its own.

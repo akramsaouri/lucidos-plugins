@@ -574,18 +574,6 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) flushPending(); });
     window.addEventListener('pagehide', flushPending);
 
-    // ---------- API base detection ----------
-    function apiBase() {
-      try {
-        const u = new URL(lucidos.data.url('__probe__'), location.href);
-        const m = u.pathname.match(/^(.*)\/data\/__probe__$/);
-        if (m) return u.origin + m[1] + '/api/v1';
-      } catch (e) {}
-      const m2 = location.pathname.match(/^(.*)\/app\/[^/]+\//);
-      if (m2) return location.origin + m2[1] + '/api/v1';
-      return location.origin + '/api/v1';
-    }
-
     // ---------- Cron parsing ----------
     function parseField(field, min, max, isDow) {
       if (field === '*' || field === '?') return null; // any
@@ -808,19 +796,25 @@
 
     // ---------- Load + project ----------
     async function load() {
-      const base = apiBase();
+      // The app frame has an opaque origin since Lucidos 0.39.0, so a bare
+      // fetch to the engine is refused ("Failed to fetch"). Both calls go over
+      // the SDK bridge instead. lucidos.request arrived in the same release; on
+      // an older engine it is absent and the group filter simply stays hidden.
       let tData, gData;
       try {
-        const [tRes, gRes] = await Promise.all([
-          fetch(base + '/triggers', { headers: { Accept: 'application/json' }, credentials: 'same-origin' }),
-          fetch(base + '/trigger-groups', { headers: { Accept: 'application/json' }, credentials: 'same-origin' }),
+        const [tList, groups] = await Promise.all([
+          lucidos.triggers.list(),
+          typeof lucidos.request === 'function'
+            ? lucidos.request('/trigger-groups').catch(() => ({ groups: [] }))
+            : Promise.resolve({ groups: [] }),
         ]);
-        if (!tRes.ok) throw new Error('triggers HTTP ' + tRes.status);
-        tData = await tRes.json();
-        gData = gRes.ok ? await gRes.json() : { groups: [] };
+        tData = { triggers: tList || [] };
+        gData = (groups && Array.isArray(groups.groups)) ? groups
+              : Array.isArray(groups) ? { groups } : { groups: [] };
       } catch (e) {
         document.getElementById('content').innerHTML =
-          '<div class="empty-state error-text">Couldn\'t load triggers: ' + esc(e.message) + '</div>';
+          '<div class="empty-state error-text">Couldn\'t load triggers: ' +
+          esc((e && e.name ? e.name + ': ' : '') + (e && e.message)) + '</div>';
         return;
       }
 
