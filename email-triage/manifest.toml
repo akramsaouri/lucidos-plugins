@@ -1,5 +1,5 @@
 id = "email-triage"
-version = "0.4.0"
+version = "0.4.1"
 name = "Email Triage"
 description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and a peek-based inbox snapshot so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
@@ -12,7 +12,7 @@ one line and stop. Do NOT re-run the steps below and do NOT create another
 on-demand trigger. Only continue if they ask you to add a new account.
 
 - **Updating to 0.4.0:** triage no longer marks unread mail read just by looking at it.
-  Opening a message with `read_email` sets IMAP's `\Seen` flag, so every run was
+  Opening a message with `read_email` sets IMAP's `\\Seen` flag, so every run was
   quietly clearing the unread state of whatever it inspected — on Gmail too, not only
   Outlook. Gmail accounts now fetch bodies over the Gmail API (a pure read); plain-IMAP
   accounts (Outlook/Exchange, Fastmail, self-hosted) use the new peek-based snapshot
