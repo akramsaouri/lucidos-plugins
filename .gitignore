@@ -1,1 +1,7 @@
+# Build output never ships in a plugin: the engine would install it into every workspace.
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+.venv/
 .DS_Store
