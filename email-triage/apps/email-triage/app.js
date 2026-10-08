@@ -48,16 +48,24 @@ const state = {
  * trigger is shared by all four accounts so it can never be paused per-account.
  */
 
+/** Lowercase, punctuation-blind: "Mailhost - Support" and "Mailhost Support" compare equal. */
+const words = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
 /** Does this account's cron trigger look like it belongs to that account? */
 function triggerFor(name) {
-  const short = shortName(name).toLowerCase();
+  const short = words(shortName(name));
+  // "Gmail - Support" shortens to "support", which also appears in the trigger
+  // of a "Mailhost - Support" account. A trigger naming a longer account name
+  // that contains ours belongs to that account, not this one.
+  const longer = state.accounts.map((a) => words(shortName(a.name)))
+    .filter((s) => s !== short && s.includes(short));
   return state.triggers.find((t) => {
-    const n = String(t.name || '').toLowerCase();
+    const n = words(t.name);
     if (!n.includes('triage')) return false;
     // Skip the shared on-demand trigger — it serves every account, so pausing
     // it for one would silence "Triage now" for all four.
     if (!(t.cron_expressions || []).length) return false;
-    return n.includes(short);
+    return n.includes(short) && !longer.some((s) => n.includes(s));
   });
 }
 

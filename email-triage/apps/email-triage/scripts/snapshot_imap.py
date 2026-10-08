@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Snapshot an IMAP mailbox WITHOUT marking anything read.
+r"""Snapshot an IMAP mailbox WITHOUT marking anything read.
 
 Why this exists
 ---------------
@@ -31,7 +31,7 @@ by a `read` action or a `no_action_clear: "read"` verdict.
 
 Usage
 -----
-    python apps/email-triage/scripts/snapshot_imap.py --account "Outlook" [--limit 50]
+    python data/apps/email-triage/scripts/snapshot_imap.py --account "Outlook" [--limit 50]
 
 Config
 ------
@@ -93,11 +93,14 @@ PREVIEW_CHARS = 200
 def load_account(name: str) -> dict:
     if not CONFIG_PATH.exists():
         raise SystemExit(f"{CONFIG_PATH} not found — is the plugin set up?")
-    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    for account in config.get("accounts", []):
+    accounts = json.loads(CONFIG_PATH.read_text(encoding="utf-8")).get("accounts", {})
+    # The app keys accounts by name; tolerate a list of blocks carrying `name` too.
+    if isinstance(accounts, dict):
+        accounts = [{**block, "name": key} for key, block in accounts.items()]
+    for account in accounts:
         if account.get("name") == name:
             return account
-    known = ", ".join(a.get("name", "?") for a in config.get("accounts", []))
+    known = ", ".join(a.get("name", "?") for a in accounts)
     raise SystemExit(f"no account named {name!r} in {CONFIG_PATH} (have: {known})")
 
 
