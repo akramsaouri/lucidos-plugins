@@ -1,8 +1,9 @@
 id = "email-triage"
-version = "0.4.0"
+version = "0.5.0"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and a peek-based inbox snapshot so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Works with Gmail over its API and with plain IMAP mailboxes that have no API or OAuth, just a host and a password. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and peek-based IMAP helpers so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
+engine = ">=0.47.1"
 categories = ["productivity", "communication", "automation"]
 
 setup = """
@@ -11,8 +12,17 @@ rules, and cron triggers all carry over untouched. Tell the user what changed in
 one line and stop. Do NOT re-run the steps below and do NOT create another
 on-demand trigger. Only continue if they ask you to add a new account.
 
+- **Updating to 0.5.0:** accounts can now be plain IMAP mailboxes with no Gmail API and
+  no OAuth — just a host and a password — via `"fetch": "imap"` and the new helper at
+  `scripts/email-triage/imap_helper.py`. It reads with `BODY.PEEK[]` so nothing gets
+  marked read, keys everything on the Message-ID, and does the `read` / `delete` writes
+  itself. Nothing needs redoing for existing accounts: Gmail and `imap-peek` blocks work
+  exactly as before. Offer the IMAP path only when the user adds a mailbox that isn't
+  Gmail and has no OAuth; step 1 below says how to connect it. Also fixed: `imap-peek`
+  runs no longer crash on a config whose `accounts` is keyed by name, and pausing an
+  account no longer pauses another account's cron trigger when one name contains the other.
 - **Updating to 0.4.0:** triage no longer marks unread mail read just by looking at it.
-  Opening a message with `read_email` sets IMAP's `\Seen` flag, so every run was
+  Opening a message with `read_email` sets IMAP's `\\Seen` flag, so every run was
   quietly clearing the unread state of whatever it inspected — on Gmail too, not only
   Outlook. Gmail accounts now fetch bodies over the Gmail API (a pure read); plain-IMAP
   accounts (Outlook/Exchange, Fastmail, self-hosted) use the new peek-based snapshot
@@ -62,6 +72,19 @@ Then, per account the user wants triaged:
    `"oauth_provider"`; an Outlook/Exchange, Fastmail or self-hosted account gets
    `"fetch": "imap-peek"` with `"imap_host"` (and `"oauth_provider"` when it uses
    OAuth), which snapshots the inbox with `BODY.PEEK[]`.
+
+   **A mailbox with no API and no OAuth** (only an IMAP host and a password) gets
+   `"fetch": "imap"`. Connect it in three steps:
+   1. `configure_email` with the provider's IMAP/SMTP hosts and the password. That stores
+      the password as a credential, injected as a `CRED_<NAME>` env var.
+   2. In the account's block in `artifacts/email-triage/config.json`, set `"fetch": "imap"`
+      and add `"imap": {"host", "port", "ssl", "username"}` (username defaults to the address).
+   3. Set `"credential_env"` in that block to the credential's env var *name*: list the
+      names, never the values, with `env | cut -d= -f1 | grep '^CRED_'`.
+
+   Check it with `python data/scripts/email-triage/imap_helper.py list --account "<name>"`,
+   which is read-only. The "IMAP Accounts" section of `knowhow/email-triage.md` has the
+   full schema and commands.
 
 2. **Build a starting rule chain.** Don't ask them to write rules — ask what
    they want gone (`delete`), what they want silenced but kept (`read`), and

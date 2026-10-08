@@ -16,8 +16,12 @@ Triage unseen emails for the specified account.
      genuine unread state. Fetch by the account's `fetch` setting:
      - `"gmail-api"`: list and read over the Gmail API, which never changes read state.
      - `"imap-peek"` (Outlook/Exchange and other plain-IMAP mailboxes): run
-       `python apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50`
+       `python data/apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50`
        first, then work from `artifacts/email-triage/inbox-<slug>.json`.
+     - `"imap"` (password-only mailboxes with no API and no OAuth): use
+       `python data/scripts/email-triage/imap_helper.py <command> --account "<name>"` — `list`
+       to fetch, `peek` for a body, `mark-read` / `trash` for the `read` / `delete` actions. Ids are
+       Message-IDs; never persist an IMAP UID. See "IMAP Accounts" in the knowhow.
    - Non-shared accounts: search `UNSEEN`
    - Shared accounts (`"shared": true`): load state file, fetch with `since` (last_run - 1 day), filter out already-processed UIDs
 3. Apply rules in order — first match wins
