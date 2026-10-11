@@ -1,10 +1,11 @@
 id = "inbox"
-version = "0.1.0"
+version = "0.1.1"
 name = "Inbox"
 description = "One calm inbox across every mailbox Email Triage watches. Needs the Email Triage plugin (0.6.0 or later) installed and configured with at least one account: Inbox reads its accounts, rules and triage results and never triages anything itself. Each account's inbox shows in two zones, never mixed: what survived triage, with the reason it was kept, and what triage hasn't seen yet. Archive, delete and undo in one key or swipe, replies with AI Suggest and Polish, a one-key hand-off to Lucidos, and each account's folders and labels in the sidebar. Gmail accounts read through one engine proxy per mailbox; password IMAP accounts go through the IMAP bridge trigger this plugin ships. OAuth IMAP accounts (Email Triage's imap-peek) aren't supported yet."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
 engine = ">=0.47.1"
 categories = ["productivity", "communication"]
+icon = "media/icon.svg"
 
 setup = """
 **Already running Inbox?** If `artifacts/inbox/settings.json` exists and every Gmail account in
