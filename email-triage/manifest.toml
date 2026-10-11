@@ -1,5 +1,5 @@
 id = "email-triage"
-version = "0.5.0"
+version = "0.6.0"
 name = "Email Triage"
 description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Works with Gmail over its API and with plain IMAP mailboxes that have no API or OAuth, just a host and a password. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and peek-based IMAP helpers so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
@@ -12,6 +12,13 @@ rules, and cron triggers all carry over untouched. Tell the user what changed in
 one line and stop. Do NOT re-run the steps below and do NOT create another
 on-demand trigger. Only continue if they ask you to add a new account.
 
+- **Updating to 0.6.0:** a visual redesign of the Email Triage app: an account rail (a chip
+  row on phones) that scopes every view to all accounts or one mailbox, one colour per
+  account, status pills, the rule chain as an ordered list ending in its fall-through steps,
+  and account avatars in Activity. Plus one editor fix: saving an edited rule now keeps keys
+  the editor doesn't show (like `_comment`), and a rule whose action isn't in the list keeps
+  it instead of turning into `skip`. No config, knowhow or trigger changes, so there is
+  nothing to do: tell the user in one line and stop.
 - **Updating to 0.5.0:** accounts can now be plain IMAP mailboxes with no Gmail API and
   no OAuth — just a host and a password — via `"fetch": "imap"` and the new helper at
   `scripts/email-triage/imap_helper.py`. It reads with `BODY.PEEK[]` so nothing gets
