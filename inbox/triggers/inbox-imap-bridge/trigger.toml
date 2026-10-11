@@ -1,0 +1,24 @@
+name = "Inbox — IMAP bridge"
+slug = "inbox-imap-bridge"
+app_id = "inbox"
+
+# The Inbox app asks: a resync, a write (read, unread, archive, trash, restore), a reply over SMTP, or a
+# read-only folder listing. Each request names its account and gets an InboxImapResult back.
+[[on]]
+event_type = "InboxImapSyncRequested"
+
+# Writes and sends move or send real mail, so they are honoured only from a device, meaning the Inbox app. An
+# agent or script that emits this event (a run misled by a crafted email, say) can't make the bridge act. The
+# engine writes `actor`; an emitter can't set it.
+[[on]]
+event_type = "InboxImapActionRequested"
+condition = { "actor.kind" = "device" }
+
+# A triage run just changed an IMAP inbox: resync it so Inbox shows what is left. The script exits silently
+# when the run touched no IMAP account.
+[[on]]
+event_type = "EmailTriageCompleted"
+
+[run]
+type = "script"
+path = "apps/inbox/scripts/imap_bridge.py"
