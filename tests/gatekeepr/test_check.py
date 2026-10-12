@@ -60,7 +60,7 @@ class CheckTest(Sandbox):
         self.run_check()
         for wrap in (False, True):
             with self.subTest(wrapped=wrap):
-                calls, _ = self.run_check(request={"summary": "Check now", "request_id": "r-1"}, wrap=wrap)
+                calls, _ = self.run_check(request={"summary": "Refresh", "request_id": "r-1"}, wrap=wrap)
                 [event] = self.events(calls)
                 self.assertFalse(event["changed"])
                 self.assertEqual(event["request_id"], "r-1")

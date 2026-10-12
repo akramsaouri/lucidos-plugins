@@ -124,7 +124,7 @@ That puts it in `$(go env GOPATH)/bin`, usually `~/go/bin`, which the reader che
 shell, add `export PATH="$PATH:$(go env GOPATH)/bin"` to `~/.zshrc` if `gatekeepr` reports "command not found".
 
 Check it with `python3 data/scripts/gatekeepr/reader.py --summary`; then ask for a check from the app (or emit
-`GatekeeprCheckRequested`) so the widget and app pick it up.
+`GatekeeprRefreshRequested`) so the widget and app pick it up.
 
 ## When it fails
 

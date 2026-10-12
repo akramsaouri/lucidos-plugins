@@ -1,17 +1,21 @@
 /* Gatekeepr: the Appgate VPN session, its history, and the expiry alert settings.
  *
  * An app frame can't run the gatekeepr CLI, so this app only reads files. scripts/gatekeepr/check.py writes
- * artifacts/gatekeepr/status.json and history.json; it runs on the 5-minute cron trigger plugin setup creates,
- * and on the shipped "Gatekeepr — check now" trigger, which Check now reaches by emitting GatekeeprCheckRequested.
- * Each check that changes something, or answers a request, emits GatekeeprStatusChecked, and the app redraws.
- * settings.json is this app's, and check.py reads it on every run. Its schema is in knowhow/gatekeepr/expiry-alerts.md. */
+ * artifacts/gatekeepr/status.json and history.json; it runs on the background check (a cron trigger this app
+ * can create, pause and reschedule) and on the shipped "Gatekeepr — refresh" trigger, which Refresh reaches by
+ * emitting GatekeeprRefreshRequested. Each check that changes something, or answers a request, emits
+ * GatekeeprStatusChecked, and the app redraws. settings.json is this app's, and check.py reads it on every run.
+ * Its schema is in knowhow/gatekeepr/expiry-alerts.md. */
 lucidos.ui.applyPreferences();
 lucidos.ui.watchPreferences();
 
+const APP_ID = 'gatekeepr';
 const DIR = 'artifacts/gatekeepr/';
 const SCRIPT = 'scripts/gatekeepr/check.py';
-const EVERY_5_MIN = '0 */5 * * * *';
-const FRESH_MS = 60e3;   // on open, a snapshot older than this asks for a check
+const SCHEDULE_NAME = 'Gatekeepr — expiry check';
+const CADENCES = [1, 2, 5, 10, 15, 30];   // minutes; each divides an hour, so checks stay evenly spaced
+const DEFAULT_CADENCE = 5;
+const FRESH_MS = 60e3;   // on open, a snapshot older than this asks for a refresh
 const DEFAULT_ALERTS = [
   { id: 'warn', kind: 'before', minutes: 30, enabled: true },
   { id: 'final', kind: 'before', minutes: 5, enabled: true },
@@ -19,13 +23,13 @@ const DEFAULT_ALERTS = [
   { id: 'problem', kind: 'problem', enabled: true },
 ];
 const ALERT_COPY = {
-  warn: { name: 'First warning' },
-  final: { name: 'Final warning' },
-  expired: { name: 'On expiry', help: 'Notify when the session runs out.' },
-  problem: { name: 'When the check can’t read the session', help: 'Notify once if the CLI goes missing or can’t read the Appgate logs, since no other alert can fire then.' },
+  warn: { name: 'First warning', icon: 'bell' },
+  final: { name: 'Final warning', icon: 'bellRing' },
+  expired: { name: 'On expiry', icon: 'timerOff', help: 'Notify when the session runs out.' },
+  problem: { name: 'When the check can’t read the session', icon: 'alert', help: 'Notify once if the CLI goes missing or can’t read the Appgate logs, since no other alert can fire then.' },
 };
 const OUTCOME = {
-  active: ['Active', 'label'],
+  active: ['Current', 'label'],
   renewed: ['Renewed', 'label label-success'],
   expired: ['Expired', 'label label-warning'],
   signedOut: ['Signed out', 'label label-neutral'],
@@ -34,7 +38,33 @@ const OUTCOME = {
 const END_KIND = { clientClosed: 'closed by the client', clientRestarted: 'client restarted', driverRestarted: 'driver restarted', renewed: 'renewed' };
 const HISTORY_ROWS = 8;
 
-const S = { status: null, history: null, settings: {}, schedule: undefined, pending: null, showAll: false };
+/* Lucide-style 24px stroke icons, drawn in currentColor. */
+const BELL = '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>';
+const ICONS = {
+  refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  renewal: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+  logIn: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+  logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  alarm: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  ruler: '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>',
+  wifi: '<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/>',
+  bell: BELL,
+  bellRing: BELL + '<path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/>',
+  timerOff: '<path d="M10 2h4"/><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"/><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"/><path d="m2 2 20 20"/><path d="M12 12v-2"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  terminal: '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  chevD: '<path d="m6 9 6 6 6-6"/>',
+  chevU: '<path d="m18 15-6-6-6 6"/>',
+};
+const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
+
+const S = { status: null, history: null, settings: {}, schedule: undefined, cadence: DEFAULT_CADENCE, scheduleBusy: false, pending: null, showAll: false };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => lucidos.utils.escapeHtml(String(s));
 const escAttr = (s) => lucidos.utils.escapeHtmlAttr(String(s));
@@ -54,6 +84,14 @@ function fmtLength(s) {          // a session length, to the nearest minute as t
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
 }
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const every = (m) => (m === 1 ? 'every minute' : `every ${m} minutes`);
+const cronFor = (m) => (m === 1 ? '0 * * * * *' : `0 */${m} * * * *`);
+function cadenceOf(t) {          // the minutes of a schedule this app writes, or null for a hand-written cron
+  const crons = t.cron_expressions || [];
+  const m = crons.length === 1 ? crons[0].trim().match(/^0 \*(?:\/(\d+))? \* \* \* \*$/) : null;
+  const n = m ? Number(m[1] || 1) : NaN;
+  return CADENCES.includes(n) ? n : null;
+}
 
 // ---------- reading ----------
 async function readJson(name) {
@@ -86,6 +124,7 @@ async function loadSchedule() {
     const all = await lucidos.triggers.list();
     S.schedule = all.find((t) => t.run && t.run.type === 'script' && String(t.run.path || '').endsWith(SCRIPT)
       && (t.cron_expressions || []).length) || null;
+    if (S.schedule && cadenceOf(S.schedule)) S.cadence = cadenceOf(S.schedule);
   } catch (e) {
     S.schedule = undefined;
   }
@@ -106,7 +145,7 @@ function view(w) {
   const soon = left <= s.warnThresholdSeconds;
   return {
     tone: soon ? 'warning' : 'normal', value: fmtLeft(left), label: 'left', left,
-    chip: soon ? ['Expiring soon', 'label label-warning'] : ['Active', 'label label-success'],
+    chip: soon ? ['Expiring soon', 'label label-warning'] : ['Signed in', 'label label-success'],
     headline: `expires ${clock(s.expiresAt)}`,
     fraction: Math.max(0, Math.min(1, left / s.sessionLengthSeconds)),
   };
@@ -136,11 +175,11 @@ function renderHero() {
     $('problem-text').textContent = (w.status && w.status.error) || 'The check failed.';
     $('problem-hint').textContent = PROBLEM_HINT[w.error_kind] || '';
     $('problem-actions').innerHTML = w.error_kind === 'not_installed' || w.error_kind === 'usage'
-      ? '<button class="action-btn" data-act="install">Help me install it</button>' : '';
+      ? `<button class="action-btn" data-act="install">${ic('download')}Help me install it</button>` : '';
   }
 
-  $('check').disabled = !!S.pending;
-  $('check').innerHTML = S.pending ? '<span class="mini-spinner" aria-hidden="true"></span> Checking' : 'Check now';
+  $('refresh').disabled = !!S.pending;
+  $('refresh').innerHTML = S.pending ? '<span class="mini-spinner" aria-hidden="true"></span> Refreshing' : `${ic('refresh')}Refresh`;
   $('checked').textContent = S.status ? `checked ${lucidos.utils.timeAgo(S.status.checked_at)}` : '';
 }
 
@@ -151,17 +190,17 @@ function renderFacts() {
   const rows = [];
   if (s.sessionStart) {
     const v = view(S.status);
-    rows.push(['Signed in', dayClock(s.sessionStart)]);
-    rows.push([s.secondsLeft < 0 || s.state === 'expired' ? 'Expired' : 'Expires', dayClock(s.expiresAt)]);
-    if (s.state === 'active' || s.state === 'expiringSoon') rows.push(['Time left', v.left > 0 ? fmtLeft(v.left) : '0m']);
-    if (s.sessionEnd) rows.push(['Ended', dayClock(s.sessionEnd)]);
-    rows.push(['Started by', s.sessionStartKind === 'renewal' ? 'Renewal from Appgate’s expiry warning' : 'Sign-in']);
-    rows.push(['Expiry from', s.expirySource === 'renewalNotification' ? 'Appgate’s 5-minute renewal countdown' : 'Sign-in plus the session length']);
+    rows.push(['logIn', 'Signed in', dayClock(s.sessionStart)]);
+    rows.push(['alarm', s.secondsLeft < 0 || s.state === 'expired' ? 'Expired' : 'Expires', dayClock(s.expiresAt)]);
+    if (s.state === 'active' || s.state === 'expiringSoon') rows.push(['hourglass', 'Time left', v.left > 0 ? fmtLeft(v.left) : '0m']);
+    if (s.sessionEnd) rows.push(['logOut', 'Ended', dayClock(s.sessionEnd)]);
+    rows.push(s.sessionStartKind === 'renewal' ? ['renewal', 'Started by', 'Renewal from Appgate’s expiry warning'] : ['key', 'Started by', 'Sign-in']);
+    rows.push(['info', 'Expiry from', s.expirySource === 'renewalNotification' ? 'Appgate’s 5-minute renewal countdown' : 'Sign-in plus the session length']);
   }
-  rows.push(['Session length', s.sessionLengthSource === 'median'
+  rows.push(['ruler', 'Session length', s.sessionLengthSource === 'median'
     ? `${fmtLength(s.sessionLengthSeconds)}, the median of ${plural(s.sessionLengthLearnedFrom, 'measured session')}`
     : `${fmtLength(s.sessionLengthSeconds)} by default: no session measured yet`]);
-  $('facts').innerHTML = rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+  $('facts').innerHTML = rows.map(([icon, k, v]) => `<div><dt>${ic(icon)}${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
 }
 
 function renderHistory() {
@@ -187,17 +226,17 @@ function renderHistory() {
   box.innerHTML = '<div class="list-rows">' + shown.map((x) => {
     const [word, cls] = OUTCOME[x.outcome] || [x.outcome, 'label label-neutral'];
     const end = x.end ? (sameDay(x.start, x.end) ? clock(x.end) : dayClock(x.end)) : 'now';
-    const bits = [x.startKind === 'renewal' ? 'renewal' : 'sign-in'];
-    if (x.endKind && END_KIND[x.endKind] && x.outcome !== 'renewed') bits.push(END_KIND[x.endKind]);
-    bits.push(plural(x.reconnects, 'reconnect'));
-    if (x.measuredLengthSeconds) bits.push(`measured ${fmtLength(x.measuredLengthSeconds)}`);
+    const bits = [x.startKind === 'renewal' ? ['renewal', 'renewal'] : ['logIn', 'sign-in']];
+    if (x.endKind && END_KIND[x.endKind] && x.outcome !== 'renewed') bits.push(['logOut', END_KIND[x.endKind]]);
+    bits.push(['wifi', plural(x.reconnects, 'reconnect')]);
+    if (x.measuredLengthSeconds) bits.push(['ruler', `measured ${fmtLength(x.measuredLengthSeconds)}`]);
     return `<div class="list-row hist-row">
         <div class="hist-when">${esc(dayClock(x.start))} → ${esc(end)}</div><span class="${cls}">${esc(word)}</span>
-        <div class="list-row-details">${bits.map((b) => `<span>${esc(b)}</span>`).join('')}</div>
+        <div class="list-row-details">${bits.map(([icon, b]) => `<span>${ic(icon)}${esc(b)}</span>`).join('')}</div>
       </div>`;
   }).join('') + '</div>'
     + (sessions.length > HISTORY_ROWS
-      ? `<div class="more"><button class="action-btn action-btn-secondary" data-act="more">${S.showAll ? 'Show fewer' : `Show all ${sessions.length}`}</button></div>`
+      ? `<div class="more"><button class="action-btn action-btn-secondary" data-act="more">${S.showAll ? `${ic('chevU')}Show fewer` : `${ic('chevD')}Show all ${sessions.length}`}</button></div>`
       : '');
 }
 
@@ -213,29 +252,84 @@ function renderAlerts() {
     const help = a.kind === 'before'
       ? `Notify with <input class="text-input mins" type="number" min="1" max="1440" step="1" inputmode="numeric" data-mins="${a.id}" value="${Number(a.minutes)}" aria-label="${escAttr(copy.name)} threshold in minutes"> minutes left`
       : esc(copy.help);
-    return `<div class="setting"><div class="setting-text"><div class="setting-name">${esc(copy.name)}</div><div class="setting-help">${help}</div></div>
+    return `<div class="setting"><span class="setting-icon">${ic(copy.icon)}</span><div class="setting-text"><div class="setting-name">${esc(copy.name)}</div><div class="setting-help">${help}</div></div>
       <label class="toggle-switch"><input type="checkbox" role="switch" data-alert="${a.id}" aria-label="${escAttr(copy.name)}"${a.enabled ? ' checked' : ''}><span class="toggle-slider"></span></label></div>`;
   }).join('');
 }
 
+/* The background check is the cron trigger running check.py. The switch pauses and resumes it (or creates it,
+ * when setup never did), and How often rewrites its cron. The trigger stays the one source of truth, so an edit
+ * made in the Triggers panel shows up here. */
+const cadencePick = lucidos.ui.Select.create({
+  options: CADENCES.map((m) => ({ value: String(m), label: m === 1 ? 'Every minute' : `Every ${m} min` })),
+  value: String(DEFAULT_CADENCE),
+  placeholder: 'Custom',
+  disabled: true,
+  onChange: (v) => setCadence(Number(v)),
+});
+$('cadence').appendChild(cadencePick.element);
+
 function renderSchedule() {
   const t = S.schedule;
-  const name = $('schedule-name'), help = $('schedule-help');
-  $('schedule-setup').hidden = t !== null;
-  if (t === undefined) {
-    name.textContent = 'Couldn’t read the triggers';
-    help.textContent = '';
-    return;
+  const on = !!t && !t.paused;
+  const custom = t && !cadenceOf(t);
+  const toggle = $('schedule-on');
+  toggle.checked = on;
+  toggle.disabled = t === undefined || S.scheduleBusy;
+  cadencePick.setDisabled(t === undefined || S.scheduleBusy);
+  cadencePick.setValue(custom ? undefined : String(S.cadence));
+
+  const name = 'Check in the background' + (t && !t.paused && t.last_run_status === 'failed' ? ' <span class="label label-error">Last run failed</span>' : '');
+  $('schedule-name').innerHTML = name;
+  const help = $('schedule-help');
+  if (t === undefined) help.textContent = 'Couldn’t read the triggers.';
+  else if (!on) help.textContent = `${t ? 'Paused' : 'Off'}. Alerts fire only while this app or the VPN expiry widget is open.`;
+  else help.textContent = `Runs gatekeepr ${custom ? 'on its own schedule' : every(S.cadence)}, so alerts arrive with Lucidos in the background${t.last_run ? `. Last run ${lucidos.utils.timeAgo(t.last_run)}` : ''}.`;
+  $('cadence-help').textContent = custom ? `Custom: ${t.cron_expressions.join(', ')}`
+    : on && t.next_run ? `Next check at ${clock(t.next_run)}` : 'An alert can land up to this long after its threshold.';
+
+  const note = $('alerts-note');
+  note.hidden = t === undefined;
+  note.textContent = !on ? 'The background check is off, so alerts fire only while this app or the VPN expiry widget is open.'
+    : custom ? 'Alerts land at the first background check past their threshold.'
+    : `The background check runs ${every(S.cadence)}, so an alert can land up to ${S.cadence === 1 ? 'a minute' : `${S.cadence} minutes`} after its threshold.`;
+}
+
+// Resolves to true when the engine took the change. A refusal arrives as a throw or as success: false.
+async function applySchedule(change, done) {
+  S.scheduleBusy = true;
+  renderSchedule();
+  let ok = false;
+  try {
+    const res = await change();
+    if (res && res.success === false) throw new Error(res.error || 'refused');
+    ok = true;
+    const next = res && res.cron_preview && res.cron_preview.next_runs && res.cron_preview.next_runs[0];
+    lucidos.ui.toast(done + (next ? `, next at ${clock(next)}` : ''), 'success', { key: 'gatekeepr-schedule' });
+    for (const w of (res && res.cron_preview && res.cron_preview.warnings) || []) lucidos.ui.toast(w, 'warning');
+  } catch (e) {
+    lucidos.ui.toast(`Couldn’t change the background check: ${(e && e.message) || e}`, 'error');
   }
-  if (t === null) {
-    name.innerHTML = '<span class="label label-warning">Not scheduled</span>';
-    help.textContent = 'Without the 5-minute check, alerts fire only while this app or the VPN expiry widget is open.';
-    return;
-  }
-  const cadence = t.cron_expressions.length === 1 && t.cron_expressions[0] === EVERY_5_MIN ? 'Every 5 minutes' : `On ${t.cron_expressions.join(', ')}`;
-  name.innerHTML = esc(cadence) + (t.paused ? ' <span class="label label-neutral">Paused</span>'
-    : t.last_run_status === 'failed' ? ' <span class="label label-error">Last run failed</span>' : '');
-  help.textContent = [t.name, t.last_run ? `last run ${lucidos.utils.timeAgo(t.last_run)}` : 'not run yet'].join(' · ');
+  S.scheduleBusy = false;
+  await loadSchedule();
+  return ok;
+}
+
+function setScheduleOn(on) {
+  const t = S.schedule;
+  if (t) return applySchedule(() => lucidos.triggers.update(t.id, { paused: !on }), on ? `Background check on, ${every(S.cadence)}` : 'Background check paused');
+  if (!on) return renderSchedule();
+  return applySchedule(() => lucidos.triggers.create({
+    name: SCHEDULE_NAME, run: { type: 'script', path: SCRIPT }, cron_expressions: [cronFor(S.cadence)], app_id: APP_ID,
+  }), `Background check on, ${every(S.cadence)}`);
+}
+
+function setCadence(minutes) {
+  S.cadence = minutes;
+  const t = S.schedule;
+  if (!t) return renderSchedule();   // applied when the switch turns it on
+  return applySchedule(() => lucidos.triggers.update(t.id, { cron_expressions: [cronFor(minutes)] }),
+    t.paused ? `Set to ${every(minutes)} (still paused)` : `Checking ${every(minutes)}`);
 }
 
 function renderCli() {
@@ -279,7 +373,7 @@ function setAlert(id, patch) {
   saveSoon();
 }
 
-// ---------- checks ----------
+// ---------- refresh ----------
 async function ask(auto) {
   if (S.pending) return;
   const id = 'app-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -289,27 +383,26 @@ async function ask(auto) {
     if (S.pending !== id) return;
     S.pending = null;
     renderHero();
-    if (!auto) lucidos.ui.toast('No answer from the check yet. Is the “Gatekeepr — check now” trigger paused?', 'warning');
+    if (!auto) lucidos.ui.toast('No answer from the check yet. Is the “Gatekeepr — refresh” trigger paused?', 'warning');
   }, 20e3);
   try {
-    await lucidos.events.emit('GatekeeprCheckRequested', { summary: 'Gatekeepr app asked for a check', request_id: id, source: 'app' });
+    await lucidos.events.emit('GatekeeprRefreshRequested', { summary: 'Gatekeepr app asked for a refresh', request_id: id, source: 'app' });
   } catch (e) {
     S.pending = null;
     renderHero();
-    if (!auto) lucidos.ui.toast('Couldn’t ask for a check', 'error');
+    if (!auto) lucidos.ui.toast('Couldn’t ask for a refresh', 'error');
   }
 }
 
-async function refresh() {
+async function reload() {
   await loadSnapshots().catch(() => {});
   render();
 }
 
 // ---------- wiring ----------
-$('check').addEventListener('click', () => ask(false));
-$('schedule-setup').addEventListener('click', () => lucidos.ui.startThread({
-  prompt: 'Set up the Gatekeepr plugin’s 5-minute expiry check: the script trigger running scripts/gatekeepr/check.py every 5 minutes.',
-}));
+for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = ic(el.dataset.icon);
+$('refresh').addEventListener('click', () => ask(false));
+$('schedule-on').addEventListener('change', (e) => setScheduleOn(e.target.checked));
 document.addEventListener('click', (e) => {
   const act = e.target.closest('[data-act]');
   if (!act) return;
@@ -340,10 +433,11 @@ $('binary').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target
 lucidos.sse.connect();
 lucidos.sse.on('GatekeeprStatusChecked', (data) => {
   if (data && data.request_id && data.request_id === S.pending) S.pending = null;
-  refresh();
+  reload();
+  loadSchedule();   // a scheduled run moves last_run and next_run
 });
-setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 60e3);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { refresh(); loadSchedule(); } });
+setInterval(() => { if (document.visibilityState === 'visible') { reload(); loadSchedule(); } }, 60e3);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { reload(); loadSchedule(); } });
 
 (async function boot() {
   await Promise.all([loadSnapshots().catch(() => {}), loadSettings()]);

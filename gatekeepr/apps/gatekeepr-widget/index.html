@@ -28,12 +28,13 @@
   .problem { max-width: 18rem; font-size: var(--font-size-sm); color: var(--text-secondary); overflow-wrap: anywhere;
              display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
   .note { font-size: var(--font-size-xs); color: var(--text-muted); }
-  .check .mini-spinner { --spinner-color: currentColor; }
+  .refresh .mini-spinner { --spinner-color: currentColor; }
+  .refresh .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); margin-right: var(--space-xs); vertical-align: -0.125rem; }
 
   /* A floating widget window in minimal mode: the ring and its one line, on a fill of its own. */
   html[data-widget-mode="minimal"] body { padding: var(--space-md) var(--space-lg); background: var(--bg-secondary); border-radius: var(--radius-surface); }
   html[data-widget-mode="minimal"] .gauge { --ring-size: 6.5rem; }
-  html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .check, html[data-widget-mode="minimal"] .problem { display: none !important; }
+  html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .refresh, html[data-widget-mode="minimal"] .problem { display: none !important; }
   @media (pointer: coarse) {
     .action-btn { position: relative; }
     .action-btn::before { content: ''; position: absolute; inset: -0.375rem -0.25rem; }
@@ -48,16 +49,31 @@
   <div class="when" id="when"></div>
   <div class="problem" id="problem" hidden></div>
   <div class="note" id="note" hidden></div>
-  <button class="action-btn action-btn-secondary check" id="check" hidden>Check now</button>
+  <button class="action-btn action-btn-secondary refresh" id="refresh" hidden>Refresh</button>
 <script>
 lucidos.ui.applyPreferences();
 lucidos.ui.watchPreferences();
 
 const STATUS = 'artifacts/gatekeepr/status.json';
-const STALE_MS = 7 * 60e3;        // the 5-minute check has missed a slot (or was never set up)
-const AUTO_GAP_MS = 5 * 60e3;     // ask for a check on our own at most this often
+const SCRIPT = 'scripts/gatekeepr/check.py';
+const AUTO_GAP_MS = 5 * 60e3;     // ask for a refresh on our own at most this often
+const CADENCE_EVERY_MS = 15 * 60e3;
+const REFRESH_ICON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
 const $ = (id) => document.getElementById(id);
-let snap, pending = null, lastAsk = 0;
+let snap, pending = null, lastAsk = 0, cadenceAt = 0;
+// The snapshot is stale once the background check has missed a run: its interval plus 2 minutes of slack. With
+// the check off, paused, on a hand-written cron, or unreadable, 5 minutes stands in for the interval.
+let staleMs = 7 * 60e3;
+
+async function loadCadence() {
+  cadenceAt = Date.now();
+  try {
+    const t = (await lucidos.triggers.list()).find((x) => x.run && x.run.type === 'script'
+      && String(x.run.path || '').endsWith(SCRIPT) && (x.cron_expressions || []).length && !x.paused);
+    const m = t && t.cron_expressions.length === 1 && t.cron_expressions[0].trim().match(/^0 \*(?:\/(\d+))? \* \* \* \*$/);
+    staleMs = ((m ? Number(m[1] || 1) : 5) + 2) * 60e3;
+  } catch (e) { /* keep the last value */ }
+}
 
 const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 // The CLI's own timeLeft style (6h08m, 25m, <1m), rounded down.
@@ -97,15 +113,16 @@ function render() {
   $('problem').textContent = v.problem || '';
   $('problem').hidden = !v.problem;
   $('ring').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.when].filter(Boolean).join(', '));
-  const stale = snap && age > STALE_MS;
+  const stale = snap && age > staleMs;
   $('note').textContent = stale ? `checked ${lucidos.utils.timeAgo(snap.checked_at)}` : '';
   $('note').hidden = !stale;
-  $('check').hidden = !(v.ask || stale || pending);
-  $('check').disabled = !!pending;
-  $('check').innerHTML = pending ? '<span class="mini-spinner" aria-hidden="true"></span> Checking' : 'Check now';
+  $('refresh').hidden = !(v.ask || stale || pending);
+  $('refresh').disabled = !!pending;
+  $('refresh').innerHTML = pending ? '<span class="mini-spinner" aria-hidden="true"></span> Refreshing' : `${REFRESH_ICON}Refresh`;
 }
 
 async function load() {
+  if (Date.now() - cadenceAt > CADENCE_EVERY_MS) await loadCadence();
   try {
     snap = JSON.parse(await lucidos.data.read(STATUS));
   } catch (e) {
@@ -113,9 +130,9 @@ async function load() {
   }
   render();
   lucidos.ui.ready();
-  // Self-heal when nothing has refreshed the snapshot: one requested check per few minutes while visible.
+  // Self-heal when nothing has refreshed the snapshot: one requested refresh per few minutes while visible.
   const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
-  if (age > STALE_MS && Date.now() - lastAsk > AUTO_GAP_MS && document.visibilityState === 'visible') ask(true);
+  if (age > staleMs && Date.now() - lastAsk > AUTO_GAP_MS && document.visibilityState === 'visible') ask(true);
 }
 
 async function ask(auto) {
@@ -126,22 +143,22 @@ async function ask(auto) {
   render();
   setTimeout(() => { if (pending === id) { pending = null; render(); } }, 20e3);
   try {
-    await lucidos.events.emit('GatekeeprCheckRequested', { summary: 'VPN expiry widget asked for a Gatekeepr check', request_id: id, source: 'widget' });
+    await lucidos.events.emit('GatekeeprRefreshRequested', { summary: 'VPN expiry widget asked for a Gatekeepr refresh', request_id: id, source: 'widget' });
   } catch (e) {
     pending = null;
     render();
-    if (!auto) lucidos.ui.toast('Couldn’t ask for a check', 'error');
+    if (!auto) lucidos.ui.toast('Couldn’t ask for a refresh', 'error');
   }
 }
 
-$('check').addEventListener('click', () => ask(false));
+$('refresh').addEventListener('click', () => ask(false));
 lucidos.sse.connect();
 lucidos.sse.on('GatekeeprStatusChecked', (data) => {
   if (data && data.request_id && data.request_id === pending) pending = null;
   load();
 });
 setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60e3);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { cadenceAt = 0; load(); } });
 load();
 </script>
 </body>

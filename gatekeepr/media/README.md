@@ -29,14 +29,15 @@ check can't read your session.
 
 ## How it works
 
-Setup creates one script trigger that runs every 5 minutes. Each run calls the CLI (a few milliseconds), no
-LLM involved, and sends an alert only when a threshold is newly crossed. The 5-minute cadence means an alert can
-land up to 5 minutes after its threshold: the 30-minute alert arrives with 25 to 30 minutes left. Nothing runs
-while your Mac is asleep. After a wake you get only the most urgent alert that's due.
+Setup creates one script trigger, the background check, that runs every 5 minutes. Each run calls the CLI (a few
+milliseconds), no LLM involved, and sends an alert only when a threshold is newly crossed. An alert can land up to
+one interval after its threshold: at 5 minutes, the 30-minute alert arrives with 25 to 30 minutes left. Switch the
+check off, or run it every 1 to 30 minutes, in the app's Background check section. Nothing runs while your Mac is
+asleep. After a wake you get only the most urgent alert that's due.
 
 Uninstalling removes everything the plugin shipped, but not that trigger, since setup created it. Delete
 "Gatekeepr — expiry check" from your triggers afterwards.
 
 ## Try first
 
-Open the Gatekeepr app and press **Check now**, or ask Lucidos "when does my VPN expire?".
+Open the Gatekeepr app and press **Refresh**, or ask Lucidos "when does my VPN expire?".

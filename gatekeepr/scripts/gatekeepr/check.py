@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Gatekeepr expiry check: the script behind both of the plugin's triggers. No LLM runs.
 
-- "Gatekeepr — expiry check": the cron trigger plugin setup creates, every 5 minutes (`0 */5 * * * *`).
-- "Gatekeepr — check now": shipped with the plugin, on GatekeeprCheckRequested (the app's and widget's
-  Check now).
+- "Gatekeepr — expiry check": the background check, a cron trigger that plugin setup (or the app's
+  Background check switch) creates. Every 5 minutes (`0 */5 * * * *`) unless the user picks another
+  interval in the app.
+- "Gatekeepr — refresh": shipped with the plugin, on GatekeeprRefreshRequested (the app's and widget's
+  Refresh).
 
 Each run reads the session with reader.py (one `gatekeepr --json`, a few milliseconds), then:
 
@@ -11,12 +13,13 @@ Each run reads the session with reader.py (one `gatekeepr --json`, a few millise
 2. Sends a notification when an enabled alert in settings.json is newly crossed. Each alert fires once per
    session: state.json keys its ledger on the session's `sessionStart` plus the alert id, so a new sign-in or
    a renewal starts afresh. When one check finds several alerts crossed (the Mac slept through the 30-minute
-   mark, say), only the most urgent is sent and the rest are marked done. An expiry more than 30 minutes old
-   is marked done without a notification, so a first check days later doesn't announce an old session.
+   mark, say), only the most urgent is sent and the rest are marked done. An expiry more than 45 minutes old
+   is marked done without a notification, so a first check days later doesn't announce an old session. 45
+   minutes outlasts the longest interval the app offers (30), so the first check after an expiry still sends.
 3. Refreshes history.json (`gatekeepr history --json`) when the state changed, on a requested check, or when
    the file is missing. A quiet scheduled run makes no second CLI call.
 4. Emits GatekeeprStatusChecked when the state changed (state, session, expiry or error), and always when
-   answering a GatekeeprCheckRequested, so a waiting Check now hears back.
+   answering a GatekeeprRefreshRequested, so a waiting Refresh hears back.
 
 A check that can't read the session (no binary, unreadable logs, an unknown schemaVersion) sends the
 "problem" alert once per kind of problem, then stays quiet until the kind changes or a read succeeds. The
@@ -39,8 +42,8 @@ import reader as R  # noqa: E402
 
 APP_ID = "gatekeepr"
 EVENT = "GatekeeprStatusChecked"
-REQUEST_EVENT = "GatekeeprCheckRequested"
-EXPIRED_RECENT_SECONDS = 30 * 60
+REQUEST_EVENT = "GatekeeprRefreshRequested"
+EXPIRED_RECENT_SECONDS = 45 * 60
 MAX_THRESHOLD_MINUTES = 24 * 60
 LEDGER_SESSIONS = 5
 
@@ -146,7 +149,7 @@ def read_json(path, default):
 
 
 def request_payload():
-    """The GatekeeprCheckRequested payload when this run answers one, else None. Read defensively: a stored
+    """The GatekeeprRefreshRequested payload when this run answers one, else None. Read defensively: a stored
     payload may arrive wrapped in an envelope (system-knowhow/triggers § The envelope)."""
     if os.environ.get("TRIGGER_EVENT_TYPE") != REQUEST_EVENT:
         return None
@@ -173,7 +176,7 @@ def run():
         with open(ignore, "w") as f:
             f.write(GITIGNORE)
 
-    # One check at a time: the cron and a Check now landing together would otherwise both send an alert.
+    # One check at a time: the cron and a Refresh landing together would otherwise both send an alert.
     with open(os.path.join(root, ".check.lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         return check(root)

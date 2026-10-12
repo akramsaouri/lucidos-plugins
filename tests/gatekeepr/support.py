@@ -100,7 +100,7 @@ class Sandbox(unittest.TestCase):
         before = len(self.lucidos_calls())
         env = dict(self.env, **(extra_env or {}))
         if request is not None:
-            env["TRIGGER_EVENT_TYPE"] = "GatekeeprCheckRequested"
+            env["TRIGGER_EVENT_TYPE"] = "GatekeeprRefreshRequested"
             env["TRIGGER_EVENT_PAYLOAD"] = json.dumps({"payload": request} if wrap else request)
         proc = subprocess.run([sys.executable, os.path.join(SCRIPTS, "check.py")], env=env,
                               capture_output=True, text=True, timeout=60, cwd=self.workspace)
