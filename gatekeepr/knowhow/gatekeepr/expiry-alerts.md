@@ -145,9 +145,9 @@ From a thread: `lucidos events emit GatekeeprRefreshRequested --payload '{"summa
 ## The widget and the app
 
 The **VPN expiry** widget (`apps/gatekeepr-widget`) and the **Gatekeepr** app read `status.json` and draw the
-session as a sand timer (`hourglass.js`, one file shipped in both app folders). The top bulb holds
-`secondsLeft / sessionLengthSeconds` of the sand, measured by area rather than height, with a sliver kept while
-any time is left so expiring soon never looks empty. Between checks they count `secondsLeft` down by the time
+session as a countdown timer (`timer.js`, one file shipped in both app folders). A full turn is the session
+length; the wedge from 12 o'clock to the hand is `secondsLeft / sessionLengthSeconds`, with a sliver kept while any
+time is left so expiring soon never looks empty. The dial's quarter labels come from `sessionLengthSeconds`. Between checks they count `secondsLeft` down by the time
 since the snapshot's `now`. That lands on the CLI's own `expiresAt` and turns the colour at its
 `warnThresholdSeconds`; nothing recomputes expiry. Both redraw on `GatekeeprStatusChecked`; the widget also
 re-reads every 60 seconds.

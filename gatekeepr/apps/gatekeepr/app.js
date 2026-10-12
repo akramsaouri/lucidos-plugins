@@ -46,7 +46,7 @@ const ICONS = {
   logIn: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
   logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   alarm: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/>',
-  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  timer: '<path d="M10 2h4"/><path d="m12 14 3-3"/><circle cx="12" cy="14" r="8"/>',
   key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   ruler: '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>',
@@ -66,7 +66,7 @@ const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="curre
 
 const S = { status: null, history: null, settings: {}, schedule: undefined, cadence: DEFAULT_CADENCE, scheduleBusy: false, pending: null, showAll: false };
 const $ = (id) => document.getElementById(id);
-const timer = Hourglass.mount($('timer'));
+const timer = ExpiryTimer.mount($('timer'));
 const esc = (s) => lucidos.utils.escapeHtml(String(s));
 const escAttr = (s) => lucidos.utils.escapeHtmlAttr(String(s));
 
@@ -162,7 +162,7 @@ const PROBLEM_HINT = {
 function renderHero() {
   const v = view(S.status);
   $('hero').dataset.tone = v.tone;
-  timer.draw(v.fraction || 0, !!v.fraction);
+  timer.draw(v.fraction || 0, !!v.fraction, S.status && S.status.status && S.status.status.sessionLengthSeconds);
   $('left').innerHTML = esc(v.value) + (v.label ? `<small>${esc(v.label)}</small>` : '');
   $('left').classList.toggle('is-word', !!v.word);
   $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.headline].filter(Boolean).join(', '));
@@ -192,7 +192,7 @@ function renderFacts() {
     const v = view(S.status);
     rows.push(['logIn', 'Signed in', dayClock(s.sessionStart)]);
     rows.push(['alarm', s.secondsLeft < 0 || s.state === 'expired' ? 'Expired' : 'Expires', dayClock(s.expiresAt)]);
-    if (s.state === 'active' || s.state === 'expiringSoon') rows.push(['hourglass', 'Time left', v.left > 0 ? fmtLeft(v.left) : '0m']);
+    if (s.state === 'active' || s.state === 'expiringSoon') rows.push(['timer', 'Time left', v.left > 0 ? fmtLeft(v.left) : '0m']);
     if (s.sessionEnd) rows.push(['logOut', 'Ended', dayClock(s.sessionEnd)]);
     rows.push(s.sessionStartKind === 'renewal' ? ['renewal', 'Started by', 'Renewal from Appgate’s expiry warning'] : ['key', 'Started by', 'Sign-in']);
     rows.push(['info', 'Expiry from', s.expirySource === 'renewalNotification' ? 'Appgate’s 5-minute renewal countdown' : 'Sign-in plus the session length']);

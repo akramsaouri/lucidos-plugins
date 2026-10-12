@@ -7,19 +7,19 @@
 <script src="/api/v1/sdk-prefs.js"></script>
 <link rel="stylesheet" href="/api/v1/sdk-iframe.css">
 <script src="/api/v1/sdk.js"></script>
-<script src="hourglass.js"></script>
+<script src="timer.js"></script>
 <style>
   /* One shape on calm ground: the card draws the frame and the name, so no title and no border here. */
   body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-sm); text-align: center; }
   [hidden] { display: none !important; }
 
-  /* The sand timer drains from a full top bulb at sign-in to an empty one at expiry. Its colour is the state,
+  /* The countdown timer's wedge shrinks from a full turn at sign-in to nothing at expiry. Its colour is the state,
      from theme tokens only. */
   [data-tone="normal"] { --tone: var(--accent); }
   [data-tone="warning"] { --tone: var(--accent-yellow); }
   [data-tone="danger"] { --tone: var(--accent-red); }
   [data-tone="muted"] { --tone: var(--text-muted); }
-  .timer { width: 5.5rem; margin-bottom: var(--space-xs); }
+  .timer { width: 6.25rem; margin-bottom: var(--space-xs); }
   .left { font-size: var(--font-size-3xl); font-weight: 600; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; }
   .left.is-word { font-size: var(--font-size-2xl); }
   .left small { margin-left: 0.2em; font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
@@ -34,7 +34,7 @@
 
   /* A floating widget window in minimal mode: the timer and its lines, on a fill of its own. */
   html[data-widget-mode="minimal"] body { padding: var(--space-md) var(--space-lg); background: var(--bg-secondary); border-radius: var(--radius-surface); }
-  html[data-widget-mode="minimal"] .timer { width: 4rem; }
+  html[data-widget-mode="minimal"] .timer { width: 4.5rem; }
   html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .refresh, html[data-widget-mode="minimal"] .problem { display: none !important; }
   @media (pointer: coarse) {
     .action-btn { position: relative; }
@@ -59,7 +59,7 @@ const AUTO_GAP_MS = 5 * 60e3;     // ask for a refresh on our own at most this o
 const CADENCE_EVERY_MS = 15 * 60e3;
 const REFRESH_ICON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
 const $ = (id) => document.getElementById(id);
-const timer = Hourglass.mount($('timer'));
+const timer = ExpiryTimer.mount($('timer'));
 let snap, pending = null, lastAsk = 0, cadenceAt = 0;
 // The snapshot is stale once the background check has missed a run: its interval plus 2 minutes of slack. With
 // the check off, paused, on a hand-written cron, or unreadable, 5 minutes stands in for the interval.
@@ -104,7 +104,7 @@ function render() {
   const v = view(snap);
   const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
   document.body.dataset.tone = v.tone;
-  timer.draw(v.fraction || 0, !!v.fraction);
+  timer.draw(v.fraction || 0, !!v.fraction, snap && snap.status && snap.status.sessionLengthSeconds);
   $('left').innerHTML = lucidos.utils.escapeHtml(v.value) + (v.label ? `<small>${v.label}</small>` : '');
   $('left').classList.toggle('is-word', !!v.word);
   $('when').textContent = v.when || '';

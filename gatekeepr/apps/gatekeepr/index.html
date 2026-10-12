@@ -16,13 +16,13 @@
   .page { max-width: 36rem; margin: 0 auto; padding: var(--space-lg) var(--space-xl) 4rem; display: grid; gap: var(--space-xl); }
   .muted { color: var(--text-muted); }
 
-  /* ---------- the session: one sand timer, coloured by state from theme tokens ---------- */
+  /* ---------- the session: one countdown timer, coloured by state from theme tokens ---------- */
   [data-tone="normal"] { --tone: var(--accent); }
   [data-tone="warning"] { --tone: var(--accent-yellow); }
   [data-tone="danger"] { --tone: var(--accent-red); }
   [data-tone="muted"] { --tone: var(--text-muted); }
   .hero { display: grid; justify-items: center; gap: var(--space-md); text-align: center; padding-top: var(--space-md); }
-  .timer { width: 6.5rem; }
+  .timer { width: 7.5rem; }
   .left { font-size: var(--font-size-3xl); font-weight: 600; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; margin-bottom: calc(-1 * var(--space-sm)); }
   .left.is-word { font-size: var(--font-size-2xl); }
   .left small { margin-left: 0.2em; font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
@@ -148,7 +148,7 @@
     </div>
   </section>
 </main>
-<script src="hourglass.js"></script>
+<script src="timer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-"""The two app frames: the sand timer they share, and the event names they emit."""
+"""The two app frames: the countdown timer they share, and the event names they emit."""
 import json
 import os
 import shutil
@@ -9,23 +9,24 @@ PLUGIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "g
 APP = os.path.join(PLUGIN, "apps", "gatekeepr")
 WIDGET = os.path.join(PLUGIN, "apps", "gatekeepr-widget")
 
-# Draws the timer on a stub DOM and reports, for a few fractions, the top sand's surface, whether any sand has
-# fallen, and where the falling stream meets the pile.
+# Draws the timer on a stub DOM and reports, for a few fractions and session lengths, the hand's angle, whether a
+# wedge is drawn, whether the second hand shows, and the dial's labels.
 PROBE = r"""
-const attrs = {};
-const node = (name) => ({ setAttribute: (k, v) => { attrs[name + '.' + k] = v; }, style: {},
-                          querySelectorAll: () => [node('line'), node('line')] });
+const nodes = {};
+const node = (name) => (nodes[name] = nodes[name] || { attrs: {}, style: {}, innerHTML: '',
+  setAttribute(k, v) { this.attrs[k] = v; } });
 const el = { set innerHTML(_) {}, querySelector: (sel) => node(sel.slice(1)) };
 global.window = global;
 global.document = { createElement: () => ({}), head: { appendChild() {} } };
 require(process.argv[1]);
-const timer = Hourglass.mount(el);
-const out = {};
-for (const f of [0, 0.001, 0.25, 0.5, 0.75, 1]) {
-  timer.draw(f, true);
-  const top = attrs['hg-top.d'];
-  out[f] = { surface: top ? Number(top.split(' ')[1]) : null, fallen: !!attrs['hg-bottom.d'],
-             streamEnd: Number(attrs['line.y2']) };
+const timer = ExpiryTimer.mount(el);
+const out = [];
+for (const [f, running, length] of [[1, true, 86399], [0.25, true, 86399], [0.001, true, 86399], [0, false, 86399],
+                                    [0.5, true, 28800], [0.5, true, 36000], [0.5, false, undefined]]) {
+  timer.draw(f, running, length);
+  out.push({ f, length, angle: Number(nodes['tm-hand-group'].attrs.transform.match(/rotate\(([\d.]+)/)[1]),
+             wedge: !!nodes['tm-wedge'].attrs.d, second: nodes['tm-sec'].style.display !== 'none',
+             labels: [...nodes['tm-dial'].innerHTML.matchAll(/>(\d+h)</g)].map((m) => m[1]) });
 }
 console.log(JSON.stringify(out));
 """
@@ -36,27 +37,27 @@ def read(path):
         return f.read()
 
 
-class SandTimerTest(unittest.TestCase):
+class CountdownTimerTest(unittest.TestCase):
     def test_both_frames_ship_the_same_drawing(self):
-        self.assertEqual(read(os.path.join(APP, "hourglass.js")), read(os.path.join(WIDGET, "hourglass.js")))
+        self.assertEqual(read(os.path.join(APP, "timer.js")), read(os.path.join(WIDGET, "timer.js")))
         for page in (os.path.join(APP, "index.html"), os.path.join(WIDGET, "index.html")):
-            self.assertIn('<script src="hourglass.js"></script>', read(page))
+            self.assertIn('<script src="timer.js"></script>', read(page))
 
     @unittest.skipUnless(shutil.which("node"), "needs node")
-    def test_sand_level_tracks_the_fraction_by_area(self):
-        out = subprocess.run(["node", "-e", PROBE, os.path.join(APP, "hourglass.js")],
+    def test_the_hand_and_wedge_track_the_time_left(self):
+        out = subprocess.run(["node", "-e", PROBE, os.path.join(APP, "timer.js")],
                              capture_output=True, text=True, check=True).stdout
-        at = {float(k): v for k, v in json.loads(out).items()}
-        top, neck = 22, 85
-        self.assertAlmostEqual(at[1]["surface"], top, places=3)        # a full bulb at sign-in
-        self.assertFalse(at[1]["fallen"])                              # with nothing fallen yet
-        self.assertIsNone(at[0]["surface"])                            # nothing left at expiry
-        self.assertLess(at[0]["streamEnd"], neck)                      # and the heap has risen to the neck
-        self.assertGreater(neck - at[0.001]["surface"], 1)             # a sliver stays while time is left
-        surfaces = [at[f]["surface"] for f in (0.25, 0.5, 0.75)]
-        self.assertEqual(surfaces, sorted(surfaces, reverse=True))     # more time, higher sand
-        # The sand rests in the narrow end by the neck, so half of it stands taller than half the bulb (a smaller y).
-        self.assertLess(at[0.5]["surface"], (top + neck) / 2)
+        full, quarter, sliver, gone, eight, ten, unknown = json.loads(out)
+        self.assertEqual((full["angle"], full["wedge"]), (360, True))      # a full turn at sign-in
+        self.assertEqual(quarter["angle"], 90)                             # a quarter left points at 3 o'clock
+        self.assertGreater(sliver["angle"], 5)                             # a sliver stays while time is left
+        self.assertEqual((gone["angle"], gone["wedge"]), (0, False))       # back at 12, no wedge, at expiry
+        self.assertTrue(quarter["second"])                                 # the second hand ticks while it runs
+        self.assertFalse(gone["second"])
+        self.assertEqual(full["labels"], ["6h", "12h", "18h"])            # quarters of a 24-hour session
+        self.assertEqual(eight["labels"], ["2h", "4h", "6h"])             # follow the learned length
+        self.assertEqual(ten["labels"], [])                                # and stay off when they aren't whole hours
+        self.assertEqual(unknown["labels"], ["6h", "12h", "18h"])         # no length means 24 hours
 
 
 class EventNamesTest(unittest.TestCase):
