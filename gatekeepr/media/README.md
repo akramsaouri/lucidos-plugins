@@ -5,8 +5,8 @@ VPN stops. Gatekeepr shows you the expiry ahead of time and nudges you before it
 
 ## What you get
 
-- **VPN expiry widget**: a countdown timer whose hand sweeps back to 12 as the session runs out, with the time left
-  and the local expiry time under it. It turns yellow when the session is about to expire and red once it has.
+- **VPN expiry widget**: a desk countdown timer whose disc shrinks back to 12 as the session runs out, with the time
+  left and the local expiry time under it. It turns yellow when the session is about to expire and red once it has.
   Pin it to Home or show it in any thread.
 - **Gatekeepr app**: the same timer plus the session's details (when you signed in, when it expires, whether it
   started with a sign-in or a renewal, how the session length was learned) and every past session in the logs,

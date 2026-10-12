@@ -1,6 +1,6 @@
 {
   "name": "VPN expiry",
-  "description": "The Appgate VPN session as a countdown timer: a full turn is the session, and the wedge to the hand shrinks back to 12 as it runs out, coloured by state (normal, expiring soon, expired, signed out), with the time left and the local expiry time under it. Reads the Gatekeepr plugin's latest check, recounts every minute, and redraws on each new check.",
+  "description": "The Appgate VPN session as a desk countdown timer: a full turn is the session, and a solid disc shrinks back to 12 as it runs out, coloured by state (normal, expiring soon, expired, signed out), with the time left and the local expiry time under it. Reads the Gatekeepr plugin's latest check, recounts every minute, and redraws on each new check.",
   "icon": "assets/icon.svg",
   "reveal": "on-ready",
   "kind": "widget",

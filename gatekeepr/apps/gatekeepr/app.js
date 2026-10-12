@@ -46,7 +46,7 @@ const ICONS = {
   logIn: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
   logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   alarm: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M6.38 18.7 4 21"/><path d="M17.64 18.67 20 21"/>',
-  timer: '<path d="M10 2h4"/><path d="m12 14 3-3"/><circle cx="12" cy="14" r="8"/>',
+  timer: '<rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="12" cy="12" r="5.5"/><path d="M12 6.5V12h5.5"/>',
   key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   ruler: '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>',
@@ -162,7 +162,7 @@ const PROBLEM_HINT = {
 function renderHero() {
   const v = view(S.status);
   $('hero').dataset.tone = v.tone;
-  timer.draw(v.fraction || 0, !!v.fraction, S.status && S.status.status && S.status.status.sessionLengthSeconds);
+  timer.draw(v.fraction || 0, S.status && S.status.status && S.status.status.sessionLengthSeconds);
   $('left').innerHTML = esc(v.value) + (v.label ? `<small>${esc(v.label)}</small>` : '');
   $('left').classList.toggle('is-word', !!v.word);
   $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.headline].filter(Boolean).join(', '));

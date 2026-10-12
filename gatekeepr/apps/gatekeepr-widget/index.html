@@ -13,7 +13,7 @@
   body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-sm); text-align: center; }
   [hidden] { display: none !important; }
 
-  /* The countdown timer's wedge shrinks from a full turn at sign-in to nothing at expiry. Its colour is the state,
+  /* The countdown timer's disc shrinks from a full turn at sign-in to nothing at expiry. Its colour is the state,
      from theme tokens only. */
   [data-tone="normal"] { --tone: var(--accent); }
   [data-tone="warning"] { --tone: var(--accent-yellow); }
@@ -104,7 +104,7 @@ function render() {
   const v = view(snap);
   const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
   document.body.dataset.tone = v.tone;
-  timer.draw(v.fraction || 0, !!v.fraction, snap && snap.status && snap.status.sessionLengthSeconds);
+  timer.draw(v.fraction || 0, snap && snap.status && snap.status.sessionLengthSeconds);
   $('left').innerHTML = lucidos.utils.escapeHtml(v.value) + (v.label ? `<small>${v.label}</small>` : '');
   $('left').classList.toggle('is-word', !!v.word);
   $('when').textContent = v.when || '';
