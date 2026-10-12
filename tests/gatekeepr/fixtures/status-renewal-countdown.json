@@ -1,0 +1,16 @@
+{
+  "exitCode" : 1,
+  "expiresAt" : "2026-10-12T23:18:20+02:00",
+  "expirySource" : "renewalNotification",
+  "now" : "2026-10-12T23:15:01+02:00",
+  "schemaVersion" : 1,
+  "secondsLeft" : 199,
+  "sessionLengthLearnedFrom" : 17,
+  "sessionLengthSeconds" : 86399,
+  "sessionLengthSource" : "median",
+  "sessionStart" : "2026-10-11T23:18:18+02:00",
+  "sessionStartKind" : "signIn",
+  "state" : "expiringSoon",
+  "timeLeft" : "3m",
+  "warnThresholdSeconds" : 1800
+}

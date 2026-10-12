@@ -1,0 +1,59 @@
+{
+  "now" : "2026-10-12T19:29:11+02:00",
+  "schemaVersion" : 1,
+  "sessionLengthLearnedFrom" : 2,
+  "sessionLengthSeconds" : 86399,
+  "sessionLengthSource" : "median",
+  "sessions" : [
+    {
+      "end" : "2026-10-10T09:31:02+02:00",
+      "endKind" : "renewed",
+      "expiresAt" : "2026-10-10T09:36:00+02:00",
+      "expirySource" : "renewalNotification",
+      "measuredLengthSeconds" : 86399,
+      "outcome" : "renewed",
+      "reconnects" : 4,
+      "start" : "2026-10-09T09:36:01+02:00",
+      "startKind" : "signIn"
+    },
+    {
+      "end" : "2026-10-11T09:31:03+02:00",
+      "endKind" : "clientClosed",
+      "expiresAt" : "2026-10-11T09:31:01+02:00",
+      "expirySource" : "renewalNotification",
+      "measuredLengthSeconds" : 86399,
+      "outcome" : "expired",
+      "reconnects" : 0,
+      "start" : "2026-10-10T09:31:02+02:00",
+      "startKind" : "renewal"
+    },
+    {
+      "end" : "2026-10-11T13:02:44+02:00",
+      "endKind" : "driverRestarted",
+      "expiresAt" : "2026-10-12T10:12:09+02:00",
+      "expirySource" : "sessionLength",
+      "outcome" : "interrupted",
+      "reconnects" : 1,
+      "start" : "2026-10-11T10:12:10+02:00",
+      "startKind" : "signIn"
+    },
+    {
+      "end" : "2026-10-11T23:18:03+02:00",
+      "endKind" : "clientClosed",
+      "expiresAt" : "2026-10-12T13:10:02+02:00",
+      "expirySource" : "sessionLength",
+      "outcome" : "signedOut",
+      "reconnects" : 0,
+      "start" : "2026-10-11T13:10:03+02:00",
+      "startKind" : "signIn"
+    },
+    {
+      "expiresAt" : "2026-10-12T23:18:16+02:00",
+      "expirySource" : "sessionLength",
+      "outcome" : "active",
+      "reconnects" : 2,
+      "start" : "2026-10-11T23:18:18+02:00",
+      "startKind" : "signIn"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+name = "Gatekeepr — refresh"
+slug = "gatekeepr-refresh"
+app_id = "gatekeepr"
+
+# The app's and the widget's Refresh (and the widget, when its snapshot has gone stale). Runs the same script
+# as the background expiry check, so alerts and their dedup behave the same either way. It always answers with
+# GatekeeprStatusChecked carrying the request's request_id.
+[[on]]
+event_type = "GatekeeprRefreshRequested"
+
+[run]
+type = "script"
+path = "scripts/gatekeepr/check.py"

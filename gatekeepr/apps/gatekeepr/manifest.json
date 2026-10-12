@@ -1,0 +1,6 @@
+{
+  "name": "Gatekeepr",
+  "description": "When your Appgate VPN session expires: a countdown timer with the time left, the session's details (signed in, expires, how it started, how its length was learned), past sessions from gatekeepr history with their outcomes and reconnects, and the settings for expiry alerts (on/off and thresholds), the gatekeepr binary path and the background check (on/off and how often it runs).",
+  "icon": "assets/icon.svg",
+  "reveal": "on-ready"
+}

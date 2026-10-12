@@ -1,0 +1,59 @@
+id = "gatekeepr"
+version = "0.1.0"
+name = "Gatekeepr"
+description = "Know when your Appgate VPN session expires, before everything behind it stops working. Reads the session with the gatekeepr CLI (macOS, v0.3.0 or later, reads /var/log/appgate with no root) and shows it as a countdown-timer VPN expiry widget and a Gatekeepr app with the session's details and history. Notifies you at 30 and 5 minutes left and on expiry, once per session, with each alert switchable and both thresholds editable. Setup checks the CLI is installed and creates the background check: a script trigger every 5 minutes, with no LLM run per check, that you can switch off or reschedule in the app. Uninstalling leaves that trigger behind, so delete it too."
+source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/gatekeepr"
+engine = ">=0.48.0"
+categories = ["developer-tools", "automation"]
+icon = "media/icon.svg"
+screenshots = ["media/app.png", "media/widget-states.png", "media/app-settings.png", "media/app-not-installed.png"]
+
+setup = """
+Gatekeepr needs the gatekeepr CLI on this Mac and one cron trigger. The CLI can't ship in a plugin, and neither
+can a cron, so both are set up here. **Load `gatekeepr/appgate-vpn-expiry` and `gatekeepr/expiry-alerts`
+first:** they have the install commands, the binary lookup, the settings schema and the exact trigger command.
+Everything Gatekeepr keeps lives under `artifacts/gatekeepr/`. When you write `settings.json`, keep every key
+already in it.
+
+1. **Check the CLI.** Run `python3 data/scripts/gatekeepr/reader.py --summary`, then without `--summary` for
+   the JSON. A one-line session summary (or a `cli` error about the logs) means it's installed. Otherwise act on
+   `error_kind`:
+   - `not_installed`: walk the user through installing it. Offer the release tarball first, verified against
+     `SHA256SUMS`, which needs no Go. `go install github.com/akramsaouri/gatekeepr@latest` works too if they
+     have Go. Hand them the `sudo install` step to run themselves; never run `sudo` for them. Run the reader
+     again until it finds the binary.
+   - `usage` or `unsupported_schema` with no `schemaVersion`: their gatekeepr is older than v0.3.0. Have them
+     update it the same way.
+   - `cli`: gatekeepr is installed but can't read `/var/log/appgate`. Tell them what the message says. The
+     rest of setup still works, and the check reports the problem until it's fixed.
+
+2. **Confirm the binary path.** Tell the user which binary the reader used (`binary` in the JSON). If it's
+   `~/go/bin/gatekeepr` or `/usr/local/bin/gatekeepr`, the trigger finds it on its own: nothing to set. If it
+   came from `PATH` anywhere else, or they want a different copy, ask whether to pin that path. On yes, write it
+   as `binary_path` in `artifacts/gatekeepr/settings.json` and run the reader again to confirm it's used.
+
+3. **Create the background check.** First run `lucidos triggers list`. If a script trigger already runs
+   `scripts/gatekeepr/check.py` on a cron, keep it (update it rather than adding a second). Otherwise create
+   "Gatekeepr — expiry check": a **script** trigger running `scripts/gatekeepr/check.py` on cron
+   `0 */5 * * * *`, with app id `gatekeepr`, using the command in `gatekeepr/expiry-alerts`. Don't create
+   anything for "Gatekeepr — refresh": the plugin registered it at install, and it's what the app's and
+   widget's Refresh buttons fire.
+
+4. **Run it once.** `lucidos triggers run --id <id>`, then read `artifacts/gatekeepr/status.json` and tell the
+   user the session in one line (its `status.timeLeft` and expiry time, or the problem). It sends no
+   notification unless an alert is actually due.
+
+5. **Show the widget and the app.** Show the reusable "VPN expiry" widget (`gatekeepr-widget`) in this thread,
+   and offer to pin it to Home. Link the app: [Gatekeepr](app:gatekeepr).
+
+Then tell the user, briefly:
+- Alerts are on at 30 minutes left, 5 minutes left and on expiry, each once per session, plus one notice if the
+  check can't read the session. They change them in the app's Alerts section.
+- The background check runs every 5 minutes, so an alert lands up to 5 minutes after its threshold: the
+  30-minute one with 25 to 30 minutes left. They can switch it off or run it every 1 to 30 minutes in the app's
+  Background check section. Nothing runs while the Mac sleeps.
+- Uninstalling the plugin leaves the "Gatekeepr — expiry check" trigger behind, so delete it too.
+
+Finish by recording `PluginSetupCompleted` as `system-knowhow/plugin-setup` describes: the trigger, whether a
+`binary_path` was pinned, and anything the user skipped.
+"""
