@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gatekeepr</title>
+<script src="/api/v1/sdk-prefs.js"></script>
+<link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+<script src="/api/v1/sdk.js"></script>
+<style>
+  :root { --hairline: color-mix(in srgb, var(--border-color) 70%, transparent); }
+  body { margin: 0; }
+  [hidden] { display: none !important; }
+  .page { max-width: 36rem; margin: 0 auto; padding: var(--space-lg) var(--space-xl) 4rem; display: grid; gap: var(--space-xl); }
+  .muted { color: var(--text-muted); }
+
+  /* ---------- the session: one ring, coloured by state from theme tokens ---------- */
+  [data-tone="normal"] { --tone: var(--accent); }
+  [data-tone="warning"] { --tone: var(--accent-yellow); }
+  [data-tone="danger"] { --tone: var(--accent-red); }
+  [data-tone="muted"] { --tone: var(--text-muted); }
+  /* Near expiry the arc is a sliver of a 24-hour ring, so the track takes the state colour too. */
+  [data-tone="warning"] .gauge, [data-tone="danger"] .gauge { --ring-track: color-mix(in srgb, var(--tone) 34%, var(--bg-tertiary)); }
+  .hero { display: grid; justify-items: center; gap: var(--space-md); text-align: center; padding-top: var(--space-md); }
+  .gauge { --ring-size: 9.5rem; --ring-weight: 0.75rem; --ring-color: var(--tone); }
+  .gauge .ring-value.is-word { font-size: var(--font-size-lg); }
+  .gauge .ring-label { font-size: var(--font-size-xs); margin-top: var(--space-xs); }
+  .hero[data-tone="danger"] .ring-value { color: var(--accent-red); }
+  .headline { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-sm); font-size: var(--font-size-md); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .checkrow { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-md); }
+  .checkrow .note { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .action-btn .mini-spinner { --spinner-color: currentColor; }
+  .problem { width: 100%; box-sizing: border-box; text-align: left; background: var(--bg-secondary); border-radius: var(--radius-surface); padding: var(--space-lg); display: grid; gap: var(--space-sm); }
+  .problem-text { font-size: var(--font-size-sm); color: var(--text-primary); overflow-wrap: anywhere; }
+  .problem-hint { font-size: var(--font-size-sm); color: var(--text-secondary); }
+  .problem .button-group { justify-content: flex-start; }
+
+  /* ---------- sections ---------- */
+  section { display: grid; gap: var(--space-sm); min-width: 0; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-xs); }
+  h2 { margin: 0; font-size: var(--font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+  .panel { background: var(--bg-secondary); border-radius: var(--radius-surface); min-width: 0; }
+  .panel-note { font-size: var(--font-size-xs); color: var(--text-muted); padding: 0 var(--space-xs); }
+
+  .facts { margin: 0; padding: var(--space-lg); display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--space-md) var(--space-lg); }
+  .facts dt { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .facts dd { margin: 0.125rem 0 0; font-size: var(--font-size-md); color: var(--text-primary); overflow-wrap: break-word; }
+
+  .panel .list-row + .list-row, .setting + .setting { border-top: 1px solid var(--hairline); }
+  .hist-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-xs) var(--space-md); }
+  .hist-row .list-row-details { grid-column: 1 / -1; margin: 0; gap: var(--space-xs) var(--space-md); }
+  .hist-when { font-size: var(--font-size-md); color: var(--text-primary); font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
+  .label { flex: none; }
+  .more { display: flex; justify-content: center; padding: var(--space-sm) var(--space-lg) var(--space-md); }
+  .empty { padding: var(--space-lg); font-size: var(--font-size-sm); color: var(--text-muted); }
+
+  /* ---------- settings ---------- */
+  .setting { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); padding: var(--space-md) var(--space-lg); }
+  .setting-text { min-width: 0; display: grid; gap: 0.125rem; }
+  .setting-name { font-size: var(--font-size-md); color: var(--text-primary); }
+  .setting-help { font-size: var(--font-size-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+  .setting-help .text-input.mins { width: 4.5rem; padding-block: 0.125rem; margin: 0 var(--space-xs); font-size: var(--font-size-xs); text-align: right; }
+  .field { display: grid; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); }
+  .field .text-input { width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: var(--font-size-sm); }
+  .field-label { font-size: var(--font-size-md); color: var(--text-primary); }
+  .warn-line { color: var(--accent-yellow); }
+  .schedule-state { display: inline-flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+
+  @media (pointer: coarse) {
+    .action-btn { position: relative; }
+    .action-btn::before { content: ''; position: absolute; inset: -0.375rem -0.25rem; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="hero" id="hero" data-tone="muted">
+    <div class="ring gauge" id="ring" role="img" style="--ring-value: 0">
+      <span class="ring-value" id="value">–</span>
+      <span class="ring-label" id="label"></span>
+    </div>
+    <div class="headline" id="headline"></div>
+    <div class="problem" id="problem" hidden>
+      <div class="problem-text" id="problem-text"></div>
+      <div class="problem-hint" id="problem-hint"></div>
+      <div class="button-group" id="problem-actions"></div>
+    </div>
+    <div class="checkrow">
+      <button class="action-btn action-btn-secondary" id="check">Check now</button>
+      <span class="note" id="checked"></span>
+    </div>
+  </div>
+
+  <section id="session-section" hidden>
+    <div class="section-head"><h2>Session</h2></div>
+    <dl class="panel facts" id="facts"></dl>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>History</h2><span class="panel-note" id="history-count"></span></div>
+    <div class="panel" id="history"><div class="empty">Loading…</div></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Alerts</h2></div>
+    <div class="panel" id="alerts"></div>
+    <div class="panel-note">Checked every 5 minutes, so an alert can land up to 5 minutes after its threshold: the 30-minute one with 25 to 30 minutes left.</div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Background check</h2></div>
+    <div class="panel">
+      <div class="setting">
+        <div class="setting-text">
+          <div class="setting-name schedule-state" id="schedule-name">Looking…</div>
+          <div class="setting-help" id="schedule-help"></div>
+        </div>
+        <button class="action-btn action-btn-secondary" id="schedule-setup" hidden>Set it up</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Gatekeepr CLI</h2></div>
+    <div class="panel">
+      <div class="field">
+        <label class="field-label" for="binary">Binary path</label>
+        <input class="text-input" id="binary" type="text" placeholder="Found automatically" spellcheck="false" autocapitalize="off" autocomplete="off">
+        <div class="setting-help" id="binary-help"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

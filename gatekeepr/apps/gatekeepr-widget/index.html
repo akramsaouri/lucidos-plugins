@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPN expiry</title>
+<script src="/api/v1/sdk-prefs.js"></script>
+<link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+<script src="/api/v1/sdk.js"></script>
+<style>
+  /* One shape on calm ground: the card draws the frame and the name, so no title and no border here. */
+  body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-md); text-align: center; }
+  [hidden] { display: none !important; }
+
+  /* The ring drains from full at sign-in to empty at expiry. Its colour is the state, from theme tokens only. */
+  [data-tone="normal"] { --tone: var(--accent); }
+  [data-tone="warning"] { --tone: var(--accent-yellow); }
+  [data-tone="danger"] { --tone: var(--accent-red); }
+  [data-tone="muted"] { --tone: var(--text-muted); }
+  /* Near expiry the arc is a sliver of a 24-hour ring, so the track takes the state colour too. */
+  [data-tone="warning"] .gauge, [data-tone="danger"] .gauge { --ring-track: color-mix(in srgb, var(--tone) 34%, var(--bg-tertiary)); }
+  .gauge { --ring-size: 8.5rem; --ring-weight: 0.625rem; --ring-color: var(--tone); }
+  .gauge .ring-value.is-word { font-size: var(--font-size-lg); }
+  .gauge .ring-label { font-size: var(--font-size-xs); margin-top: var(--space-xs); }
+  [data-tone="danger"] .ring-value { color: var(--accent-red); }
+
+  .when { font-size: var(--font-size-md); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .problem { max-width: 18rem; font-size: var(--font-size-sm); color: var(--text-secondary); overflow-wrap: anywhere;
+             display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  .note { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .check .mini-spinner { --spinner-color: currentColor; }
+
+  /* A floating widget window in minimal mode: the ring and its one line, on a fill of its own. */
+  html[data-widget-mode="minimal"] body { padding: var(--space-md) var(--space-lg); background: var(--bg-secondary); border-radius: var(--radius-surface); }
+  html[data-widget-mode="minimal"] .gauge { --ring-size: 6.5rem; }
+  html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .check, html[data-widget-mode="minimal"] .problem { display: none !important; }
+  @media (pointer: coarse) {
+    .action-btn { position: relative; }
+    .action-btn::before { content: ''; position: absolute; inset: -0.375rem -0.25rem; }
+  }
+</style>
+</head>
+<body data-tone="muted">
+  <div class="ring gauge" id="ring" role="img" style="--ring-value: 0">
+    <span class="ring-value" id="value">–</span>
+    <span class="ring-label" id="label"></span>
+  </div>
+  <div class="when" id="when"></div>
+  <div class="problem" id="problem" hidden></div>
+  <div class="note" id="note" hidden></div>
+  <button class="action-btn action-btn-secondary check" id="check" hidden>Check now</button>
+<script>
+lucidos.ui.applyPreferences();
+lucidos.ui.watchPreferences();
+
+const STATUS = 'artifacts/gatekeepr/status.json';
+const STALE_MS = 7 * 60e3;        // the 5-minute check has missed a slot (or was never set up)
+const AUTO_GAP_MS = 5 * 60e3;     // ask for a check on our own at most this often
+const $ = (id) => document.getElementById(id);
+let snap, pending = null, lastAsk = 0;
+
+const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+// The CLI's own timeLeft style (6h08m, 25m, <1m), rounded down.
+function fmtLeft(s) {
+  if (s < 60) return '<1m';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+/* What to draw. Expiry is never recomputed: between checks the CLI's secondsLeft counts down by the time since
+ * its `now`, which lands on its own expiresAt, and the state turns with the CLI's warn threshold. */
+function view(w) {
+  if (!w) return { tone: 'muted', value: '–', word: false, when: 'No check yet', ask: true };
+  const s = w.status || {};
+  if (!w.ok) return { tone: 'muted', value: 'Can’t check', word: true, problem: s.error || 'The check failed.', ask: true };
+  if (s.state === 'noSession') return { tone: 'muted', value: 'No session', word: true, when: 'Nothing in the Appgate logs' };
+  if (s.state === 'signedOut') return { tone: 'muted', value: 'Signed out', word: true, when: s.sessionEnd ? `since ${clock(s.sessionEnd)}` : '' };
+  const left = s.secondsLeft - Math.floor((Date.now() - Date.parse(s.now)) / 1000);
+  if (s.state === 'expired' || left <= 0) return { tone: 'danger', value: 'Expired', word: true, when: `expired ${clock(s.expiresAt)}` };
+  return {
+    tone: left <= s.warnThresholdSeconds ? 'warning' : 'normal',
+    value: fmtLeft(left), label: 'left', when: `expires ${clock(s.expiresAt)}`,
+    fraction: Math.max(0, Math.min(1, left / s.sessionLengthSeconds)),
+  };
+}
+
+function render() {
+  const v = view(snap);
+  const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
+  document.body.dataset.tone = v.tone;
+  $('ring').style.setProperty('--ring-value', v.fraction || 0);
+  $('value').textContent = v.value;
+  $('value').classList.toggle('is-word', !!v.word);
+  $('label').textContent = v.label || '';
+  $('when').textContent = v.when || '';
+  $('when').hidden = !v.when;
+  $('problem').textContent = v.problem || '';
+  $('problem').hidden = !v.problem;
+  $('ring').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.when].filter(Boolean).join(', '));
+  const stale = snap && age > STALE_MS;
+  $('note').textContent = stale ? `checked ${lucidos.utils.timeAgo(snap.checked_at)}` : '';
+  $('note').hidden = !stale;
+  $('check').hidden = !(v.ask || stale || pending);
+  $('check').disabled = !!pending;
+  $('check').innerHTML = pending ? '<span class="mini-spinner" aria-hidden="true"></span> Checking' : 'Check now';
+}
+
+async function load() {
+  try {
+    snap = JSON.parse(await lucidos.data.read(STATUS));
+  } catch (e) {
+    if (e && e.httpCode === 404) snap = null;   // no check has run yet; anything else keeps the last snapshot
+  }
+  render();
+  lucidos.ui.ready();
+  // Self-heal when nothing has refreshed the snapshot: one requested check per few minutes while visible.
+  const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
+  if (age > STALE_MS && Date.now() - lastAsk > AUTO_GAP_MS && document.visibilityState === 'visible') ask(true);
+}
+
+async function ask(auto) {
+  if (pending) return;
+  lastAsk = Date.now();
+  const id = 'widget-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  pending = id;
+  render();
+  setTimeout(() => { if (pending === id) { pending = null; render(); } }, 20e3);
+  try {
+    await lucidos.events.emit('GatekeeprCheckRequested', { summary: 'VPN expiry widget asked for a Gatekeepr check', request_id: id, source: 'widget' });
+  } catch (e) {
+    pending = null;
+    render();
+    if (!auto) lucidos.ui.toast('Couldn’t ask for a check', 'error');
+  }
+}
+
+$('check').addEventListener('click', () => ask(false));
+lucidos.sse.connect();
+lucidos.sse.on('GatekeeprStatusChecked', (data) => {
+  if (data && data.request_id && data.request_id === pending) pending = null;
+  load();
+});
+setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60e3);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(); });
+load();
+</script>
+</body>
+</html>
