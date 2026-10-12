@@ -1,5 +1,5 @@
 id = "email-triage"
-version = "0.6.1"
+version = "0.6.2"
 name = "Email Triage"
 description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Works with Gmail over its API and with plain IMAP mailboxes that have no API or OAuth, just a host and a password. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and peek-based IMAP helpers so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
