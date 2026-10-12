@@ -1,0 +1,8 @@
+{
+  "now" : "2026-10-12T09:00:00+02:00",
+  "schemaVersion" : 1,
+  "sessionLengthLearnedFrom" : 0,
+  "sessionLengthSeconds" : 86400,
+  "sessionLengthSource" : "default",
+  "sessions" : []
+}

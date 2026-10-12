@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPN expiry</title>
+<script src="/api/v1/sdk-prefs.js"></script>
+<link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+<script src="/api/v1/sdk.js"></script>
+<script src="timer.js"></script>
+<style>
+  /* One shape on calm ground: the card draws the frame and the name, so no title and no border here. */
+  body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-sm); text-align: center; }
+  [hidden] { display: none !important; }
+
+  /* The countdown timer's disc shrinks from a full turn at sign-in to nothing at expiry. Its colour is the state,
+     from theme tokens only. */
+  [data-tone="normal"] { --tone: var(--accent); }
+  [data-tone="warning"] { --tone: var(--accent-yellow); }
+  [data-tone="danger"] { --tone: var(--accent-red); }
+  [data-tone="muted"] { --tone: var(--text-muted); }
+  .timer { width: 6.25rem; margin-bottom: var(--space-xs); }
+  /* The time left is the headline, and when it expires is its subtitle. */
+  .left { font-size: var(--font-size-display); font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .left.is-word { font-size: calc(var(--font-size-display) * 0.75); }
+  .left small { margin-left: 0.25em; font-size: var(--font-size-lg); font-weight: 500; letter-spacing: 0; color: var(--text-muted); }
+  [data-tone="danger"] .left { color: var(--accent-red); }
+
+  .when { margin-top: calc(-1 * var(--space-xs)); font-size: var(--font-size-lg); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .problem { max-width: 18rem; font-size: var(--font-size-sm); color: var(--text-secondary); overflow-wrap: anywhere;
+             display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  /* Refresh with its last-checked time as a caption, so the two read as one control. */
+  .note { margin-top: calc(-1 * var(--space-xs)); font-size: var(--font-size-xs); color: var(--text-muted); }
+  .refresh .mini-spinner { --spinner-color: currentColor; }
+  .refresh .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); margin-right: var(--space-xs); vertical-align: -0.125rem; }
+
+  /* A floating widget window in minimal mode: the timer and its lines, on a fill of its own. */
+  html[data-widget-mode="minimal"] body { padding: var(--space-md) var(--space-lg); background: var(--bg-secondary); border-radius: var(--radius-surface); }
+  html[data-widget-mode="minimal"] .timer { width: 4.5rem; }
+  html[data-widget-mode="minimal"] .left { font-size: var(--font-size-3xl); }
+  html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .refresh, html[data-widget-mode="minimal"] .problem { display: none !important; }
+  @media (pointer: coarse) {
+    .action-btn { position: relative; }
+    .action-btn::before { content: ''; position: absolute; inset: -0.375rem -0.25rem; }
+  }
+</style>
+</head>
+<body data-tone="muted">
+  <div class="timer" id="timer" role="img"></div>
+  <div class="left" id="left">–</div>
+  <div class="when" id="when"></div>
+  <div class="problem" id="problem" hidden></div>
+  <button class="action-btn action-btn-secondary refresh" id="refresh" hidden>Refresh</button>
+  <div class="note" id="note" hidden></div>
+<script>
+lucidos.ui.applyPreferences();
+lucidos.ui.watchPreferences();
+
+const STATUS = 'artifacts/gatekeepr/status.json';
+const SCRIPT = 'scripts/gatekeepr/check.py';
+const AUTO_GAP_MS = 5 * 60e3;     // ask for a refresh on our own at most this often
+const CADENCE_EVERY_MS = 15 * 60e3;
+const REFRESH_ICON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
+const $ = (id) => document.getElementById(id);
+const timer = ExpiryTimer.mount($('timer'));
+let snap, pending = null, lastAsk = 0, cadenceAt = 0;
+// The snapshot is stale once the background check has missed a run: its interval plus 2 minutes of slack. With
+// the check off, paused, on a hand-written cron, or unreadable, 5 minutes stands in for the interval.
+let staleMs = 7 * 60e3;
+
+async function loadCadence() {
+  cadenceAt = Date.now();
+  try {
+    const t = (await lucidos.triggers.list()).find((x) => x.run && x.run.type === 'script'
+      && String(x.run.path || '').endsWith(SCRIPT) && (x.cron_expressions || []).length && !x.paused);
+    const m = t && t.cron_expressions.length === 1 && t.cron_expressions[0].trim().match(/^0 \*(?:\/(\d+))? \* \* \* \*$/);
+    staleMs = ((m ? Number(m[1] || 1) : 5) + 2) * 60e3;
+  } catch (e) { /* keep the last value */ }
+}
+
+const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+function relDay(iso) {          // "today at 23:18", "tomorrow at 09:14", or "Wed 14 at 09:14"
+  const days = Math.round((new Date(new Date(iso).toDateString()) - new Date(new Date().toDateString())) / 864e5);
+  const day = new Date(iso).toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+  return `${days === 0 ? 'today' : days === 1 ? 'tomorrow' : days === -1 ? 'yesterday' : day} at ${clock(iso)}`;
+}
+// The CLI's own timeLeft style (6h08m, 25m, <1m), rounded down.
+function fmtLeft(s) {
+  if (s < 60) return '<1m';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+/* What to draw. Expiry is never recomputed: between checks the CLI's secondsLeft counts down by the time since
+ * its `now`, which lands on its own expiresAt, and the state turns with the CLI's warn threshold. */
+function view(w) {
+  if (!w) return { tone: 'muted', value: '–', word: false, when: 'No check yet', ask: true };
+  const s = w.status || {};
+  if (!w.ok) return { tone: 'muted', value: 'Can’t check', word: true, problem: s.error || 'The check failed.', ask: true };
+  if (s.state === 'noSession') return { tone: 'muted', value: 'No session', word: true, when: 'Nothing in the Appgate logs' };
+  if (s.state === 'signedOut') return { tone: 'muted', value: 'Signed out', word: true, when: s.sessionEnd ? `Since ${relDay(s.sessionEnd)}` : '' };
+  const left = s.secondsLeft - Math.floor((Date.now() - Date.parse(s.now)) / 1000);
+  if (s.state === 'expired' || left <= 0) return { tone: 'danger', value: 'Expired', word: true, when: `Ran out ${relDay(s.expiresAt)}` };
+  return {
+    tone: left <= s.warnThresholdSeconds ? 'warning' : 'normal',
+    value: fmtLeft(left), label: 'left', when: `Expires ${relDay(s.expiresAt)}`,
+    fraction: Math.max(0, Math.min(1, left / s.sessionLengthSeconds)),
+  };
+}
+
+function render() {
+  const v = view(snap);
+  const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
+  document.body.dataset.tone = v.tone;
+  timer.draw(v.fraction || 0, snap && snap.status && snap.status.sessionLengthSeconds);
+  $('left').innerHTML = lucidos.utils.escapeHtml(v.value) + (v.label ? `<small>${v.label}</small>` : '');
+  $('left').classList.toggle('is-word', !!v.word);
+  $('when').textContent = v.when || '';
+  $('when').hidden = !v.when;
+  $('problem').textContent = v.problem || '';
+  $('problem').hidden = !v.problem;
+  $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.when].filter(Boolean).join(', '));
+  const stale = snap && age > staleMs;
+  $('note').textContent = stale ? `Checked ${lucidos.utils.timeAgo(snap.checked_at)}` : '';
+  $('note').hidden = !stale;
+  $('refresh').hidden = !(v.ask || stale || pending);
+  $('refresh').disabled = !!pending;
+  $('refresh').innerHTML = pending ? '<span class="mini-spinner" aria-hidden="true"></span> Refreshing' : `${REFRESH_ICON}Refresh`;
+}
+
+async function load() {
+  if (Date.now() - cadenceAt > CADENCE_EVERY_MS) await loadCadence();
+  try {
+    snap = JSON.parse(await lucidos.data.read(STATUS));
+  } catch (e) {
+    if (e && e.httpCode === 404) snap = null;   // no check has run yet; anything else keeps the last snapshot
+  }
+  render();
+  lucidos.ui.ready();
+  // Self-heal when nothing has refreshed the snapshot: one requested refresh per few minutes while visible.
+  const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
+  if (age > staleMs && Date.now() - lastAsk > AUTO_GAP_MS && document.visibilityState === 'visible') ask(true);
+}
+
+async function ask(auto) {
+  if (pending) return;
+  lastAsk = Date.now();
+  const id = 'widget-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  pending = id;
+  render();
+  setTimeout(() => { if (pending === id) { pending = null; render(); } }, 20e3);
+  try {
+    await lucidos.events.emit('GatekeeprRefreshRequested', { summary: 'VPN expiry widget asked for a Gatekeepr refresh', request_id: id, source: 'widget' });
+  } catch (e) {
+    pending = null;
+    render();
+    if (!auto) lucidos.ui.toast('Couldn’t ask for a refresh', 'error');
+  }
+}
+
+$('refresh').addEventListener('click', () => ask(false));
+lucidos.sse.connect();
+lucidos.sse.on('GatekeeprStatusChecked', (data) => {
+  if (data && data.request_id && data.request_id === pending) pending = null;
+  load();
+});
+setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60e3);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { cadenceAt = 0; load(); } });
+load();
+</script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 {
   "name": "Email Triage",
-  "description": "Control panel for the automated email triage engine — per-account health and next run, the rule chain editor (first-match-wins, with dead-rule detection), what's currently actionable, and the suggestions triage runs leave behind in their event payloads."
+  "description": "Control panel for the automated email triage engine — per-account health and next run, the rule chain editor (first-match-wins, with dead-rule detection), what's currently actionable, and the suggestions triage runs leave behind in their event payloads.",
+  "icon": "assets/icon.svg"
 }

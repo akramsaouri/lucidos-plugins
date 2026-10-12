@@ -1,0 +1,72 @@
+id = "inbox"
+version = "0.1.1"
+name = "Inbox"
+description = "One calm inbox across every mailbox Email Triage watches. Needs the Email Triage plugin (0.6.0 or later) installed and configured with at least one account: Inbox reads its accounts, rules and triage results and never triages anything itself. Each account's inbox shows in two zones, never mixed: what survived triage, with the reason it was kept, and what triage hasn't seen yet. Archive, delete and undo in one key or swipe, replies with AI Suggest and Polish, a one-key hand-off to Lucidos, and each account's folders and labels in the sidebar. Gmail accounts read through one engine proxy per mailbox; password IMAP accounts go through the IMAP bridge trigger this plugin ships. OAuth IMAP accounts (Email Triage's imap-peek) aren't supported yet."
+source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
+engine = ">=0.47.1"
+categories = ["productivity", "communication"]
+icon = "media/icon.svg"
+
+setup = """
+**Already running Inbox?** If `artifacts/inbox/settings.json` exists and every Gmail account in
+Email Triage's config already has an `accounts["<name>"].proxy` in it, nothing below needs redoing:
+tell the user what changed in one line and stop. Only continue for an account that has no entry
+yet. One cleanup worth offering on any update: if `lucidos triggers list` shows a bridge trigger the
+user created by hand (it runs `apps/inbox/scripts/imap_bridge.py` and isn't this plugin's
+"Inbox — IMAP bridge"), offer to delete it. The bridge never answers the same request twice, but a
+second trigger still runs on every request for nothing.
+
+---
+
+Inbox is a mail client on top of Email Triage. It owns no accounts of its own: it reads Email
+Triage's config and results, and needs one piece of wiring per account plus two answers from the
+user. **Read `knowhow/inbox.md` first.** It has the settings schema, how each account type is read,
+and the bridge protocol. Keep every key already in `artifacts/inbox/settings.json` when you write it.
+
+1. **Check Email Triage.** It must be installed at 0.6.0 or later (the newest `PluginInstalled`
+   event for `email-triage`, or the Plugins panel) with at least one account in
+   `artifacts/email-triage/config.json`. If it isn't, stop and offer to install or set it up
+   first: Inbox has nothing to show without it.
+
+2. **Each Gmail account** (`"fetch": "gmail-api"`, or an older block with no `fetch` on a Gmail
+   address) is read and changed through an engine proxy in `data/config/apis.json` that carries
+   that mailbox's OAuth token: one proxy per mailbox.
+   - Reuse an entry if one exists; Email Triage's own Gmail access often has one already. Check it
+     with `lucidos proxy <name> /gmail/v1/users/me/profile`: its `emailAddress` must equal the
+     account's `address`. Never record a proxy that fails this check, since Inbox would then
+     archive and reply in the wrong mailbox. (The app repeats the check before every list.)
+   - If none matches, add one: base URL `https://www.googleapis.com`, authenticating with the
+     account's `oauth_provider` (see `system-knowhow/building-an-auth-handshake`). Then run the
+     same check.
+   - Record the name as `accounts["<config account name>"].proxy` in `artifacts/inbox/settings.json`.
+
+3. **Each IMAP account** (`"fetch": "imap"`) goes through the "Inbox — IMAP bridge" trigger this
+   plugin registered at install. Confirm it is live and unpaused in `lucidos triggers list`. Check
+   that the account's `imap` block names a `credential_env` that exists: list the names with
+   `env | cut -d= -f1 | grep '^CRED_'` and never print a value. Replies go out over SMTP with the
+   same username and password. The bridge assumes SMTP at `smtp.<domain>` when the IMAP host is
+   `imap.<domain>`, and the IMAP host itself otherwise, on port 465. If the provider differs, add
+   `smtp_host` (and `smtp_port`; 587 means STARTTLS) to that `imap` block. To prove it works, run
+   `lucidos events emit InboxImapSyncRequested --payload '{"summary": "Inbox setup check", "account": "<name>", "request_id": "setup-check-<name>"}'`
+   and look for an `InboxImapResult` with `ok: true` for that account. On `ok: false`, its
+   `error` says what to fix. (A sync is the only request an agent can make: writes and sends are
+   honoured only from the Inbox app, so don't test those from here.)
+
+4. **Accounts Inbox can't read yet** (`"fetch": "imap-peek"`, OAuth IMAP such as Outlook): tell
+   the user they show in the sidebar with the reason, and that nothing else is needed.
+
+5. **Ask for the user's display name and reply voice.** The name goes on outgoing mail and into
+   the AI prompts. The voice is a sentence or two on how replies should sound. Offer per-account
+   overrides (a different From name, voice or signature for a shared mailbox) but don't push them.
+   Write `display_name`, `voice` and any overrides to `artifacts/inbox/settings.json`.
+
+6. **AI Suggest, Polish and Summarize** go through one of the engine's built-in model proxies.
+   With no `ai` block, Inbox tries `anthropic`, then `vertex`, with a Claude model. If the
+   workspace has neither (`lucidos proxy anthropic /models` answers 404 for a provider with no
+   credential), set `ai.provider` (`openai`, `openrouter`, `xai` or `local`) and `ai.model` in the
+   settings file.
+
+Finally, open the Inbox app. Tell the user that each account's mail is split into "Needs you" (it
+survived triage, with the reason it was kept) and "Not triaged yet", and that `?` lists the
+keyboard shortcuts.
+"""
