@@ -23,13 +23,16 @@
   [data-tone="muted"] { --tone: var(--text-muted); }
   .hero { display: grid; justify-items: center; gap: var(--space-md); text-align: center; padding-top: var(--space-md); }
   .timer { width: 7.5rem; }
-  .left { font-size: var(--font-size-3xl); font-weight: 600; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; margin-bottom: calc(-1 * var(--space-sm)); }
-  .left.is-word { font-size: var(--font-size-2xl); }
-  .left small { margin-left: 0.2em; font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
+  /* The time left is the headline: a status chip above it, and when it expires as its subtitle. */
+  .title { display: grid; justify-items: center; gap: var(--space-xs); }
+  .left { font-size: var(--font-size-display); font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .left.is-word { font-size: calc(var(--font-size-display) * 0.75); }
+  .left small { margin-left: 0.25em; font-size: var(--font-size-lg); font-weight: 500; letter-spacing: 0; color: var(--text-muted); }
   .hero[data-tone="danger"] .left { color: var(--accent-red); }
-  .headline { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-sm); font-size: var(--font-size-md); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-  .checkrow { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-md); }
-  .checkrow .note { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .subtitle { font-size: var(--font-size-lg); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  /* Refresh with its last-checked time as a caption, so the two read as one control. */
+  .refresh-block { display: grid; justify-items: center; gap: var(--space-xs); }
+  .refresh-block .note { font-size: var(--font-size-xs); color: var(--text-muted); }
   .action-btn .mini-spinner { --spinner-color: currentColor; }
   .problem { width: 100%; box-sizing: border-box; text-align: left; background: var(--bg-secondary); border-radius: var(--radius-surface); padding: var(--space-lg); display: grid; gap: var(--space-sm); }
   .problem-head { display: flex; align-items: flex-start; gap: var(--space-sm); }
@@ -86,14 +89,17 @@
 <main class="page">
   <div class="hero" id="hero" data-tone="muted">
     <div class="timer" id="timer" role="img"></div>
-    <div class="left" id="left">–</div>
-    <div class="headline" id="headline"></div>
+    <div class="title">
+      <div id="chip" hidden></div>
+      <div class="left" id="left">–</div>
+      <div class="subtitle" id="subtitle" hidden></div>
+    </div>
     <div class="problem" id="problem" hidden>
       <div class="problem-head"><span data-icon="alert"></span><div class="problem-text" id="problem-text"></div></div>
       <div class="problem-hint" id="problem-hint"></div>
       <div class="button-group" id="problem-actions"></div>
     </div>
-    <div class="checkrow">
+    <div class="refresh-block">
       <button class="action-btn action-btn-secondary" id="refresh">Refresh</button>
       <span class="note" id="checked"></span>
     </div>

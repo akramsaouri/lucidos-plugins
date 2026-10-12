@@ -20,21 +20,24 @@
   [data-tone="danger"] { --tone: var(--accent-red); }
   [data-tone="muted"] { --tone: var(--text-muted); }
   .timer { width: 6.25rem; margin-bottom: var(--space-xs); }
-  .left { font-size: var(--font-size-3xl); font-weight: 600; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-  .left.is-word { font-size: var(--font-size-2xl); }
-  .left small { margin-left: 0.2em; font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
+  /* The time left is the headline, and when it expires is its subtitle. */
+  .left { font-size: var(--font-size-display); font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .left.is-word { font-size: calc(var(--font-size-display) * 0.75); }
+  .left small { margin-left: 0.25em; font-size: var(--font-size-lg); font-weight: 500; letter-spacing: 0; color: var(--text-muted); }
   [data-tone="danger"] .left { color: var(--accent-red); }
 
-  .when { font-size: var(--font-size-md); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .when { margin-top: calc(-1 * var(--space-xs)); font-size: var(--font-size-lg); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
   .problem { max-width: 18rem; font-size: var(--font-size-sm); color: var(--text-secondary); overflow-wrap: anywhere;
              display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
-  .note { font-size: var(--font-size-xs); color: var(--text-muted); }
+  /* Refresh with its last-checked time as a caption, so the two read as one control. */
+  .note { margin-top: calc(-1 * var(--space-xs)); font-size: var(--font-size-xs); color: var(--text-muted); }
   .refresh .mini-spinner { --spinner-color: currentColor; }
   .refresh .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); margin-right: var(--space-xs); vertical-align: -0.125rem; }
 
   /* A floating widget window in minimal mode: the timer and its lines, on a fill of its own. */
   html[data-widget-mode="minimal"] body { padding: var(--space-md) var(--space-lg); background: var(--bg-secondary); border-radius: var(--radius-surface); }
   html[data-widget-mode="minimal"] .timer { width: 4.5rem; }
+  html[data-widget-mode="minimal"] .left { font-size: var(--font-size-3xl); }
   html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .refresh, html[data-widget-mode="minimal"] .problem { display: none !important; }
   @media (pointer: coarse) {
     .action-btn { position: relative; }
@@ -47,8 +50,8 @@
   <div class="left" id="left">–</div>
   <div class="when" id="when"></div>
   <div class="problem" id="problem" hidden></div>
-  <div class="note" id="note" hidden></div>
   <button class="action-btn action-btn-secondary refresh" id="refresh" hidden>Refresh</button>
+  <div class="note" id="note" hidden></div>
 <script>
 lucidos.ui.applyPreferences();
 lucidos.ui.watchPreferences();
@@ -76,6 +79,11 @@ async function loadCadence() {
 }
 
 const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+function relDay(iso) {          // "today at 23:18", "tomorrow at 09:14", or "Wed 14 at 09:14"
+  const days = Math.round((new Date(new Date(iso).toDateString()) - new Date(new Date().toDateString())) / 864e5);
+  const day = new Date(iso).toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+  return `${days === 0 ? 'today' : days === 1 ? 'tomorrow' : days === -1 ? 'yesterday' : day} at ${clock(iso)}`;
+}
 // The CLI's own timeLeft style (6h08m, 25m, <1m), rounded down.
 function fmtLeft(s) {
   if (s < 60) return '<1m';
@@ -90,12 +98,12 @@ function view(w) {
   const s = w.status || {};
   if (!w.ok) return { tone: 'muted', value: 'Can’t check', word: true, problem: s.error || 'The check failed.', ask: true };
   if (s.state === 'noSession') return { tone: 'muted', value: 'No session', word: true, when: 'Nothing in the Appgate logs' };
-  if (s.state === 'signedOut') return { tone: 'muted', value: 'Signed out', word: true, when: s.sessionEnd ? `since ${clock(s.sessionEnd)}` : '' };
+  if (s.state === 'signedOut') return { tone: 'muted', value: 'Signed out', word: true, when: s.sessionEnd ? `Since ${relDay(s.sessionEnd)}` : '' };
   const left = s.secondsLeft - Math.floor((Date.now() - Date.parse(s.now)) / 1000);
-  if (s.state === 'expired' || left <= 0) return { tone: 'danger', value: 'Expired', word: true, when: `expired ${clock(s.expiresAt)}` };
+  if (s.state === 'expired' || left <= 0) return { tone: 'danger', value: 'Expired', word: true, when: `Ran out ${relDay(s.expiresAt)}` };
   return {
     tone: left <= s.warnThresholdSeconds ? 'warning' : 'normal',
-    value: fmtLeft(left), label: 'left', when: `expires ${clock(s.expiresAt)}`,
+    value: fmtLeft(left), label: 'left', when: `Expires ${relDay(s.expiresAt)}`,
     fraction: Math.max(0, Math.min(1, left / s.sessionLengthSeconds)),
   };
 }
@@ -113,7 +121,7 @@ function render() {
   $('problem').hidden = !v.problem;
   $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.when].filter(Boolean).join(', '));
   const stale = snap && age > staleMs;
-  $('note').textContent = stale ? `checked ${lucidos.utils.timeAgo(snap.checked_at)}` : '';
+  $('note').textContent = stale ? `Checked ${lucidos.utils.timeAgo(snap.checked_at)}` : '';
   $('note').hidden = !stale;
   $('refresh').hidden = !(v.ask || stale || pending);
   $('refresh').disabled = !!pending;

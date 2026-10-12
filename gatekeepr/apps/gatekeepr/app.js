@@ -75,6 +75,10 @@ const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', m
 const day = (iso) => new Date(iso).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
 const dayClock = (iso) => `${day(iso)}, ${clock(iso)}`;
 const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+function relDay(iso) {          // "today at 23:18", "tomorrow at 09:14", or "Wed, Oct 14 at 09:14"
+  const days = Math.round((new Date(new Date(iso).toDateString()) - new Date(new Date().toDateString())) / 864e5);
+  return `${days === 0 ? 'today' : days === 1 ? 'tomorrow' : days === -1 ? 'yesterday' : day(iso)} at ${clock(iso)}`;
+}
 function fmtLeft(s) {            // the CLI's timeLeft style: 6h08m, 25m, <1m, rounded down
   if (s < 60) return '<1m';
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -136,18 +140,18 @@ async function loadSchedule() {
 /* Expiry is never recomputed: between checks the CLI's secondsLeft counts down by the time since its `now`,
  * which lands on its own expiresAt, and the state turns with its warnThresholdSeconds. */
 function view(w) {
-  if (!w) return { tone: 'muted', value: '–', headline: 'No check yet' };
+  if (!w) return { tone: 'muted', value: '–', subtitle: 'No check yet' };
   const s = w.status || {};
   if (!w.ok) return { tone: 'muted', value: 'Can’t check', word: true, problem: true };
-  if (s.state === 'noSession') return { tone: 'muted', value: 'No session', word: true, headline: 'No Appgate session anywhere in the logs' };
-  if (s.state === 'signedOut') return { tone: 'muted', value: 'Signed out', word: true, chip: ['Signed out', 'label label-neutral'], headline: s.sessionEnd ? `since ${dayClock(s.sessionEnd)}` : '' };
+  if (s.state === 'noSession') return { tone: 'muted', value: 'No session', word: true, subtitle: 'No Appgate session anywhere in the logs' };
+  if (s.state === 'signedOut') return { tone: 'muted', value: 'Signed out', word: true, subtitle: s.sessionEnd ? `Since ${relDay(s.sessionEnd)}` : '' };
   const left = s.secondsLeft - Math.floor((Date.now() - Date.parse(s.now)) / 1000);
-  if (s.state === 'expired' || left <= 0) return { tone: 'danger', value: 'Expired', word: true, chip: ['Expired', 'label label-error'], headline: `expired ${clock(s.expiresAt)}`, left: Math.min(left, 0) };
+  if (s.state === 'expired' || left <= 0) return { tone: 'danger', value: 'Expired', word: true, subtitle: `Ran out ${relDay(s.expiresAt)}`, left: Math.min(left, 0) };
   const soon = left <= s.warnThresholdSeconds;
   return {
     tone: soon ? 'warning' : 'normal', value: fmtLeft(left), label: 'left', left,
     chip: soon ? ['Expiring soon', 'label label-warning'] : ['Signed in', 'label label-success'],
-    headline: `expires ${clock(s.expiresAt)}`,
+    subtitle: `Expires ${relDay(s.expiresAt)}`,
     fraction: Math.max(0, Math.min(1, left / s.sessionLengthSeconds)),
   };
 }
@@ -165,9 +169,12 @@ function renderHero() {
   timer.draw(v.fraction || 0, S.status && S.status.status && S.status.status.sessionLengthSeconds);
   $('left').innerHTML = esc(v.value) + (v.label ? `<small>${esc(v.label)}</small>` : '');
   $('left').classList.toggle('is-word', !!v.word);
-  $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.headline].filter(Boolean).join(', '));
-  $('headline').innerHTML = (v.chip ? `<span class="${v.chip[1]}">${esc(v.chip[0])}</span>` : '') + (v.headline ? `<span>${esc(v.headline)}</span>` : '');
-  $('headline').hidden = !v.chip && !v.headline;
+  $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.subtitle].filter(Boolean).join(', '));
+  // The chip only adds something while signed in; "Expired" and "Signed out" are already the headline.
+  $('chip').innerHTML = v.chip ? `<span class="${v.chip[1]}">${esc(v.chip[0])}</span>` : '';
+  $('chip').hidden = !v.chip;
+  $('subtitle').textContent = v.subtitle || '';
+  $('subtitle').hidden = !v.subtitle;
 
   $('problem').hidden = !v.problem;
   if (v.problem) {
@@ -180,7 +187,7 @@ function renderHero() {
 
   $('refresh').disabled = !!S.pending;
   $('refresh').innerHTML = S.pending ? '<span class="mini-spinner" aria-hidden="true"></span> Refreshing' : `${ic('refresh')}Refresh`;
-  $('checked').textContent = S.status ? `checked ${lucidos.utils.timeAgo(S.status.checked_at)}` : '';
+  $('checked').textContent = S.status ? `Checked ${lucidos.utils.timeAgo(S.status.checked_at)}` : '';
 }
 
 function renderFacts() {
