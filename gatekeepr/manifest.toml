@@ -1,7 +1,7 @@
 id = "gatekeepr"
 version = "0.1.0"
 name = "Gatekeepr"
-description = "Know when your Appgate VPN session expires, before everything behind it stops working. Reads the session with the gatekeepr CLI (macOS, v0.3.0 or later, reads /var/log/appgate with no root) and shows it as a draining-ring VPN expiry widget and a Gatekeepr app with the session's details and history. Notifies you at 30 and 5 minutes left and on expiry, once per session, with each alert switchable and both thresholds editable. Setup checks the CLI is installed and creates the background check: a script trigger every 5 minutes, with no LLM run per check, that you can switch off or reschedule in the app. Uninstalling leaves that trigger behind, so delete it too."
+description = "Know when your Appgate VPN session expires, before everything behind it stops working. Reads the session with the gatekeepr CLI (macOS, v0.3.0 or later, reads /var/log/appgate with no root) and shows it as a sand-timer VPN expiry widget and a Gatekeepr app with the session's details and history. Notifies you at 30 and 5 minutes left and on expiry, once per session, with each alert switchable and both thresholds editable. Setup checks the CLI is installed and creates the background check: a script trigger every 5 minutes, with no LLM run per check, that you can switch off or reschedule in the app. Uninstalling leaves that trigger behind, so delete it too."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/gatekeepr"
 engine = ">=0.48.0"
 categories = ["developer-tools", "automation"]

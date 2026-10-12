@@ -66,6 +66,7 @@ const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="curre
 
 const S = { status: null, history: null, settings: {}, schedule: undefined, cadence: DEFAULT_CADENCE, scheduleBusy: false, pending: null, showAll: false };
 const $ = (id) => document.getElementById(id);
+const timer = Hourglass.mount($('timer'));
 const esc = (s) => lucidos.utils.escapeHtml(String(s));
 const escAttr = (s) => lucidos.utils.escapeHtmlAttr(String(s));
 
@@ -161,11 +162,10 @@ const PROBLEM_HINT = {
 function renderHero() {
   const v = view(S.status);
   $('hero').dataset.tone = v.tone;
-  $('ring').style.setProperty('--ring-value', v.fraction || 0);
-  $('value').textContent = v.value;
-  $('value').classList.toggle('is-word', !!v.word);
-  $('label').textContent = v.label || '';
-  $('ring').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.headline].filter(Boolean).join(', '));
+  timer.draw(v.fraction || 0, !!v.fraction);
+  $('left').innerHTML = esc(v.value) + (v.label ? `<small>${esc(v.label)}</small>` : '');
+  $('left').classList.toggle('is-word', !!v.word);
+  $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.headline].filter(Boolean).join(', '));
   $('headline').innerHTML = (v.chip ? `<span class="${v.chip[1]}">${esc(v.chip[0])}</span>` : '') + (v.headline ? `<span>${esc(v.headline)}</span>` : '');
   $('headline').hidden = !v.chip && !v.headline;
 

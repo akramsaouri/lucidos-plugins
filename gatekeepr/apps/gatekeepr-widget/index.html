@@ -7,22 +7,23 @@
 <script src="/api/v1/sdk-prefs.js"></script>
 <link rel="stylesheet" href="/api/v1/sdk-iframe.css">
 <script src="/api/v1/sdk.js"></script>
+<script src="hourglass.js"></script>
 <style>
   /* One shape on calm ground: the card draws the frame and the name, so no title and no border here. */
-  body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-md); text-align: center; }
+  body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-sm); text-align: center; }
   [hidden] { display: none !important; }
 
-  /* The ring drains from full at sign-in to empty at expiry. Its colour is the state, from theme tokens only. */
+  /* The sand timer drains from a full top bulb at sign-in to an empty one at expiry. Its colour is the state,
+     from theme tokens only. */
   [data-tone="normal"] { --tone: var(--accent); }
   [data-tone="warning"] { --tone: var(--accent-yellow); }
   [data-tone="danger"] { --tone: var(--accent-red); }
   [data-tone="muted"] { --tone: var(--text-muted); }
-  /* Near expiry the arc is a sliver of a 24-hour ring, so the track takes the state colour too. */
-  [data-tone="warning"] .gauge, [data-tone="danger"] .gauge { --ring-track: color-mix(in srgb, var(--tone) 34%, var(--bg-tertiary)); }
-  .gauge { --ring-size: 8.5rem; --ring-weight: 0.625rem; --ring-color: var(--tone); }
-  .gauge .ring-value.is-word { font-size: var(--font-size-lg); }
-  .gauge .ring-label { font-size: var(--font-size-xs); margin-top: var(--space-xs); }
-  [data-tone="danger"] .ring-value { color: var(--accent-red); }
+  .timer { width: 5.5rem; margin-bottom: var(--space-xs); }
+  .left { font-size: var(--font-size-3xl); font-weight: 600; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .left.is-word { font-size: var(--font-size-2xl); }
+  .left small { margin-left: 0.2em; font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
+  [data-tone="danger"] .left { color: var(--accent-red); }
 
   .when { font-size: var(--font-size-md); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
   .problem { max-width: 18rem; font-size: var(--font-size-sm); color: var(--text-secondary); overflow-wrap: anywhere;
@@ -31,9 +32,9 @@
   .refresh .mini-spinner { --spinner-color: currentColor; }
   .refresh .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); margin-right: var(--space-xs); vertical-align: -0.125rem; }
 
-  /* A floating widget window in minimal mode: the ring and its one line, on a fill of its own. */
+  /* A floating widget window in minimal mode: the timer and its lines, on a fill of its own. */
   html[data-widget-mode="minimal"] body { padding: var(--space-md) var(--space-lg); background: var(--bg-secondary); border-radius: var(--radius-surface); }
-  html[data-widget-mode="minimal"] .gauge { --ring-size: 6.5rem; }
+  html[data-widget-mode="minimal"] .timer { width: 4rem; }
   html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .refresh, html[data-widget-mode="minimal"] .problem { display: none !important; }
   @media (pointer: coarse) {
     .action-btn { position: relative; }
@@ -42,10 +43,8 @@
 </style>
 </head>
 <body data-tone="muted">
-  <div class="ring gauge" id="ring" role="img" style="--ring-value: 0">
-    <span class="ring-value" id="value">–</span>
-    <span class="ring-label" id="label"></span>
-  </div>
+  <div class="timer" id="timer" role="img"></div>
+  <div class="left" id="left">–</div>
   <div class="when" id="when"></div>
   <div class="problem" id="problem" hidden></div>
   <div class="note" id="note" hidden></div>
@@ -60,6 +59,7 @@ const AUTO_GAP_MS = 5 * 60e3;     // ask for a refresh on our own at most this o
 const CADENCE_EVERY_MS = 15 * 60e3;
 const REFRESH_ICON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
 const $ = (id) => document.getElementById(id);
+const timer = Hourglass.mount($('timer'));
 let snap, pending = null, lastAsk = 0, cadenceAt = 0;
 // The snapshot is stale once the background check has missed a run: its interval plus 2 minutes of slack. With
 // the check off, paused, on a hand-written cron, or unreadable, 5 minutes stands in for the interval.
@@ -104,15 +104,14 @@ function render() {
   const v = view(snap);
   const age = snap ? Date.now() - Date.parse(snap.checked_at) : Infinity;
   document.body.dataset.tone = v.tone;
-  $('ring').style.setProperty('--ring-value', v.fraction || 0);
-  $('value').textContent = v.value;
-  $('value').classList.toggle('is-word', !!v.word);
-  $('label').textContent = v.label || '';
+  timer.draw(v.fraction || 0, !!v.fraction);
+  $('left').innerHTML = lucidos.utils.escapeHtml(v.value) + (v.label ? `<small>${v.label}</small>` : '');
+  $('left').classList.toggle('is-word', !!v.word);
   $('when').textContent = v.when || '';
   $('when').hidden = !v.when;
   $('problem').textContent = v.problem || '';
   $('problem').hidden = !v.problem;
-  $('ring').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.when].filter(Boolean).join(', '));
+  $('timer').setAttribute('aria-label', ['Appgate VPN', v.value + (v.label ? ' ' + v.label : ''), v.when].filter(Boolean).join(', '));
   const stale = snap && age > staleMs;
   $('note').textContent = stale ? `checked ${lucidos.utils.timeAgo(snap.checked_at)}` : '';
   $('note').hidden = !stale;

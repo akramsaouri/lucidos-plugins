@@ -16,18 +16,17 @@
   .page { max-width: 36rem; margin: 0 auto; padding: var(--space-lg) var(--space-xl) 4rem; display: grid; gap: var(--space-xl); }
   .muted { color: var(--text-muted); }
 
-  /* ---------- the session: one ring, coloured by state from theme tokens ---------- */
+  /* ---------- the session: one sand timer, coloured by state from theme tokens ---------- */
   [data-tone="normal"] { --tone: var(--accent); }
   [data-tone="warning"] { --tone: var(--accent-yellow); }
   [data-tone="danger"] { --tone: var(--accent-red); }
   [data-tone="muted"] { --tone: var(--text-muted); }
-  /* Near expiry the arc is a sliver of a 24-hour ring, so the track takes the state colour too. */
-  [data-tone="warning"] .gauge, [data-tone="danger"] .gauge { --ring-track: color-mix(in srgb, var(--tone) 34%, var(--bg-tertiary)); }
   .hero { display: grid; justify-items: center; gap: var(--space-md); text-align: center; padding-top: var(--space-md); }
-  .gauge { --ring-size: 9.5rem; --ring-weight: 0.75rem; --ring-color: var(--tone); }
-  .gauge .ring-value.is-word { font-size: var(--font-size-lg); }
-  .gauge .ring-label { font-size: var(--font-size-xs); margin-top: var(--space-xs); }
-  .hero[data-tone="danger"] .ring-value { color: var(--accent-red); }
+  .timer { width: 6.5rem; }
+  .left { font-size: var(--font-size-3xl); font-weight: 600; line-height: 1.15; color: var(--text-primary); font-variant-numeric: tabular-nums; margin-bottom: calc(-1 * var(--space-sm)); }
+  .left.is-word { font-size: var(--font-size-2xl); }
+  .left small { margin-left: 0.2em; font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
+  .hero[data-tone="danger"] .left { color: var(--accent-red); }
   .headline { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-sm); font-size: var(--font-size-md); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
   .checkrow { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--space-md); }
   .checkrow .note { font-size: var(--font-size-xs); color: var(--text-muted); }
@@ -86,10 +85,8 @@
 <body>
 <main class="page">
   <div class="hero" id="hero" data-tone="muted">
-    <div class="ring gauge" id="ring" role="img" style="--ring-value: 0">
-      <span class="ring-value" id="value">–</span>
-      <span class="ring-label" id="label"></span>
-    </div>
+    <div class="timer" id="timer" role="img"></div>
+    <div class="left" id="left">–</div>
     <div class="headline" id="headline"></div>
     <div class="problem" id="problem" hidden>
       <div class="problem-head"><span data-icon="alert"></span><div class="problem-text" id="problem-text"></div></div>
@@ -151,6 +148,7 @@
     </div>
   </section>
 </main>
+<script src="hourglass.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

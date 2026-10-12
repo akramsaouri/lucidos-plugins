@@ -144,10 +144,13 @@ From a thread: `lucidos events emit GatekeeprRefreshRequested --payload '{"summa
 
 ## The widget and the app
 
-The **VPN expiry** widget (`apps/gatekeepr-widget`) and the **Gatekeepr** app read `status.json`. Between
-checks they count `secondsLeft` down by the time since the snapshot's `now`. That lands on the CLI's own
-`expiresAt` and turns the colour at its `warnThresholdSeconds`; nothing recomputes expiry. Both redraw on
-`GatekeeprStatusChecked`; the widget also re-reads every 60 seconds.
+The **VPN expiry** widget (`apps/gatekeepr-widget`) and the **Gatekeepr** app read `status.json` and draw the
+session as a sand timer (`hourglass.js`, one file shipped in both app folders). The top bulb holds
+`secondsLeft / sessionLengthSeconds` of the sand, measured by area rather than height, with a sliver kept while
+any time is left so expiring soon never looks empty. Between checks they count `secondsLeft` down by the time
+since the snapshot's `now`. That lands on the CLI's own `expiresAt` and turns the colour at its
+`warnThresholdSeconds`; nothing recomputes expiry. Both redraw on `GatekeeprStatusChecked`; the widget also
+re-reads every 60 seconds.
 
 When the snapshot has missed a background check (older than the interval plus 2 minutes, or 7 minutes when the
 check is off, paused or on a custom cron), the widget asks for a refresh itself, at most once per 5 minutes
