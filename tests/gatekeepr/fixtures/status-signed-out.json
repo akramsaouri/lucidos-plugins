@@ -1,0 +1,17 @@
+{
+  "exitCode" : 2,
+  "expiresAt" : "2026-10-12T23:18:16+02:00",
+  "expirySource" : "sessionLength",
+  "now" : "2026-10-12T18:00:00+02:00",
+  "schemaVersion" : 1,
+  "secondsLeft" : 19096,
+  "sessionEnd" : "2026-10-12T17:42:05+02:00",
+  "sessionLengthLearnedFrom" : 17,
+  "sessionLengthSeconds" : 86399,
+  "sessionLengthSource" : "median",
+  "sessionStart" : "2026-10-11T23:18:18+02:00",
+  "sessionStartKind" : "signIn",
+  "state" : "signedOut",
+  "timeLeft" : "5h18m",
+  "warnThresholdSeconds" : 1800
+}

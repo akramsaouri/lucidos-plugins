@@ -1,0 +1,13 @@
+name = "Gatekeepr — check now"
+slug = "gatekeepr-check-now"
+app_id = "gatekeepr"
+
+# The app's and the widget's Check now (and the widget, when its snapshot has gone stale). Runs the same script
+# as the 5-minute expiry check that plugin setup creates, so alerts and their dedup behave the same either way.
+# It always answers with GatekeeprStatusChecked carrying the request's request_id.
+[[on]]
+event_type = "GatekeeprCheckRequested"
+
+[run]
+type = "script"
+path = "scripts/gatekeepr/check.py"

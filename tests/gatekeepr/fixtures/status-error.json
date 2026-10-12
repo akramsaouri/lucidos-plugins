@@ -1,0 +1,6 @@
+{
+  "error" : "driver.log:1: this line doesn't match any known Appgate log format, so gatekeepr won't guess. Line: [synthetic]",
+  "exitCode" : 3,
+  "schemaVersion" : 1,
+  "state" : "error"
+}
