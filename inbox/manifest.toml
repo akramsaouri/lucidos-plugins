@@ -1,9 +1,9 @@
 id = "inbox"
-version = "0.1.2"
+version = "0.1.3"
 name = "Inbox"
-description = "One calm inbox across every mailbox Email Triage watches. Needs the Email Triage plugin (0.6.0 or later) installed and configured with at least one account: Inbox reads its accounts, rules and triage results and never triages anything itself. Each account's inbox shows in two zones, never mixed: what survived triage, with the reason it was kept, and what triage hasn't seen yet. Archive, delete and undo in one key or swipe, replies with AI Suggest and Polish, a one-key hand-off to Lucidos, and each account's folders and labels in the sidebar. Gmail accounts read through one engine proxy per mailbox; password IMAP accounts go through the IMAP bridge trigger this plugin ships. OAuth IMAP accounts (Email Triage's imap-peek) aren't supported yet."
+description = "One calm inbox across every mailbox Email Triage watches. Needs the Email Triage plugin (0.6.0 or later) installed and configured with at least one account: Inbox reads its accounts, rules and triage results and never triages anything itself. Each account's inbox shows in two zones, never mixed: what survived triage, with the reason it was kept, and what triage hasn't seen yet. Archive, delete and undo in one key or swipe, replies with AI Suggest and Polish, a one-key hand-off to Lucidos, and each account's folders and labels in the sidebar. Gmail accounts read through one engine proxy per mailbox; password IMAP accounts go through the IMAP bridge trigger this plugin ships. OAuth IMAP accounts (Email Triage's imap-peek) aren't supported yet. Also ships an Inbox Home widget: how many threads need you across every account, with per-account counts and the top threads on larger tiles."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
-engine = ">=0.47.1"
+engine = ">=0.48.0"
 categories = ["productivity", "communication"]
 icon = "media/icon.svg"
 
@@ -68,5 +68,6 @@ and the bridge protocol. Keep every key already in `artifacts/inbox/settings.jso
 
 Finally, open the Inbox app. Tell the user that each account's mail is split into "Needs you" (it
 survived triage, with the reason it was kept) and "Not triaged yet", and that `?` lists the
-keyboard shortcuts.
+keyboard shortcuts. Then show the reusable "Inbox" widget (`inbox-glance`) in this thread, and offer
+to pin it to Home: it counts what needs them across every account.
 """

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inbox glance</title>
+<script src="/api/v1/sdk-prefs.js"></script>
+<link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+<script src="/api/v1/sdk.js"></script>
+<style>
+  /* Inline (no size attribute) the body is content-sized and reads as large.
+     On the Home board the tile sets the box, so only there does the page fill it. */
+  body { margin: 0; padding: var(--space-lg); }
+  html[data-widget-size], html[data-widget-size] body { height: 100%; }
+  html[data-widget-size] body { box-sizing: border-box; display: grid; grid-template-rows: auto minmax(0, 1fr); row-gap: var(--space-sm); }
+
+  /* A Home tile has no title bar, so it names its app: icon and "Inbox", top-left (the tile's ⋯ menu sits top-right).
+     It takes its own row, so the glance below only ever gets the height that is left. Elsewhere the host already draws the name. */
+  .ident { display: none; }
+  html[data-widget-size] .ident { display: flex; align-items: center; gap: var(--space-xs); justify-self: start; min-width: 0;
+    max-width: calc(100% - 2 * var(--space-xl)); margin: 0; padding: 0; border: 0; border-radius: var(--radius-control);
+    background: none; color: var(--text-muted); font: inherit; font-size: var(--font-size-xs); line-height: var(--icon-size-md);
+    text-align: left; cursor: pointer; }
+  .ident-icon { display: block; flex: none; width: var(--icon-size-md); height: var(--icon-size-md); border-radius: var(--radius-sm); }
+  .ident-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  @media (hover: hover) {
+    .ident:hover { background: none; color: var(--text-secondary); }
+  }
+  .ident:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+  .glance { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "lead accs" "rows rows";
+    column-gap: var(--space-xl); row-gap: var(--space-xl); align-items: center; }
+  html[data-widget-size] .glance { height: 100%; column-gap: var(--space-lg); }
+  html[data-widget-size="large"] .glance { grid-template-rows: auto minmax(0, 1fr); }
+  html[data-widget-size="medium"] .glance { grid-template-areas: "lead accs"; align-content: safe center; }
+  html[data-widget-size="small"] .glance { grid-template-columns: minmax(0, 1fr); grid-template-areas: "lead"; }
+  html[data-widget-size="medium"] .rows,
+  html[data-widget-size="small"] .rows,
+  html[data-widget-size="small"] .accs { display: none; }
+
+  /* The one shape: how many threads need you. Tapping it opens the Inbox. */
+  .lead { grid-area: lead; display: grid; gap: var(--space-sm); justify-items: start; min-width: 0; }
+  html[data-widget-size="small"] .lead { height: 100%; grid-template-rows: minmax(0, 1fr) auto; }
+  .hero { display: grid; gap: var(--space-xs); justify-items: start; margin: 0; padding: 0; border: 0; border-radius: var(--radius-control);
+    background: none; color: inherit; text-align: left; cursor: pointer; }
+  html[data-widget-size="small"] .hero { align-content: center; width: 100%; height: 100%; }
+  @media (hover: hover) {
+    .hero:hover { background: none; }
+    .hero:hover .cap { color: var(--text-primary); }
+  }
+  .hero:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+  .n { font-size: var(--font-size-display); font-weight: 600; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .n.idle { color: var(--text-muted); }
+  .cap { font-size: var(--font-size-sm); color: var(--text-secondary); transition: color var(--duration-fast); }
+  .sub, .meta { font-size: var(--font-size-xs); color: var(--text-muted); }
+  /* In a tile, or with an error, the status line wraps under the number instead of widening its column into the pills. */
+  .meta { margin: 0; }
+  html[data-widget-size] .meta, .meta.err { width: 0; min-width: 100%; }
+  .meta.err { color: var(--accent-red); }
+  /* The short tiles have no height to spare for a wrapped error: one line, the full text is in the title. */
+  html[data-widget-size="small"] .meta.err,
+  html[data-widget-size="medium"] .meta.err { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html[data-widget-size="small"] .meta:not(.err),
+  html[data-widget-size="medium"] .meta:not(.err) { display: none; }
+
+  /* Per-account counts, which are also the filter: tap one to narrow to it, tap it again for all. */
+  .accs { grid-area: accs; justify-self: end; width: 100%; max-width: 18rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm); --pill-bar-hit-slop: calc(var(--space-sm) / 2); }
+  .acc { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-xs); min-width: 0; width: 100%;
+    padding-inline: var(--space-sm); }
+  .accs[hidden], .acc[hidden] { display: none; }
+  .acc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .acc-n { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .acc.zero .acc-n { color: var(--text-muted); font-weight: 500; }
+  .acc[aria-pressed="true"] .acc-n { color: inherit; }
+  .acc.failed .acc-n { color: var(--accent-red); }
+
+  /* The top few threads. No panel around them: space separates, a fill shows only under the pointer. */
+  .rows { grid-area: rows; position: relative; display: grid; gap: var(--space-xs); align-content: start; min-height: 0;
+    padding: var(--focus-ring-width); margin: calc(-1 * var(--focus-ring-width)) calc(-1 * (var(--space-sm) + var(--focus-ring-width))); }
+  html[data-widget-size] .rows { align-self: stretch; overflow: hidden; }
+  .row { display: grid; gap: calc(var(--space-xs) / 2); width: 100%; min-width: 0; margin: 0; padding: var(--space-xs) var(--space-sm);
+    border: 0; border-radius: var(--radius-control); background: none; color: inherit; text-align: left; cursor: pointer;
+    transition: background var(--duration-fast); }
+  .row[hidden] { display: none; }
+  @media (hover: hover) { .row:hover { background: var(--bg-tertiary); } }
+  .row:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+  .row-top { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0; }
+  .from, .subj, .why { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .from { flex: 0 1 auto; max-width: 50%; font-size: var(--font-size-md); font-weight: 500; color: var(--text-primary); }
+  .row.unread .from { font-weight: 600; }
+  .subj { flex: 1 1 0; min-width: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
+  .when { flex: none; font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .why { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .empty { margin: 0; padding-inline: var(--space-sm); font-size: var(--font-size-sm); color: var(--text-muted); }
+
+  .row.entering { animation: rise var(--duration-slow) both; animation-delay: calc(var(--i) * var(--duration-fast) / 3); }
+  @keyframes rise { from { opacity: 0; transform: translateY(var(--space-sm)); } }
+  .n.tick { animation: settle var(--duration-normal) both; }
+  @keyframes settle { from { opacity: 0.35; transform: translateY(var(--space-xs)); } }
+  :root[data-motion="reduce"] .row.entering,
+  :root[data-motion="reduce"] .n.tick { animation: none; }
+</style>
+</head>
+<body>
+  <button class="ident" id="ident" type="button" aria-label="Open the Inbox">
+    <img class="ident-icon" src="assets/icon.svg" alt="">
+    <span class="ident-name">Inbox</span>
+  </button>
+  <main class="glance">
+    <div class="lead">
+      <button class="hero" id="hero" type="button">
+        <span class="n idle" id="n">–</span>
+        <span class="cap" id="cap">Loading your inboxes…</span>
+        <span class="sub" id="sub"></span>
+      </button>
+      <p class="meta" id="meta" role="status"></p>
+    </div>
+    <div class="accs" id="accs" role="group" aria-label="Filter by account"></div>
+    <div class="rows" id="rows"></div>
+  </main>
+<script>
+(async function () {
+  'use strict';
+  lucidos.ui.applyPreferences();
+  lucidos.ui.watchPreferences();
+  const $ = id => document.getElementById(id);
+  const CACHE = 'glance-v2', ROWS = 4;
+  const WAKE_STALE = 5 * 60e3, TICK_STALE = 15 * 60e3;
+  /* accounts are Email Triage's, in its config order, as the Inbox data layer describes them: { key, label, kind, problem }. */
+  let state = { accounts: [], threads: [], at: 0, errors: {} }, fatal = '', pick = 'all';
+  let busy = false, again = false, missed = false, soonTimer = null, clock = null, rowsKey = '', pillsKey = null;
+
+  const openInbox = () => lucidos.ui.navigate('app', { app_id: 'inbox' });
+  const shown = () => lucidos.widget.visible() && !document.hidden;
+  const labelOf = k => (state.accounts.find(a => a.key === k) || {}).label || k;
+  /* A small tile has no pills, so it always counts every account. */
+  const scope = () => (lucidos.widget.size() === 'small' ? 'all' : pick);
+
+  /* One source of truth: load the Inbox app's own data layer (Gmail through each account's proxy, IMAP from the bridge's last snapshot, triage classify). */
+  async function loadMail() {
+    if (window.Mail) return window.Mail;
+    const src = await lucidos.data.read('apps/inbox/mail.js');
+    const s = document.createElement('script');
+    s.textContent = src + '\n//# sourceURL=inbox/mail.js';
+    document.head.appendChild(s);
+    if (!window.Mail) throw new Error('the Inbox data layer did not load');
+    return window.Mail;
+  }
+
+  function when(ms) {
+    const d = new Date(ms), now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return now - d < 6 * 864e5 ? d.toLocaleDateString('en-GB', { weekday: 'short' }) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  /* One pill per account, rebuilt only when the accounts change and otherwise updated in place, so a tap never
+     loses focus to a rebuild. With one account the total is the account: there is nothing to filter. */
+  function buildPills() {
+    const key = state.accounts.map(a => a.key + '\u0001' + a.label).join('\u0002');
+    if (key === pillsKey) return;
+    pillsKey = key;
+    $('accs').replaceChildren(...state.accounts.map(a => {
+      const b = el('button', 'pill-bar-btn acc');
+      b.type = 'button';
+      b.dataset.k = a.key;
+      b.append(el('span', 'acc-name', a.label), el('span', 'acc-n', '·'));
+      return b;
+    }));
+    $('accs').hidden = state.accounts.length < 2;
+    fit();
+  }
+
+  function tick(node) {
+    node.classList.remove('tick');
+    void node.offsetWidth;
+    node.classList.add('tick');
+  }
+
+  function renderMeta() {
+    /* An account Inbox can't read at all (an unsupported fetch) is marked on its pill, as the Inbox sidebar marks it, and not repeated here. */
+    const errs = state.errors || {}, bad = state.accounts.filter(a => errs[a.key] && a.kind !== 'none').map(a => a.label);
+    const meta = $('meta');
+    meta.classList.toggle('err', !!(fatal || bad.length));
+    meta.textContent = fatal ? "Couldn't load: " + fatal
+      : bad.length ? bad.join(', ') + " didn't load"
+      : !state.at ? ''
+      : busy ? 'Refreshing…'
+      : 'Updated ' + lucidos.utils.timeAgo(new Date(state.at).toISOString());
+    meta.title = fatal || Object.values(errs).join('\n');
+  }
+
+  function render(animate) {
+    buildPills();
+    if (state.accounts.length < 2 || !state.accounts.some(a => a.key === pick)) pick = 'all';
+    const k = scope(), all = state.threads, loaded = !!state.at, errs = state.errors || {};
+    /* Email Triage watches no mailbox yet, so there is nothing to count. */
+    const none = loaded && !state.accounts.length;
+    const mine = k === 'all' ? all : all.filter(t => t.account === k);
+    const kept = mine.filter(t => t.zone === 'kept'), fresh = mine.filter(t => t.zone === 'new');
+
+    const n = $('n'), num = loaded && !none ? String(kept.length) : '–';
+    if (n.textContent !== num) { n.textContent = num; if (loaded && !none) tick(n); }
+    n.classList.toggle('idle', !loaded || none);
+    const cap = !loaded ? (fatal ? 'Inbox unavailable' : 'Loading your inboxes…') : none ? 'No mailboxes yet'
+      : k === 'all' ? 'need you' : 'need you in ' + labelOf(k);
+    const sub = !loaded ? '' : none ? 'Set up Email Triage first' : fresh.length ? fresh.length + ' not triaged yet' : 'all triaged';
+    $('cap').textContent = cap;
+    $('sub').textContent = sub;
+    $('hero').setAttribute('aria-label', (!loaded ? '' : none ? `${cap}. ${sub}. ` : `${kept.length} ${cap}, ${sub}. `) + 'Open the Inbox');
+
+    for (const b of $('accs').children) {
+      const a = b.dataset.k, c = all.filter(t => t.account === a && t.zone === 'kept').length;
+      b.setAttribute('aria-pressed', String(pick === a));
+      b.classList.toggle('failed', !!errs[a]);
+      b.classList.toggle('zero', loaded && !errs[a] && !c);
+      b.lastChild.textContent = loaded ? (errs[a] ? '!' : c) : '·';
+      b.title = errs[a] || '';
+      b.setAttribute('aria-label', `${labelOf(a)}: ${!loaded ? 'loading' : errs[a] ? 'did not load' : c + ' need you'}`);
+    }
+
+    /* Needs you first; with nothing kept, the newest not triaged yet. */
+    const list = (kept.length ? kept : fresh).slice(0, ROWS);
+    const key = [k, loaded].concat(list.map(t => [t.account, t.date, t.from, t.subject, t.why, t.unread, t.zone].join('\u0001'))).join('\u0002');
+    if (key !== rowsKey) {
+      rowsKey = key;
+      const box = $('rows');
+      box.replaceChildren(...list.map((t, i) => {
+        const why = t.zone === 'kept' ? (t.why || 'Kept by triage') : 'Not triaged yet';
+        const line = (k === 'all' && state.accounts.length > 1 ? labelOf(t.account) + ' · ' : '') + why;
+        const b = el('button', 'row' + (t.unread ? ' unread' : '') + (animate ? ' entering' : ''));
+        b.type = 'button';
+        b.title = why;
+        b.style.setProperty('--i', i);
+        const top = el('span', 'row-top');
+        top.append(el('span', 'from', t.from), el('span', 'subj', t.subject), el('span', 'when', when(t.date)));
+        b.append(top, el('span', 'why', line));
+        return b;
+      }));
+      if (!list.length && loaded && !none) box.append(el('p', 'empty', 'Nothing waiting. Inbox zero.'));
+      fitRows();
+    }
+    renderMeta();
+  }
+
+  /* A tile never scrolls: drop the rows that would not fit whole, rather than cut one in half. */
+  function fitRows() {
+    const box = $('rows'), rows = Array.from(box.querySelectorAll('.row'));
+    rows.forEach(r => { r.hidden = false; });
+    if (!document.documentElement.hasAttribute('data-widget-size')) return;
+    const limit = box.clientHeight - parseFloat(getComputedStyle(box).paddingBottom);
+    let full = false;
+    for (const r of rows) { full = full || r.offsetTop + r.offsetHeight > limit; r.hidden = full; }
+  }
+  /* Pills too: with more accounts than the tile has room for, the ones that would not fit whole leave the
+     filter. Their mail still counts in the total. */
+  function fitPills() {
+    const pills = Array.from($('accs').children);
+    pills.forEach(p => { p.hidden = false; });
+    if (!document.documentElement.hasAttribute('data-widget-size')) return;
+    const limit = document.querySelector('.glance').getBoundingClientRect().bottom + 0.5;
+    let full = false;
+    for (const p of pills) { full = full || p.getBoundingClientRect().bottom > limit; p.hidden = full; }
+  }
+  function fit() { fitPills(); fitRows(); }
+  const fitter = new ResizeObserver(fit);
+  fitter.observe($('rows'));
+  fitter.observe(document.querySelector('.glance'));
+
+  $('hero').addEventListener('click', openInbox);
+  $('ident').addEventListener('click', openInbox);
+  $('rows').addEventListener('click', e => { if (e.target.closest('.row')) openInbox(); });
+  $('accs').addEventListener('click', e => {
+    const b = e.target.closest('.acc');
+    if (!b) return;
+    pick = pick === b.dataset.k ? 'all' : b.dataset.k;
+    render(true);
+  });
+
+  const slim = t => ({ account: t.account, from: t.from, subject: t.subject, date: t.date, unread: t.unread, zone: t.zone, why: t.why });
+
+  async function refresh() {
+    if (busy) { again = true; return; }
+    if (!shown()) { missed = true; return; }
+    busy = true; missed = false; again = false;
+    renderMeta();
+    try {
+      const M = await loadMail();
+      const ctx = await M.loadContext();
+      /* Every account the Inbox app lists, read the way it reads them. One it can't read (no proxy recorded, an
+         unsupported fetch) fails like a load error, never as an empty inbox. */
+      const accounts = M.snapshot().map(a => ({ key: a.key, label: a.label, kind: a.kind, problem: a.problem }));
+      const res = await Promise.allSettled(accounts.map(a => a.problem ? Promise.reject(new Error(a.problem))
+        : a.kind === 'imap' ? M.listImap(a.key).then(r => r.threads) : M.listGmail(a.key)));
+      const raw = [], errors = {};
+      res.forEach((r, i) => {
+        const acc = accounts[i].key;
+        if (r.status === 'fulfilled') raw.push(...r.value);
+        else errors[acc] = (r.reason && r.reason.message) || String(r.reason);
+      });
+      /* An account that failed keeps its last rows, already classified, so they never go back through classify. */
+      const kept = state.threads.filter(t => errors[t.account]);
+      const threads = raw.map(t => slim(M.classify(t, ctx))).concat(kept).sort((a, b) => b.date - a.date);
+      const first = !state.at;
+      state = { accounts, threads, at: Date.now(), errors };
+      fatal = '';
+      try { lucidos.storage.local.setItem(CACHE, JSON.stringify(state)); } catch (e) { /* quota */ }
+      busy = false;
+      render(first);
+    } catch (e) {
+      busy = false;
+      fatal = (e && e.message) || String(e);
+      render(false);
+    }
+    if (again) soon();
+  }
+
+  function soon() {
+    clearTimeout(soonTimer);
+    if (!shown()) { missed = true; return; }
+    soonTimer = setTimeout(() => { soonTimer = null; refresh(); }, 1500);
+  }
+
+  /* Timers only while someone can see the widget: a minute clock keeps "Updated …" honest and refreshes once stale. */
+  function startClock() {
+    if (!clock) clock = setInterval(() => { if (Date.now() - state.at > TICK_STALE) refresh(); else renderMeta(); }, 60e3);
+  }
+  function sleep() {
+    clearInterval(clock); clock = null;
+    if (soonTimer) { clearTimeout(soonTimer); soonTimer = null; missed = true; }
+  }
+  function wake() {
+    if (!shown()) return;
+    startClock();
+    if (missed || Date.now() - state.at > WAKE_STALE) refresh(); else renderMeta();
+  }
+
+  await lucidos.storage.ready;
+  try {
+    const c = JSON.parse(lucidos.storage.local.getItem(CACHE) || 'null');
+    if (c && Array.isArray(c.threads)) state = { accounts: Array.isArray(c.accounts) ? c.accounts : [], threads: c.threads, at: c.at || 0, errors: c.errors || {} };
+  } catch (e) { /* no cache yet */ }
+  render(false);
+  lucidos.ui.ready();
+
+  lucidos.widget.onSize(() => render(false));
+  lucidos.widget.onVisibility(v => (v ? wake() : sleep()));
+  document.addEventListener('visibilitychange', () => (document.hidden ? sleep() : wake()));
+  addEventListener('pageshow', e => { if (e.persisted) wake(); });
+  if (shown()) startClock();
+
+  /* The first open and every reconnect catch up; triage runs and IMAP syncs refresh in between. */
+  lucidos.sse.onOpen(refresh);
+  lucidos.sse.on('EmailTriageCompleted', soon);
+  lucidos.sse.on('InboxImapResult', d => { const p = (d && d.payload) || d || {}; if (p.synced) soon(); });
+})();
+</script>
+</body>
+</html>
