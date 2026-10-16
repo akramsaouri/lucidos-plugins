@@ -12,6 +12,8 @@
   /* One shape on calm ground: the card draws the frame and the name, so no title and no border here. */
   body { margin: 0; padding: var(--space-lg); display: grid; justify-items: center; gap: var(--space-sm); text-align: center; }
   [hidden] { display: none !important; }
+  /* The page is the tile's way into the app, so it takes focus. Its ring is drawn inside: a tile clips the outside. */
+  body:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
 
   /* The countdown timer's disc shrinks from a full turn at sign-in to nothing at expiry. Its colour is the state,
      from theme tokens only. */
@@ -205,7 +207,14 @@ async function ask(auto) {
   }
 }
 
-$('refresh').addEventListener('click', () => ask(false));
+$('refresh').addEventListener('click', (e) => { e.stopPropagation(); ask(false); });
+// The whole tile is the way into the Gatekeepr app; only the Refresh button does something else.
+const openApp = () => lucidos.ui.navigate('app', { app_id: 'gatekeepr' });
+document.body.style.cursor = 'pointer';
+document.addEventListener('click', (e) => { if (!e.target.closest('button')) openApp(); });
+// Enter on the focused tile opens it too. Enter on a focused Refresh targets the button, which clicks it instead.
+document.body.tabIndex = 0;
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === document.body) openApp(); });
 lucidos.sse.connect();
 lucidos.sse.on('GatekeeprStatusChecked', (data) => {
   if (data && data.request_id && data.request_id === pending) pending = null;
