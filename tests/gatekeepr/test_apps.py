@@ -1,6 +1,7 @@
 """The two app frames: the countdown timer they share, and the event names they emit."""
 import json
 import os
+import re
 import shutil
 import subprocess
 import unittest
@@ -56,6 +57,31 @@ class CountdownTimerTest(unittest.TestCase):
         self.assertEqual(eight["labels"], ["2h", "4h", "6h"])             # follow the learned length
         self.assertEqual(ten["labels"], [])                                # and stay off when they aren't whole hours
         self.assertEqual(unknown["labels"], ["6h", "12h", "18h"])         # no length means 24 hours
+
+
+class WidgetTileTest(unittest.TestCase):
+    """The widget on a Home board tile: it names itself top-left and has a layout for each tile size."""
+
+    def setUp(self):
+        self.page = read(os.path.join(WIDGET, "index.html"))
+        self.css = re.search(r"<style>(.*?)</style>", self.page, re.S).group(1)
+
+    def test_it_names_itself_with_its_icon(self):
+        self.assertIn('<img src="assets/icon.svg" alt=""><span>Gatekeepr</span>', self.page)
+        self.assertTrue(os.path.exists(os.path.join(WIDGET, "assets", "icon.svg")))
+        # Only on a tile (the card draws the name everywhere else), and never on the right, where the tile's menu is.
+        self.assertIn(".ident { display: none; }", self.css)
+        self.assertRegex(self.css, r"html\[data-widget-size\] \.ident \{[^}]*align-self: flex-start")
+
+    def test_each_tile_size_has_a_layout_and_nothing_scrolls(self):
+        for size in ("small", "medium", "large"):
+            self.assertIn(f'html[data-widget-size="{size}"]', self.css)
+        self.assertRegex(self.css, r"html\[data-widget-size\], html\[data-widget-size\] body \{[^}]*overflow: hidden")
+
+    def test_the_style_uses_theme_tokens_and_rem_only(self):
+        self.assertNotRegex(self.css, r"\d\s*px\b")
+        self.assertNotRegex(self.css, r"#[0-9a-fA-F]{3,8}\b")
+        self.assertNotRegex(self.css, r"\b(rgb|hsl)a?\(")
 
 
 class EventNamesTest(unittest.TestCase):
