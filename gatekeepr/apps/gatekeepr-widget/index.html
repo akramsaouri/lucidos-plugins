@@ -39,6 +39,47 @@
   html[data-widget-mode="minimal"] .timer { width: 4.5rem; }
   html[data-widget-mode="minimal"] .left { font-size: var(--font-size-3xl); }
   html[data-widget-mode="minimal"] .note, html[data-widget-mode="minimal"] .refresh, html[data-widget-mode="minimal"] .problem { display: none !important; }
+
+  /* Outside a Home board tile the stage and the readout only group: the page lays out as one centred column. */
+  .stage, .readout { display: contents; }
+  .ident { display: none; }
+
+  /* A Home board tile: the tile is the box, so the page fills it exactly, never scrolls, and fits each size. A tile
+     draws no title bar, so the widget names itself, top-left (the tile's menu is top-right). */
+  html[data-widget-size], html[data-widget-size] body { height: 100%; overflow: hidden; }
+  html[data-widget-size] body { box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch;
+    gap: var(--space-sm); padding: var(--space-md); text-align: left; }
+  html[data-widget-size] .ident { display: flex; align-items: center; gap: var(--space-xs); align-self: flex-start;
+    min-width: 0; max-width: calc(100% - 2.5rem); font-size: var(--font-size-xs); color: var(--text-muted); }
+  html[data-widget-size] .ident img { flex: none; width: var(--icon-size-md); height: var(--icon-size-md); border-radius: var(--radius-sm); }
+  html[data-widget-size] .ident span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html[data-widget-size] .stage { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: var(--space-sm); }
+  /* The timer takes whatever room the readout leaves, and its drawing scales to fit that box. */
+  html[data-widget-size] .timer { position: relative; flex: 1 1 0; align-self: stretch; width: auto; min-height: 0; margin: 0; }
+  html[data-widget-size] .timer .expiry-timer { position: absolute; inset: 0; width: 100%; height: 100%; }
+  html[data-widget-size] .readout { display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); min-width: 0; }
+  html[data-widget-size] .when, html[data-widget-size] .note { margin-top: 0; }
+  html[data-widget-size] .refresh { margin-top: var(--space-xs); }
+
+  /* Small: the timer and the time left. */
+  html[data-widget-size="small"] .left { font-size: var(--font-size-3xl); }
+  html[data-widget-size="small"] .left.is-word { font-size: var(--font-size-xl); }
+  html[data-widget-size="small"] .left small { margin-left: var(--space-xs); font-size: var(--font-size-sm); }
+  html[data-widget-size="small"] .when, html[data-widget-size="small"] .problem, html[data-widget-size="small"] .note { display: none; }
+
+  /* Medium: the timer beside its text, on the room that is left under the label. */
+  html[data-widget-size="medium"] .stage { flex-direction: row; justify-content: flex-start; gap: var(--space-lg); }
+  html[data-widget-size="medium"] .timer { flex: none; align-self: stretch; aspect-ratio: 140 / 150; }
+  html[data-widget-size="medium"] .readout { flex: 1 1 0; align-items: flex-start; }
+  html[data-widget-size="medium"] .left.is-word { font-size: var(--font-size-2xl); }
+  html[data-widget-size="medium"] .when { font-size: var(--font-size-md); }
+  html[data-widget-size="medium"] .problem { -webkit-line-clamp: 2; }
+
+  /* Large: the whole column, with a bigger timer. */
+  html[data-widget-size="large"] body { padding: var(--space-lg); }
+  html[data-widget-size="large"] .stage { gap: var(--space-md); }
+
   @media (pointer: coarse) {
     .action-btn { position: relative; }
     .action-btn::before { content: ''; position: absolute; inset: -0.375rem -0.25rem; }
@@ -46,12 +87,17 @@
 </style>
 </head>
 <body data-tone="muted">
-  <div class="timer" id="timer" role="img"></div>
-  <div class="left" id="left">–</div>
-  <div class="when" id="when"></div>
-  <div class="problem" id="problem" hidden></div>
-  <button class="action-btn action-btn-secondary refresh" id="refresh" hidden>Refresh</button>
-  <div class="note" id="note" hidden></div>
+  <div class="ident"><img src="assets/icon.svg" alt=""><span>Gatekeepr</span></div>
+  <div class="stage">
+    <div class="timer" id="timer" role="img"></div>
+    <div class="readout">
+      <div class="left" id="left">–</div>
+      <div class="when" id="when"></div>
+      <div class="problem" id="problem" hidden></div>
+      <button class="action-btn action-btn-secondary refresh" id="refresh" hidden>Refresh</button>
+      <div class="note" id="note" hidden></div>
+    </div>
+  </div>
 <script>
 lucidos.ui.applyPreferences();
 lucidos.ui.watchPreferences();
