@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulls glance</title>
+<script src="/api/v1/sdk-prefs.js"></script>
+<link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+<script src="/api/v1/sdk.js"></script>
+<style>
+  /* Inline and in the Canvas the widget is content-sized and shows everything:
+     the count, the breakdown and the top rows. A Home board tile sets the box,
+     and each size below keeps only what fits it. */
+  body { padding: var(--space-lg); }
+  main { display: grid; gap: var(--space-xl); cursor: pointer; border-radius: var(--radius-control); outline: none; }
+  main:focus-visible { box-shadow: var(--focus-ring); }
+
+  .head { display: grid; gap: var(--space-sm) var(--space-lg); grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "hero run" "foot run"; }
+  .hero { grid-area: hero; display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0; }
+  .big { font-size: var(--font-size-display); font-weight: 600; line-height: 1; color: var(--text-primary);
+    font-variant-numeric: tabular-nums; }
+  .big.zero { color: var(--text-muted); }
+  .big.bump { animation: settle var(--duration-slow) ease-out; }
+  .cap { font-size: var(--font-size-sm); color: var(--text-secondary); white-space: nowrap; }
+  .foot { grid-area: foot; align-self: end; display: grid; gap: var(--space-xs); min-width: 0; line-height: 1.4; }
+  .meta { display: grid; font-size: var(--font-size-xs); color: var(--text-muted); }
+  .urgent { display: none; font-size: var(--font-size-sm); font-weight: 500; color: var(--accent); }
+  .urgent.calm { color: var(--text-secondary); }
+  .err { font-size: var(--font-size-xs); color: var(--accent-red); }
+  /* Not a failure, only nothing to count: no Pulls app, or no sweep yet. */
+  .err.calm { color: var(--text-secondary); }
+  main.absent { cursor: default; }
+  .meta:empty, .err:empty { display: none; }
+
+  .run { grid-area: run; align-self: end; --bar-run-height: 2.5rem; }
+  .run[hidden] { display: none; }
+  .run .bar-run-item { max-inline-size: 3.5rem; }
+  .bar-run-count { font-size: var(--font-size-md); font-weight: 600; line-height: 1.2; color: var(--text-secondary);
+    font-variant-numeric: tabular-nums; }
+  .bar-run-item.is-accent .bar-run-count { color: var(--text-primary); }
+  .bar-run-item.is-zero .bar-run-count { color: var(--text-muted); }
+
+  .rows { list-style: none; display: grid; margin-inline: calc(-1 * var(--space-sm)); }
+  .rows:empty { display: none; }
+  .row { display: grid; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-control); min-width: 0;
+    line-height: 1.4; transition: background-color var(--duration-fast); }
+  @media (hover: hover) { .row:hover { background: var(--bg-tertiary); } }
+  .pr-title { font-size: var(--font-size-md); font-weight: 500; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pr-meta { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html[data-font-bold="none"] .big, html[data-font-bold="none"] .bar-run-count { color: var(--text-strong); }
+
+  .row.entering { animation: rise var(--duration-slow) both; animation-delay: calc(var(--i) * var(--duration-fast) / 3); }
+  @keyframes rise { from { opacity: 0; transform: translateY(0.4rem); } }
+  @keyframes settle { from { opacity: 0.3; transform: translateY(0.25rem); } }
+  :root[data-motion="reduce"] .row.entering, :root[data-motion="reduce"] .big.bump { animation: none; }
+
+  /* Home board tiles: the tile is the box, so the page fills it exactly. A tile
+     has no title bar, so it names the app itself, top left (the menu sits top
+     right). Inline and in the Canvas the host already shows the name. */
+  .id { display: none; align-items: center; gap: var(--space-xs); min-width: 0; line-height: 1; }
+  .id img { inline-size: 1rem; block-size: 1rem; flex: none; border-radius: var(--radius-sm); }
+  .id span { min-width: 0; font-size: var(--font-size-xs); color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html[data-widget-size], html[data-widget-size] body, html[data-widget-size] main { height: 100%; }
+  html[data-widget-size] main { grid-template-rows: auto auto minmax(0, 1fr); gap: var(--space-sm); }
+  html[data-widget-size] .id { display: flex; }
+
+  /* Small: one number and the bucket to start with. */
+  html[data-widget-size="small"] body { padding: var(--space-md); }
+  html[data-widget-size="small"] main { grid-template-rows: auto minmax(0, 1fr); }
+  html[data-widget-size="small"] .head { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto;
+    grid-template-areas: "hero" "foot"; }
+  html[data-widget-size="small"] .hero { flex-wrap: wrap; align-self: start; column-gap: var(--space-xs); }
+  html[data-widget-size="small"] .urgent { display: block; }
+  html[data-widget-size="small"] .err:not(:empty) + .urgent,
+  html[data-widget-size="small"] .run,
+  html[data-widget-size="small"] .meta,
+  html[data-widget-size="small"] .rows { display: none; }
+
+  /* Medium: the number and the breakdown, nothing listed. */
+  html[data-widget-size="medium"] main { grid-template-rows: auto minmax(0, 1fr); }
+  html[data-widget-size="medium"] .head { grid-template-rows: auto 1fr; }
+  html[data-widget-size="medium"] .rows { display: none; }
+
+  /* Large: rows that do not fit wrap into a second column the tile clips, so a
+     narrow board drops whole rows instead of cutting one in half. */
+  html[data-widget-size="large"] .head { margin-bottom: calc(var(--space-xl) - var(--space-sm)); }
+  html[data-widget-size="large"] .rows { display: flex; flex-direction: column; flex-wrap: wrap;
+    align-content: flex-start; overflow: hidden; min-height: 0; }
+  html[data-widget-size="large"] .row { width: 100%; }
+</style>
+</head>
+<body>
+  <main id="tap" role="link" tabindex="0" title="Open Pulls">
+    <div class="id"><img src="assets/icon.svg" alt=""><span>Pulls</span></div>
+    <div class="head">
+      <div class="hero"><span class="big" id="n">–</span><span class="cap">on you</span></div>
+      <div class="foot">
+        <div class="err" id="err"></div>
+        <div class="urgent" id="urgent"></div>
+        <div class="meta" id="meta"></div>
+      </div>
+      <div class="run bar-run" id="run" role="img" hidden></div>
+    </div>
+    <ol class="rows" id="rows"></ol>
+  </main>
+<script>
+(function () {
+  lucidos.ui.applyPreferences();
+  lucidos.ui.watchPreferences();
+  lucidos.sse.connect();
+  const $ = id => document.getElementById(id);
+  const esc = s => lucidos.utils.escapeHtml(String(s == null ? '' : s));
+  /* Everything here belongs to the Pulls app (review-cockpit), which this plugin doesn't ship. */
+  const APP = 'review-cockpit';
+  const MINE = 'artifacts/review-cockpit/my-prs.json';
+  const QUEUE = 'artifacts/review-cockpit/review-queue.json';
+  const ROWS = 4;
+
+  let present = true;
+  const open = () => { if (present) lucidos.ui.navigate('app', { app_id: APP }); };
+  $('tap').addEventListener('click', open);
+  $('tap').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  });
+
+  /* The buckets, most urgent first. A blocked PR of yours holds up a reviewer
+     waiting on your reply, a review holds up its author, and a merge waits
+     only on you. The first bucket with anything in it takes the accent. */
+  const BUCKETS = [
+    { key: 'blocked', bar: 'Blocked', urgent: n => `${n} blocked`, run: n => `${n} blocked` },
+    { key: 'review', bar: 'Review', urgent: n => `${n} to review`, run: n => `${n} to review` },
+    { key: 'merge', bar: 'Merge', urgent: n => `${n} to merge`, run: n => `${n} ready to merge` },
+  ];
+  const RANK = Object.fromEntries(BUCKETS.map((b, i) => [b.key, i]));
+
+  /* Mirrors Pulls (review-cockpit), so this count matches its badge. */
+  const ciFailed = p => /FAIL|ERROR|TIMED_OUT|CANCELL?ED/.test(String(p.ci || '').toUpperCase());
+  const approved = p => String(p.review_decision || '').toUpperCase() === 'APPROVED'
+    || (!p.review_decision && (p.approvals || []).length > 0);
+  function mineAction(p) {
+    if (p.draft || p.state === 'draft') return null;
+    if (p.mergeable === 'CONFLICTING' || p.state === 'conflict') return 'conflicts';
+    if (ciFailed(p)) return 'ci';
+    if ((p.unresolved_threads || (p.threads || []).length || 0) > 0) return 'comments';
+    if ((p.stale_reviewers || []).length) return 'rerequest';
+    if (approved(p) && p.mergeable === 'MERGEABLE') return 'merge';
+    return null;
+  }
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const REASON = {
+    conflicts: () => 'Merge conflicts',
+    ci: () => 'CI failing',
+    comments: p => plural(p.unresolved_threads || (p.threads || []).length, 'unresolved thread'),
+    rerequest: () => 'Re-request review',
+    merge: () => 'Ready to merge',
+  };
+  const shortRepo = r => String(r || '').split('/').pop();
+  const at = p => Date.parse(p.updated_at || p.pushed_at || p.created_at || '') || 0;
+
+  function model(mine, queue) {
+    const items = [];
+    let waiting = 0;
+    for (const p of mine) {
+      const act = mineAction(p);
+      if (act || p.on_me) {
+        items.push({
+          bucket: act === 'merge' ? 'merge' : 'blocked', title: p.title, at: at(p),
+          meta: `${act ? REASON[act](p) : (p.reason || 'On you')} · ${shortRepo(p.repo)} #${p.number}`,
+        });
+      } else if (!p.draft && p.state !== 'draft' && (p.waiting_on || []).length) {
+        waiting++;
+      }
+    }
+    for (const q of queue) {
+      if (q.assigned === false || q.reviewed_current) continue;
+      const again = !!q.my_review || /earlier head/i.test(q.requested_via || '');
+      items.push({
+        bucket: 'review', title: q.title, at: at(q),
+        meta: [again ? 'Re-review' : 'Review', `${q.repo_name || shortRepo(q.repo)} #${q.number}`, q.author].filter(Boolean).join(' · '),
+      });
+    }
+    items.sort((a, b) => RANK[a.bucket] - RANK[b.bucket] || b.at - a.at);
+    const counts = { blocked: 0, review: 0, merge: 0 };
+    items.forEach(it => counts[it.bucket]++);
+    return { items, counts, waiting };
+  }
+
+  function asOf(stamps) {
+    const t = Math.min(...stamps.map(s => Date.parse(s)).filter(Number.isFinite));
+    if (!Number.isFinite(t)) return '';
+    const d = new Date(t), now = new Date();
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return `as of ${time}`;
+    const day = now - d < 6 * 86400000
+      ? d.toLocaleDateString([], { weekday: 'short' })
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `as of ${day} ${time}`;
+  }
+
+  // The run is built once, so a new count slides its bar instead of redrawing it.
+  $('run').innerHTML = BUCKETS.map(b => `
+    <div class="bar-run-item" data-bucket="${b.key}">
+      <span class="bar-run-count">0</span><span class="bar-run-bar"></span><span class="bar-run-label">${b.bar}</span>
+    </div>`).join('');
+
+  /* A sweep that has never run has written no file yet: that is no data, not a failure. */
+  async function read(path) {
+    try {
+      const text = await lucidos.data.read(path);
+      return { text, json: JSON.parse(text) };
+    } catch (e) {
+      const missing = !!(e && e.httpCode === 404);
+      return { text: '', json: null, missing, err: !missing };
+    }
+  }
+
+  /* Only a 404 means the app is gone, so a failed lookup never hides a working Pulls. */
+  async function hasPulls() {
+    try { await lucidos.apps.get(APP); return true; } catch (e) { return !(e && e.httpCode === 404); }
+  }
+
+  let reads = 0, shown = null, first = true;
+  async function refresh() {
+    const read$ = ++reads;
+    try {
+      const [app, mine, queue] = await Promise.all([hasPulls(), read(MINE), read(QUEUE)]);
+      // The date is in the key so "as of 14:00" gains its day after midnight.
+      const key = app + '\u0000' + mine.text + '\u0000' + queue.text + '\u0000' + new Date().toDateString();
+      if (read$ !== reads || key === shown) return;
+      shown = key;
+      draw(app, mine, queue);
+    } finally {
+      lucidos.ui.ready();
+    }
+  }
+
+  function draw(app, mine, queue) {
+    /* Without the Pulls app, files it left behind are stale and a tap has nowhere to go: show none of them. */
+    const absent = !app, unswept = !absent && mine.missing && queue.missing;
+    const failed = absent ? [] : [mine.err && 'your PRs', queue.err && 'the review queue'].filter(Boolean);
+    const none = absent || (!mine.json && !queue.json);
+    const prs = f => (!absent && f.json && f.json.prs) || [];
+    const { items, counts, waiting } = model(prs(mine), prs(queue));
+    const total = items.length;
+    const top = BUCKETS.find(b => counts[b.key] > 0);
+    present = !absent;
+    $('tap').classList.toggle('absent', absent);
+    $('tap').title = absent ? 'The Pulls app is not installed' : 'Open Pulls';
+    $('tap').setAttribute('aria-disabled', String(absent));
+
+    const n = $('n'), next = none ? '–' : String(total);
+    if (!first && n.textContent !== next) {
+      n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump');
+    }
+    n.textContent = next;
+    n.classList.toggle('zero', none || total === 0);
+    $('urgent').textContent = top ? top.urgent(counts[top.key]) : (none ? '' : 'All clear');
+    $('urgent').classList.toggle('calm', !top);
+    $('err').textContent = absent ? 'Pulls app not installed' : unswept ? 'Pulls has no data yet'
+      : failed.length ? `Couldn't read ${failed.join(' or ')}` : '';
+    $('err').classList.toggle('calm', absent || unswept);
+
+    $('meta').innerHTML = absent ? '' : [
+      waiting ? `${waiting} waiting on others` : '',
+      asOf([mine.json && mine.json.generated_at, queue.json && queue.json.generated_at].filter(Boolean)),
+    ].filter(Boolean).map(s => `<span>${esc(s)}</span>`).join('');
+
+    const run = $('run');
+    run.hidden = none || total === 0;
+    const most = Math.max(1, ...Object.values(counts));
+    run.querySelectorAll('.bar-run-item').forEach(el => {
+      const c = counts[el.dataset.bucket];
+      el.style.setProperty('--bar-value', c / most);
+      el.querySelector('.bar-run-count').textContent = c;
+      el.classList.toggle('is-accent', !!top && el.dataset.bucket === top.key);
+      el.classList.toggle('is-zero', c === 0);
+    });
+    run.setAttribute('aria-label', BUCKETS.map(b => b.run(counts[b.key])).join(', '));
+
+    $('rows').innerHTML = items.slice(0, ROWS).map((it, i) => `
+      <li class="row${first ? ' entering' : ''}" style="--i:${i}">
+        <span class="pr-title">${esc(it.title)}</span>
+        <span class="pr-meta">${esc(it.meta)}</span>
+      </li>`).join('');
+    first = false;
+  }
+
+  /* Live: a sweep's write or its domain event re-reads, coalesced. While the
+     board hides the tile nothing is scheduled, and showing it reads again. */
+  let timer = null, hidden = !lucidos.widget.visible();
+  const soon = () => {
+    if (hidden) return;
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 1000);
+  };
+  const MINE_ARTIFACT = MINE.slice('artifacts/'.length), QUEUE_ARTIFACT = QUEUE.slice('artifacts/'.length);
+  const ifMine = d => { if (d && (d.artifact_path === MINE_ARTIFACT || d.artifact_path === QUEUE_ARTIFACT)) soon(); };
+  ['ArtifactCreated', 'ArtifactUpdated', 'ArtifactDeleted'].forEach(e => lucidos.sse.on(e, ifMine));
+  ['MyPrStatusSnapshotted', 'ReviewQueueSnapshotted', 'PrCommentResolutionFinished', 'PrConflictResolutionFinished', 'ReviewFindingsProduced']
+    .forEach(e => lucidos.sse.on(e, soon));
+  lucidos.sse.onOpen(soon);
+  lucidos.widget.onVisibility(visible => {
+    hidden = !visible;
+    clearTimeout(timer);
+    if (visible) refresh();
+  });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !hidden) refresh(); });
+  addEventListener('pageshow', e => { if (e.persisted && !hidden) refresh(); });
+  refresh();
+})();
+</script>
+</body>
+</html>

@@ -20,10 +20,14 @@ that survived triage kept apart from the mail triage hasn't seen yet, so a long 
   the same list. IMAP folders are read-only for archive and delete. Replying works everywhere.
 - **Careful reading**: remote images stay blocked until you allow them for a message. On an account where triage
   looks at unread mail, opening a message triage hasn't seen leaves it unread, so its next run still sees it.
+- **An Inbox widget for Home**: how many threads need you across every account, with how many aren't triaged
+  yet. A small tile shows the one number, medium adds a count per account that doubles as a filter, and large
+  adds the top few threads with the reason triage kept each one. Tap it to open the Inbox. It reads the same
+  accounts and triage results as the app, and needs no setup of its own.
 
 ## What it needs
 
-- Lucidos 0.47.1 or later.
+- Lucidos 0.48.0 or later.
 - The **Email Triage** plugin, 0.6.0 or later, installed and set up with at least one account. Inbox owns no
   accounts. It reads Email Triage's accounts, rules and results, and never triages anything itself. Without Email
   Triage it has nothing to show.
@@ -68,4 +72,4 @@ your back.
 ## Try first
 
 Open the Inbox app and look at an account's *Needs you* list. Press `?` for the shortcuts, `s` to summarize a
-thread, or `r` to reply and try Suggest.
+thread, or `r` to reply and try Suggest. Then pin the **Inbox** widget to Home from the board's Add.
