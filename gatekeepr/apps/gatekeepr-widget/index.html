@@ -69,8 +69,9 @@
   html[data-widget-size="small"] .when, html[data-widget-size="small"] .problem, html[data-widget-size="small"] .note { display: none; }
 
   /* Medium: the timer beside its text, on the room that is left under the label. */
-  html[data-widget-size="medium"] .stage { flex-direction: row; justify-content: flex-start; gap: var(--space-lg); }
-  html[data-widget-size="medium"] .timer { flex: none; align-self: stretch; aspect-ratio: 140 / 150; }
+  html[data-widget-size="medium"] .stage { flex-direction: row; justify-content: flex-start; gap: var(--space-lg); container-type: size; }
+  /* Sized from the stage's height (cqh), not by aspect-ratio on a stretched item: WebKit gives that a width of 0. */
+  html[data-widget-size="medium"] .timer { flex: none; align-self: stretch; width: calc(100cqh * 140 / 150); }
   html[data-widget-size="medium"] .readout { flex: 1 1 0; align-items: flex-start; }
   html[data-widget-size="medium"] .left.is-word { font-size: var(--font-size-2xl); }
   html[data-widget-size="medium"] .when { font-size: var(--font-size-md); }

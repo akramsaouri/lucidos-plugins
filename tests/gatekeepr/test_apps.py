@@ -78,6 +78,14 @@ class WidgetTileTest(unittest.TestCase):
             self.assertIn(f'html[data-widget-size="{size}"]', self.css)
         self.assertRegex(self.css, r"html\[data-widget-size\], html\[data-widget-size\] body \{[^}]*overflow: hidden")
 
+    def test_the_medium_timer_takes_its_width_from_the_stage_height(self):
+        # aspect-ratio on a stretched flex item with only an absolute child: WebKit resolves its width to 0, so the
+        # timer draws over the readout. The width comes from the stage's height in container query units instead.
+        medium_timer = re.search(r'html\[data-widget-size="medium"\] \.timer \{([^}]*)\}', self.css).group(1)
+        self.assertNotIn("aspect-ratio", medium_timer)
+        self.assertRegex(medium_timer, r"width: calc\(100cqh \* 140 / 150\)")
+        self.assertRegex(self.css, r'html\[data-widget-size="medium"\] \.stage \{[^}]*container-type: size')
+
     def test_the_style_uses_theme_tokens_and_rem_only(self):
         self.assertNotRegex(self.css, r"\d\s*px\b")
         self.assertNotRegex(self.css, r"#[0-9a-fA-F]{3,8}\b")
