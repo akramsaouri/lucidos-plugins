@@ -256,7 +256,7 @@
       n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump');
     }
     n.textContent = next;
-    n.classList.toggle('zero', !none && total === 0);
+    n.classList.toggle('zero', none || total === 0);
     $('urgent').textContent = top ? top.urgent(counts[top.key]) : (none ? '' : 'All clear');
     $('urgent').classList.toggle('calm', !top);
     $('err').textContent = absent ? 'Pulls app not installed' : unswept ? 'Pulls has no data yet'
