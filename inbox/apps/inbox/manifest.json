@@ -1,6 +1,6 @@
 {
   "name": "Inbox",
   "reveal": "on-ready",
-  "description": "One calm inbox across the mailboxes Email Triage watches: what survived triage (with the reason it was kept) and what hasn't been triaged yet, never mixed. Archive, delete and undo in one key or swipe, replies with AI suggest/polish, and one key to hand a thread to Lucidos. Each account's folders and labels fold away in the sidebar, to open in the same list when needed.",
+  "description": "One calm inbox across the mailboxes Email Triage watches: what survived triage (with the reason it was kept) and what hasn't been triaged yet, never mixed. Archive, delete and undo in one key or swipe, replies with AI suggest/polish, and one key to hand a thread to Lucidos. Each account's folders and labels fold away in the sidebar, to open in the same list when needed. The triage controls live there too: an All accounts health strip, and per account its next run, pause/resume, Triage now, the rule chain editor with unreachable-rule warnings, suggestions from runs and run history.",
   "icon": "assets/icon.svg"
 }

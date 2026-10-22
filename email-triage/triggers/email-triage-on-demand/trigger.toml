@@ -1,6 +1,6 @@
 name = "Email Triage — on demand"
 slug = "email-triage-on-demand"
-app_id = "email-triage"
+app_id = "inbox"
 reasoning_effort = "low"
 
 [[on]]
@@ -8,4 +8,4 @@ event_type = "EmailTriageRequested"
 
 [run]
 type = "intent"
-intent = "When I ask for a triage run from the Email Triage app, execute the email triage intent at triggers/email-triage/intents/triage.md for the account named in the request."
+intent = "When I ask for a triage run from the Inbox app's triage pane (its Triage now button), execute the email triage intent at triggers/email-triage/intents/triage.md for the account named in the request."

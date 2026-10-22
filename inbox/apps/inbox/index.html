@@ -9,8 +9,8 @@
 <script src="/api/v1/sdk.js"></script>
 <style>
   /* Account identity: one of five colours mixed from the theme's accents, picked by the account's position in
-   * Email Triage's config.json. Email Triage uses the same slots in the same order, so an account wears one colour
-   * in both apps. A sixth account starts the cycle again. */
+   * Email Triage's config.json, so an account wears one colour in its inbox, its triage pane and the Home widget.
+   * A sixth account starts the cycle again. */
   :root {
     --acct-0: var(--accent);
     --acct-1: var(--accent-green);
@@ -293,6 +293,116 @@
   .undo[hidden] { display: none; }
   .undo-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* ---------- triage: the pane takes the list's place (and the reader's beside it); triage.js draws it ---------- */
+  .pane-triage { display: none; padding: var(--space-lg) var(--space-lg) 6rem; min-width: 0; }
+  .pane-triage > * { max-width: 46rem; }
+  body.triage .pane-list, body.triage .pane-reader { display: none !important; }
+  body.triage .pane-triage { display: block; }
+  @media (max-width: 55.99rem) {
+    body.triage.mbx .pane-triage { display: none; }
+    body.triage:not(.mbx) .pane-triage { animation: push-in var(--duration-normal) ease-out; }
+  }
+  :root[data-motion="reduce"] .pane-triage { animation: none; }
+  @media (min-width: 56rem) {
+    .pane-triage { box-sizing: border-box; height: 100vh; overflow-x: hidden; overflow-y: auto; grid-row: 1; grid-column: 1 / -1; }
+    body.triage.mbx .pane-triage { grid-column: 2; }
+  }
+  @media (min-width: 72rem) {
+    .pane-triage, body.triage.mbx .pane-triage { grid-column: 2 / -1; }
+  }
+  .warn { color: var(--accent-yellow); }
+
+  /* Sidebar: the All accounts strip, and each account's Triage entry at the head of its folders. */
+  .tri-all:hover { background: none; }
+  .tri-all { display: flex; align-items: center; gap: var(--space-sm); width: 100%; box-sizing: border-box; min-height: 2.75rem; margin-bottom: var(--space-md); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xs); border: 1px solid var(--hairline); border-radius: var(--radius-surface); background: none; color: var(--text-secondary); font: inherit; text-align: left; cursor: pointer; }
+  @media (hover: hover) { .tri-all:hover { background: var(--bg-hover); color: var(--text-primary); } }
+  .tri-all.sel { background: var(--bg-selected); color: var(--text-primary); }
+  .tri-all:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+  .tri-all-ic { flex: none; display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: calc(var(--radius-surface) * 0.75); background: var(--bg-tertiary); color: var(--text-secondary); }
+  .tri-all-ic .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+  .tri-all-text { flex: 1; min-width: 0; display: grid; }
+  .tri-all-name { font-size: var(--font-size-md); font-weight: 600; }
+  .tri-all-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-xs); color: var(--text-muted); }
+  .tri-dots { flex: none; display: inline-flex; gap: 0.25rem; }
+  .tri-dot { width: 0.5rem; height: 0.5rem; box-sizing: border-box; border-radius: var(--radius-round); background: var(--acct); }
+  .tri-dot[data-health="paused"], .tri-dot[data-health="missing"] { background: none; border: 0.09375rem solid var(--acct); }
+  .tri-dot[data-health="warn"] { background: var(--accent-yellow); }
+  .tri-fold .tri-sub { display: inline-flex; align-items: center; gap: var(--space-xs); }
+  .tri-fold[data-health="paused"] .tri-sub, .tri-fold[data-health="warn"] .tri-sub, .tri-fold[data-health="missing"] .tri-sub { color: var(--accent-yellow); font-weight: 600; }
+
+  /* The pane: one column of sections, phone width up. */
+  .tri-body { display: grid; gap: var(--space-xl); margin-top: var(--space-md); }
+  .tri-sec { display: grid; gap: var(--space-md); min-width: 0; }
+  .tri-sec-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); }
+  .tri-sec-head .title { margin: 0; font-size: var(--font-size-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+  .tri-hint { margin-left: auto; font-size: var(--font-size-xs); color: var(--text-muted); }
+  .tri-pills { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+  .pane-triage .label.pill { display: inline-flex; align-items: center; gap: var(--space-xs); }
+  .pane-triage .label .ic { width: 0.875rem; height: 0.875rem; }
+  .pill-dot { flex: none; width: 0.375rem; height: 0.375rem; border-radius: var(--radius-round); background: currentColor; }
+  .tri-actions { flex-wrap: wrap; }
+  .tri-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--space-md) var(--space-lg); margin: 0; padding: var(--space-md); border-radius: var(--radius-surface); background: var(--bg-secondary); }
+  .tri-details div { min-width: 0; }
+  .tri-details dt { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .tri-details dd { margin: 0; font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+  .tri-group { display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--hairline); border-radius: var(--radius-surface); overflow: hidden; }
+  .tri-group > * + * { border-top: 1px solid var(--hairline); }
+  .tri-empty { padding: var(--space-lg) var(--space-md); font-size: var(--font-size-sm); color: var(--text-muted); text-align: center; }
+  .tri-card { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); gap: var(--space-md); padding: var(--space-md); }
+  .tri-card.is-paused .chip { opacity: 0.55; }
+  .tri-card-main { display: grid; gap: var(--space-sm); min-width: 0; }
+  .tri-card-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-sm); font-size: var(--font-size-xs); }
+  .tri-name { font-size: var(--font-size-md); font-weight: 600; color: var(--text-primary); }
+  .tri-meta { display: flex; flex-wrap: wrap; gap: 0 var(--space-md); font-size: var(--font-size-xs); color: var(--text-muted); }
+  .tri-lede { margin: 0; font-size: var(--font-size-sm); line-height: 1.5; color: var(--text-secondary); }
+  .tri-rule { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto auto; align-items: start; gap: var(--space-xs) var(--space-md); padding: var(--space-sm) var(--space-md); font-size: var(--font-size-sm); }
+  .tri-rule-n { display: inline-grid; place-items: center; min-height: 1.5rem; font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .tri-rule-n .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+  .tri-rule-expr { display: grid; gap: var(--space-xs); min-width: 0; }
+  .tri-expr { line-height: 1.6; overflow-wrap: anywhere; }
+  .tri-expr code { padding: 0 0.25rem; border-radius: var(--radius-control); background: var(--bg-tertiary); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+  .tri-rule-tools { display: flex; justify-content: flex-end; gap: 0.125rem; margin-top: -0.25rem; }
+  @media (max-width: 40rem) { .tri-rule { grid-template-columns: 1.75rem minmax(0, 1fr) auto; } .tri-rule-tools { grid-column: 2 / -1; margin-top: 0; } }
+  .tri-rule.dead .tri-rule-n { color: var(--text-muted); text-decoration: line-through; }
+  .tri-rule.dead .tri-expr, .tri-rule.dead .tri-rule-act { opacity: 0.5; }
+  .tri-rule.dead .tri-expr code { text-decoration: line-through; text-decoration-color: var(--text-muted); }
+  .tri-dead { display: flex; align-items: flex-start; gap: var(--space-xs); font-size: var(--font-size-xs); color: var(--accent-yellow); }
+  .tri-dead .ic { width: 0.875rem; height: 0.875rem; margin-top: 0.125rem; }
+  .tri-act { --tone: var(--text-secondary); background: color-mix(in srgb, var(--tone) 14%, transparent); color: var(--tone); }
+  .tri-act[data-action="skip"] { --tone: var(--text-muted); }
+  .tri-act[data-action="delete"] { --tone: var(--accent-red); }
+  .tri-act[data-action="flag"], .tri-act[data-action="notify"] { --tone: var(--accent-yellow); }
+  .tri-act[data-action="triage"] { --tone: var(--accent); }
+  .tri-act[data-action="todo"], .tri-act[data-action="label"] { --tone: var(--accent-green); }
+  .tri-act[data-action="calendar"] { --tone: var(--accent-light); }
+  .tri-act[data-action="notion"] { --tone: color-mix(in srgb, var(--accent-red) 45%, var(--accent)); }
+  .tri-add:hover { background: none; }
+  .tri-add { width: 100%; grid-template-columns: 1.75rem minmax(0, 1fr); align-items: center; border: 0; border-radius: 0; background: none; color: var(--accent); font: inherit; font-size: var(--font-size-sm); text-align: left; cursor: pointer; }
+  @media (hover: hover) { .tri-add:hover { background: var(--bg-hover); } }
+  .tri-add:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+  .tri-rule.terminal { grid-template-columns: 1.75rem minmax(0, 1fr); background: var(--bg-secondary); }
+  .tri-rule.terminal .tri-rule-expr { justify-items: start; }
+  .tri-term { font-weight: 600; }
+  .tri-term-sub { font-size: var(--font-size-xs); line-height: 1.5; color: var(--text-muted); }
+  .tri-editor { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-sm) var(--space-md); padding: var(--space-md); background: color-mix(in srgb, var(--accent) 6%, var(--bg-secondary)); }
+  .tri-editor-title { grid-column: 1 / -1; font-size: var(--font-size-sm); font-weight: 600; }
+  .tri-editor label { display: grid; gap: var(--space-xs); min-width: 0; font-size: var(--font-size-xs); color: var(--text-muted); }
+  .tri-editor .wide { grid-column: 1 / -1; }
+  .tri-editor .text-input, .tri-editor select { width: 100%; box-sizing: border-box; }
+  @media (max-width: 32rem) { .tri-editor { grid-template-columns: minmax(0, 1fr); } }
+  .tri-sugg { display: grid; grid-template-columns: var(--icon-size-md) minmax(0, 1fr); gap: var(--space-md); padding: var(--space-md); font-size: var(--font-size-sm); }
+  .tri-sugg .ic { color: var(--accent-yellow); }
+  .tri-sugg p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+  .tri-when { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .tri-run { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: var(--space-md); padding: var(--space-sm) var(--space-md); }
+  .tri-run:not(:has(.chip)) { grid-template-columns: minmax(0, 1fr); }
+  .tri-run-main { display: grid; gap: 0.125rem; min-width: 0; }
+  .tri-run-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-sm); }
+  .tri-run-who { font-size: var(--font-size-sm); font-weight: 600; color: var(--acct); }
+  .tri-run-sum { font-size: var(--font-size-sm); line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
+  .tri-count { font-size: var(--font-size-2xs); }
+  .tri-pager { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-top: var(--space-sm); }
+
   @media (pointer: coarse) {
     .keys { display: none; }
     /* Real 2.75rem (44pt) targets on touch: an invisible hit-slop overlaps neighbours in a tight row. */
@@ -319,6 +429,10 @@
     .back-link { min-height: 2.75rem; padding-inline: var(--space-sm) var(--space-md); }
     .row-from, .row-subject { font-size: var(--font-size-lg); }
     .row-why { font-size: var(--font-size-md); }
+    .tri-all { min-height: 3.25rem; }
+    .tri-all-name { font-size: var(--font-size-lg); }
+    .tri-editor .text-input { min-height: 2.75rem; font-size: var(--font-size-lg); }
+    .tri-add { min-height: 2.75rem; }
   }
 </style>
 </head>
@@ -341,6 +455,7 @@
     <p class="keys keys-line" id="keys-line"></p>
   </main>
   <section id="reader" class="pane-reader" aria-live="polite"></section>
+  <section id="triage" class="pane-triage" aria-label="Triage"></section>
 </div>
 <dialog id="comp" class="comp-modal" aria-label="Reply"></dialog>
 <div id="undo" class="undo" hidden role="status">
@@ -349,6 +464,7 @@
 </div>
 <script src="purify.min.js"></script>
 <script src="mail.js"></script>
+<script src="triage.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

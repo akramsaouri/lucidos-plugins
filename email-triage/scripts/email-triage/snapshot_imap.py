@@ -31,7 +31,7 @@ by a `read` action or a `no_action_clear: "read"` verdict.
 
 Usage
 -----
-    python data/apps/email-triage/scripts/snapshot_imap.py --account "Outlook" [--limit 50]
+    python data/scripts/email-triage/snapshot_imap.py --account "Outlook" [--limit 50]
 
 Config
 ------

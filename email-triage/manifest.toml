@@ -1,7 +1,7 @@
 id = "email-triage"
-version = "0.6.2"
+version = "0.7.0"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Works with Gmail over its API and with plain IMAP mailboxes that have no API or OAuth, just a host and a password. Ships a control panel app with per-account “Triage now” and Pause/Resume (individually or all at once), the triage engine knowhow, the per-account intent, the on-demand trigger that button fires, and peek-based IMAP helpers so reading a message to triage it never marks it read. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Works with Gmail over its API and with plain IMAP mailboxes that have no API or OAuth, just a host and a password. Ships the triage engine knowhow, the per-account intent, the on-demand trigger behind “Triage now”, and peek-based IMAP helpers so reading a message to triage it never marks it read. Its controls (per-account health, Pause/Resume, Triage now, the rule chain editor, suggestions and run history) live in the Inbox plugin, which you should install alongside it; this plugin no longer ships an app of its own. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 engine = ">=0.47.1"
 categories = ["productivity", "communication", "automation"]
@@ -12,6 +12,18 @@ setup = """
 rules, and cron triggers all carry over untouched. Tell the user what changed in
 one line and stop. Do NOT re-run the steps below and do NOT create another
 on-demand trigger. Only continue if they ask you to add a new account.
+
+- **Updating to 0.7.0:** the Email Triage app is gone; this update removes `apps/email-triage`.
+  Its controls moved into the **Inbox** plugin (0.2.0 or later): a Triage entry per account in
+  Inbox's sidebar, and an All accounts strip, with the same Pause/Resume, Triage now, rule editor,
+  suggestions and run history. Accounts, rules, cron triggers and run history carry over untouched,
+  and pausing still writes the same `"paused": true`. Check the newest `PluginInstalled` event for
+  `inbox`: if it isn't installed, or is older than 0.2.0, recommend installing or updating it, since
+  without it the rules and pauses are hand edits to `config.json`. The peek snapshot script moved
+  from `apps/email-triage/scripts/snapshot_imap.py` to `scripts/email-triage/snapshot_imap.py` (the
+  intent and knowhow already point there). If the user has their own trigger or note that runs the
+  old path, update it. The on-demand trigger now belongs to the Inbox app (`app_id = "inbox"`) and
+  still answers the same `EmailTriageRequested` event.
 
 - **Updating to 0.6.0:** a visual redesign of the Email Triage app: an account rail (a chip
   row on phones) that scopes every view to all accounts or one mailbox, one colour per
@@ -97,8 +109,8 @@ Then, per account the user wants triaged:
 2. **Build a starting rule chain.** Don't ask them to write rules — ask what
    they want gone (`delete`), what they want silenced but kept (`read`), and
    what should always escalate (`notify` / `flag`), then turn the answers into
-   rules. A first chain of 2–5 rules is plenty; the app's Rules tab is where
-   they'll grow it.
+   rules. A first chain of 2–5 rules is plenty; the rule editor in Inbox's
+   Triage pane is where they'll grow it.
 
 3. **Ask what happens to mail the AI judges as needing nothing** — the account's
    `no_action_clear`: `read` (mark read, keep), `delete` (Trash), or `keep`.
@@ -120,13 +132,16 @@ Then, per account the user wants triaged:
 
    The **on-demand** trigger is already live — it ships with the plugin and was
    registered at install. It listens for `EmailTriageRequested` and is what the
-   app's per-account "Triage now" button fires, running the same intent your
+   per-account "Triage now" button in Inbox's Triage pane fires, running the same intent your
    cron triggers run. Do NOT create a second one.
 
-Write the accounts into `artifacts/email-triage/config.json`. The app reads that
-file, so it flips from its setup screen to the real dashboard as soon as the
-first account lands.
+Write the accounts into `artifacts/email-triage/config.json`. Inbox reads that
+file, so each account shows up there with its Triage entry as soon as it lands.
 
 Finally, tell them the first run is silent unless something actually needs them —
-that's the design, not a failure. Point them at the Email Triage app to watch it.
+that's the design, not a failure. The controls live in the **Inbox** plugin: if it
+isn't installed, recommend installing it (its own setup wires up reading the mail),
+then point them at each account's **Triage** entry in Inbox's sidebar to watch runs,
+edit rules and pause. Without Inbox, triage still runs on schedule; rule and pause
+changes are then edits to `config.json`.
 """

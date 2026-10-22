@@ -1,6 +1,6 @@
 ---
 name: Inbox
-description: How the Inbox app (the inbox plugin) reads Email Triage's accounts and results, its settings file (Gmail proxy per account, display name, reply voice, AI provider), the IMAP bridge trigger and its event protocol, and what to check when an account shows a red dot or the bridge doesn't answer. Load when setting up Inbox, adding an account to it, or debugging it
+description: How the Inbox app (the inbox plugin) reads Email Triage's accounts and results, its settings file (Gmail proxy per account, display name, reply voice, AI provider), the IMAP bridge trigger and its event protocol, where Email Triage's controls live (the Triage pane), and what to check when an account shows a red dot or the bridge doesn't answer. Load when setting up Inbox, adding an account to it, or debugging it
 ---
 
 # Inbox
@@ -15,14 +15,19 @@ inbox is split into two zones that never mix:
 
 Folders and labels are browsed on demand outside the zones: see `apps/inbox/knowhow/folders.md`.
 
+Inbox is also Email Triage's control panel (Email Triage 0.7.0 dropped its own app). A **Triage** entry heads each
+account's folders and an **All accounts** strip tops the sidebar; both open the Triage pane in the list's place:
+health and next run, pause/resume, Triage now, the rule chain editor, suggestions from runs and run history. It
+writes Email Triage's `config.json` and emits `EmailTriageRequested`: see `apps/inbox/knowhow/triage.md`.
+
 ## Accounts
 
 Inbox lists Email Triage's accounts (`artifacts/email-triage/config.json`) in config order.
 
 - **Label**: `accounts["<name>"].label` from the settings below, else the config name with only a `Gmail - `
   prefix dropped, the way Email Triage shows it.
-- **Colour**: one of five theme-mixed colours, by the account's position in config.json. Email Triage picks the
-  same slot, so an account wears one colour in both apps.
+- **Colour**: one of five theme-mixed colours, by the account's position in config.json, so an account wears
+  one colour in its inbox, its triage pane and the widget.
 - **How it is read** follows the block's `fetch`:
 
 | `fetch` | Read and changed through |
@@ -80,8 +85,8 @@ Per account, by Email Triage's slug (the name lowercased and hyphenated, only a 
   left each mail in the inbox. Email Triage doesn't write this file. A workspace whose triage intent does gets a
   reason under every kept row. Without it, rows fall back to the triage snapshot's summary, or a generic reason.
 - `EmailTriageCompleted` events: the last run per account, and today's cleared count for the empty state.
-- Each account's cron trigger, matched by name the same way Email Triage's app does: its next run and paused
-  state show in the reader.
+- Each account's cron trigger, matched by name (`triggerFor` in `mail.js`): its next run and paused state show
+  in the reader, and the triage pane pauses and resumes it.
 
 Opening an unread mail marks it read only when that can't hide it from triage: in the Needs you zone, or on a
 shared account. On an unread-only account an untriaged mail stays unread when opened, so its next run still

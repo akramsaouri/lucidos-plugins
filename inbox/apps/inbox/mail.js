@@ -10,8 +10,7 @@
   'use strict';
 
   const CONFIG = 'artifacts/email-triage/config.json', SETTINGS = 'artifacts/inbox/settings.json', CACHE = 'artifacts/inbox/cache/';
-  /* How many account colours index.html defines. Email Triage picks the same slot from the same config order,
-   * so an account wears one colour in both apps. */
+  /* How many account colours index.html defines, picked by the account's position in config order. */
   const COLOURS = 5;
   /* key -> account, and the keys in config order. Filled in place by useAccounts, so app.js can hold on to them. */
   const ACCOUNTS = {};
@@ -168,9 +167,9 @@
     return m;
   }
 
-  /* Email Triage's own matcher, so both apps agree which cron trigger is whose: punctuation-blind, cron
-   * triggers only (the on-demand one serves every account), and never a trigger naming a longer account name
-   * that contains this one. */
+  /* Which cron trigger is whose, as Email Triage's own pause logic matched it: punctuation-blind, cron triggers
+   * only (the on-demand one serves every account), and never a trigger naming a longer account name that contains
+   * this one. The triage pane pauses and resumes what this finds. */
   const words = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   function triggerFor(name, triggers, names) {
     const short = words(shortName(name));
@@ -179,6 +178,21 @@
       const n = words(t.name);
       return n.includes('triage') && (t.cron_expressions || []).length && n.includes(short) && !longer.some(s => n.includes(s));
     });
+  }
+
+  /* What one account's config block and cron trigger say about it. loadContext uses it, and so does the triage
+   * pane after it writes config.json, so an edited rule chain reaches classify() without a reload. */
+  function configCtx(acc, config, triggers) {
+    const a = ACCOUNTS[acc];
+    const trig = triggerFor(a.cfg, triggers, ORDER.map(k => ACCOUNTS[k].cfg));
+    const cfg = ((config && config.accounts) || {})[a.cfg] || {};
+    return {
+      nextRun: trig && !trig.paused && trig.next_run ? Date.parse(trig.next_run) : null,
+      paused: !!(cfg.paused || (trig && trig.paused)),
+      /* Shared accounts fetch a date window instead of the unread set, so read state doesn't decide what triage sees. */
+      windowed: !!(cfg.shared || cfg.fetch_scope === 'window'),
+      rules: cfg.rules || [],
+    };
   }
 
   /* Reads the config and settings, refreshes ACCOUNTS / ORDER, then everything triage left behind per account.
@@ -192,26 +206,19 @@
       lucidos.triggers.list().catch(() => []),
     ]);
     useAccounts(buildAccounts(config, settings || {}));
-    const names = ORDER.map(k => ACCOUNTS[k].cfg);
     const per = {};
     await Promise.all(ORDER.map(async acc => {
       const a = ACCOUNTS[acc];
       const [state, triage, notified, kept] = await Promise.all(['state', 'triage', 'notified', 'kept'].map(k => readJson(`artifacts/email-triage/${k}-${a.slug}.json`, {})));
       const ev = (events || []).find(e => e.payload && e.payload.account_results && e.payload.account_results[a.cfg]);
       const times = [state.last_run, triage.triaged_at, ev && ev.created].filter(Boolean).map(t => Date.parse(t)).filter(n => !isNaN(n));
-      const trig = triggerFor(a.cfg, triggers, names);
-      const cfg = (config.accounts || {})[a.cfg] || {};
-      per[acc] = {
+      per[acc] = Object.assign({
         lastRun: times.length ? Math.max(...times) : null,
-        nextRun: trig && !trig.paused && trig.next_run ? Date.parse(trig.next_run) : null,
-        paused: !!(cfg.paused || (trig && trig.paused)),
-        /* Shared accounts fetch a date window instead of the unread set, so read state doesn't decide what triage sees. */
-        windowed: !!(cfg.shared || cfg.fetch_scope === 'window'),
-        rules: cfg.rules || [],
+      }, configCtx(acc, config, triggers), {
         reasons: indexReasons(kept, triage),
         notified: new Set(((notified && notified.notified) || []).map(n => String(n.id))),
         processed: new Set(((state && state.processed) || []).flatMap(p => [p.id, p.uid]).filter(x => x != null).map(String)),
-      };
+      });
     }));
     const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
     let cleared = 0;
@@ -629,7 +636,7 @@
   }
 
   window.Mail = {
-    ACCOUNTS, ORDER, useAccounts, snapshot, keyOf, voiceOf, loadContext, classify, listGmail, listImap, listFolders, listFolder, readImapFolder,
+    ACCOUNTS, ORDER, useAccounts, snapshot, keyOf, voiceOf, loadContext, configCtx, triggerFor, classify, listGmail, listImap, listFolders, listFolder, readImapFolder,
     act, undo, loadThread, inlineImages, attachmentUrl, replyDraft, sendReply, imap, onImap: fn => listeners.push(fn), ai, clean, htmlText,
     parseAddr, displayName,
   };

@@ -58,6 +58,8 @@
     view: null, mbx: false, folderLists: new Map(), folderData: new Map(), foldersOpen: new Set(), moreOpen: new Set(), listScroll: 0,
     /* Threads archived from a folder view: hidden from the inbox, still listed in their folder. */
     keepInFolder: new Set(),
+    /* The triage pane in the list's place: 'all', an account, or null. triage.js draws it. */
+    triage: null,
   };
   const FOLDERS_TTL = 10 * 60e3, FOLDER_TTL = 2 * 60e3;
 
@@ -254,12 +256,46 @@
   function openFolder(acc, id) {
     const l = S.folderLists.get(acc), f = l && l.items && l.items.find(x => x.id === id);
     if (!f) return;
-    Object.assign(S, { view: { account: acc, id: f.id, name: f.name, folder: f }, filter: acc, sel: null });
+    Object.assign(S, { view: { account: acc, id: f.id, name: f.name, folder: f }, filter: acc, sel: null, triage: null });
     closeMbx();
     render();
     toListTop();
     loadFolder();
   }
+  /* ---------- triage pane ---------- */
+  function openTriage(scope) {
+    if (scope !== 'all' && !A[scope]) return;
+    if (S.open) closeReader(true);
+    Object.assign(S, { triage: scope, view: null, sel: null });
+    closeMbx();
+    render();
+    const pane = $('triage');
+    if (wide()) pane.scrollTop = 0; else window.scrollTo(0, 0);
+  }
+  function exitTriage() {
+    if (!S.triage) return;
+    S.triage = null;
+    render();
+    toListTop();
+  }
+  function renderTriage() {
+    /* A config edit can drop the open account: fall back to the inbox rather than draw a pane for nothing. */
+    if (S.triage && S.triage !== 'all' && !A[S.triage]) S.triage = null;
+    document.body.classList.toggle('triage', !!S.triage);
+    if (S.triage) Triage.render(S.triage, { tap: !three() });
+  }
+  /* triage.js wrote config.json (or reloaded it): put each account's rules, pause and window through the same
+   * configCtx path loadContext uses, and re-run classify so reasons and hints follow without a reload. A context
+   * from the cache has no reasons to classify with; the live load that follows it does. */
+  function applyConfig(config, triggers) {
+    if (!S.ctx || !S.ctx.full) return;
+    for (const a of M.ORDER) S.ctx.per[a] = Object.assign(S.ctx.per[a] || {}, M.configCtx(a, config, triggers));
+    S.threads = S.threads.map(t => M.classify(t, S.ctx));
+    saveCache();
+    /* An open reader keeps its why line until it is reopened: redrawing it would reload the mail frames. */
+    renderList();
+  }
+
   function exitFolder() {
     if (!S.view) return;
     Object.assign(S, { view: null, sel: null });
@@ -330,7 +366,7 @@
     return { kept, fresh, all: kept.concat(fresh) };
   }
 
-  function render() { renderSide(); renderHead(); renderFilters(); renderFresh(); renderList(); if (!S.open) renderReader(); }
+  function render() { renderSide(); renderHead(); renderFilters(); renderFresh(); renderList(); renderTriage(); if (!S.open) renderReader(); }
 
   function counts() {
     const n = {};
@@ -341,8 +377,9 @@
   function renderSide() {
     const n = counts();
     $('side').innerHTML = `<div class="side-head"><button class="back-link narrow-only" data-act="mbx-close">${ic('chevL')}Back</button><h2 class="side-title">Mailboxes</h2></div>` +
+      (M.ORDER.length ? Triage.sideAllHtml(S.triage === 'all') : '') +
       M.ORDER.map(a => {
-        const sel = S.filter === a && !S.view, open = S.foldersOpen.has(a), l = A[a].label;
+        const sel = S.filter === a && !S.view && !S.triage, open = S.foldersOpen.has(a), l = A[a].label;
         return `<div class="mbx-acct" data-acct="${slot(a)}">
           <div class="mbx-row${sel ? ' sel' : ''}">
             <button class="mbx-main" data-filter="${a}"${sel ? ' aria-current="page"' : ''}><span class="chip" aria-hidden="true">${esc(initial(l))}</span><span class="mbx-name">${esc(l)}</span>${S.errors[a] ? `<span class="mbx-err" data-tooltip="${attr(S.errors[a])}" aria-label="Not loaded"></span>` : ''}${n[a] ? `<span class="mbx-n">${n[a]}</span>` : ''}</button>
@@ -353,14 +390,15 @@
       }).join('');
   }
 
+  /* The account's Triage entry leads its group and never waits on the folder list. */
   function foldersHtml(a) {
-    const c = S.folderLists.get(a) || {};
+    const c = S.folderLists.get(a) || {}, tri = Triage.sideEntryHtml(a, S.triage === a);
     if (!c.items) {
-      if (c.err) return `<div class="mbx-folders"><div class="fold-note">Couldn't list folders: ${esc(c.err)} · <button class="accent-link" data-folders-retry="${a}">Retry</button></div></div>`;
-      return `<div class="mbx-folders" aria-busy="true"><div class="fold-sk"></div><div class="fold-sk"></div><div class="fold-sk"></div>${A[a].kind === 'imap' ? '<div class="fold-note">Asking the mail server…</div>' : ''}</div>`;
+      if (c.err) return `<div class="mbx-folders">${tri}<div class="fold-note">Couldn't list folders: ${esc(c.err)} · <button class="accent-link" data-folders-retry="${a}">Retry</button></div></div>`;
+      return `<div class="mbx-folders" aria-busy="true">${tri}<div class="fold-sk"></div><div class="fold-sk"></div><div class="fold-sk"></div>${A[a].kind === 'imap' ? '<div class="fold-note">Asking the mail server…</div>' : ''}</div>`;
     }
     const main = c.items.filter(f => f.group === 'main'), more = c.items.filter(f => f.group === 'more'), moreOpen = S.moreOpen.has(a);
-    return `<div class="mbx-folders" role="group" aria-label="${attr(A[a].label)} folders">${main.map(f => foldHtml(a, f)).join('')}` +
+    return `<div class="mbx-folders" role="group" aria-label="${attr(A[a].label)} folders">${tri}${main.map(f => foldHtml(a, f)).join('')}` +
       (more.length ? `<button class="fold fold-more" data-more="${a}" aria-expanded="${moreOpen}">${ic('chevR')}<span class="fold-name">More</span><span class="fold-n">${more.length}</span></button>${moreOpen ? more.map(f => foldHtml(a, f)).join('') : ''}` : '') +
       (c.items.length ? '' : '<div class="fold-note">No folders</div>') +
       (c.err ? `<div class="fold-note">Refresh failed: ${esc(c.err)}</div>` : '') + '</div>';
@@ -1074,8 +1112,10 @@
   /* ---------- input ---------- */
   document.addEventListener('click', e => {
     if (S.menu && !e.target.closest('[data-act="more"]')) { S.menu = false; renderActions(); }
+    const tri = e.target.closest('[data-triage]');
+    if (tri) { openTriage(tri.dataset.triage); return; }
     const f = e.target.closest('[data-filter]');
-    if (f) { Object.assign(S, { filter: f.dataset.filter, view: null }); closeMbx(); render(); toListTop(); return; }
+    if (f) { Object.assign(S, { filter: f.dataset.filter, view: null, triage: null }); closeMbx(); render(); toListTop(); return; }
     const fo = e.target.closest('[data-folder]');
     if (fo) { const v = fo.dataset.folder, i = v.indexOf('|'); openFolder(v.slice(0, i), v.slice(i + 1)); return; }
     const disc = e.target.closest('[data-folders]');
@@ -1101,6 +1141,7 @@
       case 'mbx-open': openMbx(); break;
       case 'mbx-close': closeMbx(); break;
       case 'inbox': exitFolder(); break;
+      case 'triage-exit': if (S.triage !== 'all') S.filter = S.triage; exitTriage(); break;
       case 'folder-retry': loadFolder(true); break;
       case 'undo': popUndo(); break;
       case 'back': closeReader(); break;
@@ -1160,7 +1201,7 @@
     return {
       j: () => S.open ? step(1) : move(1), ArrowDown: () => move(1), k: () => S.open ? step(-1) : move(-1), ArrowUp: () => move(-1),
       Enter: () => S.sel && S.sel !== S.open && openThread(S.sel), o: () => S.sel && S.sel !== S.open && openThread(S.sel),
-      Escape: () => { if (S.menu) { S.menu = false; renderActions(); } else if (S.open) closeReader(); else if (S.mbx) closeMbx(); else if (S.view) exitFolder(); },
+      Escape: () => { if (S.menu) { S.menu = false; renderActions(); } else if (S.open) closeReader(); else if (S.mbx) closeMbx(); else if (S.triage) exitTriage(); else if (S.view) exitFolder(); },
       e: () => t && act(t.key, 'done'), '#': () => t && act(t.key, 'delete'), Delete: () => t && act(t.key, 'delete'),
       r: () => reply(false), R: () => reply(true), a: () => t && ask(t), s: () => S.open && summarize(), z: () => popUndo(),
       '/': () => $('search').focus(), '?': () => lucidos.ui.toast(KEYS, 'info', { title: 'Keys', durationMs: 8000 }),
@@ -1177,6 +1218,8 @@
     }
     if (typing) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    /* The triage pane hides the list: its keys would act on rows nobody can see. */
+    if (S.triage && e.key !== 'Escape' && e.key !== 'z') return;
     const run = shortcut(e.key);
     if (run) { e.preventDefault(); run(); }
   });
@@ -1227,7 +1270,7 @@
   })();
 
 
-  matchMedia('(min-width: 72rem)').addEventListener('change', () => { if (three()) closeMbx(); renderHead(); });
+  matchMedia('(min-width: 72rem)').addEventListener('change', () => { if (three()) closeMbx(); renderHead(); renderTriage(); });
 
   lucidos.sse.on('EmailTriageCompleted', () => setTimeout(load, 1500));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - S.loadedAt > 120e3) load(); });
@@ -1274,7 +1317,11 @@
     render();
     renderReader();
     if (S.threads.length) lucidos.ui.ready();
+    /* The triage pane reads per-account files by Mail's account list, which the first live load may change. */
+    const accountsBefore = M.ORDER.join('\n');
+    const triageReady = Triage.init({ el: $('triage'), refresh: () => { renderSide(); renderTriage(); }, onConfig: applyConfig });
     await load();
+    if (M.ORDER.join('\n') !== accountsBefore) triageReady.then(() => Triage.load());
     requestImapSync(3 * 60e3);
   })();
 })();

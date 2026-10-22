@@ -9,14 +9,14 @@ Triage unseen emails for the specified account.
 0. **Check `paused` first.** If the account's config block has `"paused": true`, stop
    immediately: fetch nothing, change nothing, notify nothing, and emit no
    `EmailTriageCompleted` event. A paused account is off, whether this run came from its
-   cron trigger or from the app's "Triage now" button.
+   cron trigger or from the "Triage now" button in the Inbox app's triage pane.
 1. Load config from `artifacts/email-triage/config.json` for this account
 2. Fetch emails:
    - **Never read a message with `read_email`** — it marks the message read, wiping
      genuine unread state. Fetch by the account's `fetch` setting:
      - `"gmail-api"`: list and read over the Gmail API, which never changes read state.
      - `"imap-peek"` (Outlook/Exchange and other plain-IMAP mailboxes): run
-       `python data/apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50`
+       `python data/scripts/email-triage/snapshot_imap.py --account "<name>" --limit 50`
        first, then work from `artifacts/email-triage/inbox-<slug>.json`.
      - `"imap"` (password-only mailboxes with no API and no OAuth): use
        `python data/scripts/email-triage/imap_helper.py <command> --account "<name>"` — `list`
