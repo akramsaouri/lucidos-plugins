@@ -3,6 +3,7 @@
 [Email Triage](https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage) decides what needs you.
 Inbox is where you read and act on it: one calm inbox across every mailbox Email Triage watches, with the mail
 that survived triage kept apart from the mail triage hasn't seen yet, so a long list never hides what matters.
+It is also where you run triage: its rules, schedules and pauses.
 
 ## What you get
 
@@ -18,6 +19,11 @@ that survived triage kept apart from the mail triage hasn't seen yet, so a long 
   such as "draft a polite no".
 - **Folders and labels**: each account's folders (IMAP) or labels (Gmail) fold away in the sidebar and open in
   the same list. IMAP folders are read-only for archive and delete. Replying works everywhere.
+- **Triage controls**: each account's sidebar group starts with a **Triage** entry showing its next run, or that
+  it's paused. It opens the account's health, Pause / Resume, **Triage now**, the rule chain editor (rules run
+  top to bottom, first match wins, and a rule an earlier one makes unreachable is dimmed), what happens to mail
+  the AI says needs nothing, suggestions runs leave behind, and run history. An **All accounts** strip at the top
+  of the sidebar shows every account's health at a glance, with Pause all and Triage all accounts.
 - **Careful reading**: remote images stay blocked until you allow them for a message. On an account where triage
   looks at unread mail, opening a message triage hasn't seen leaves it unread, so its next run still sees it.
 - **An Inbox widget for Home**: how many threads need you across every account, with how many aren't triaged
@@ -28,7 +34,7 @@ that survived triage kept apart from the mail triage hasn't seen yet, so a long 
 ## What it needs
 
 - Lucidos 0.48.0 or later.
-- The **Email Triage** plugin, 0.6.0 or later, installed and set up with at least one account. Inbox owns no
+- The **Email Triage** plugin, 0.7.0 or later, installed and set up with at least one account. Inbox owns no
   accounts. It reads Email Triage's accounts, rules and results, and never triages anything itself. Without Email
   Triage it has nothing to show.
 - For each **Gmail** account, a Lucidos API proxy that carries that mailbox's OAuth token. Setup reuses one Email
@@ -64,6 +70,11 @@ An app can't speak IMAP or SMTP, so for password IMAP accounts Inbox asks a scri
 agent or a script is refused, so a triage run misled by a crafted email can't make the bridge trash or send
 anything. A sync, which only reads, is all an agent can ask for.
 
+The triage controls edit Email Triage's own `artifacts/email-triage/config.json`, rewriting it in its own style
+and keeping every key they don't touch. Pause is a flag in that file, which every triage run checks first. Inbox
+also pauses the account's "Email Triage — <account>" cron trigger when it finds one, and tells you if it couldn't.
+**Triage now** asks Email Triage's on-demand trigger for a run.
+
 Your settings live in `artifacts/inbox/settings.json`. Snapshots of IMAP mail, which hold message bodies, go to
 `artifacts/inbox/cache/`, a folder the workspace repo never commits. Drafts and replies waiting in their undo
 window stay on the device. A reply still waiting when you close the app comes back as a draft, never sent behind
@@ -72,4 +83,5 @@ your back.
 ## Try first
 
 Open the Inbox app and look at an account's *Needs you* list. Press `?` for the shortcuts, `s` to summarize a
-thread, or `r` to reply and try Suggest. Then pin the **Inbox** widget to Home from the board's Add.
+thread, or `r` to reply and try Suggest. Open an account's **Triage** entry to see its rules and press
+**Triage now**. Then pin the **Inbox** widget to Home from the board's Add.

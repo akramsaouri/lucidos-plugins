@@ -1,0 +1,76 @@
+{
+  "accounts": {
+    "Gmail - Personal": {
+      "address": "me@example.com",
+      "fetch": "gmail-api",
+      "oauth_provider": "google",
+      "no_action_clear": "delete",
+      "rules": [
+        {
+          "_comment": "Receipts, in either language",
+          "action": "label",
+          "condition": {
+            "field": "subject",
+            "operator": "regex",
+            "value": "receipt|kvitto|re\u00e7u"
+          },
+          "label": "Receipts"
+        },
+        {
+          "action": "delete",
+          "condition": {
+            "field": "from",
+            "operator": "contains",
+            "value": "newsletter@"
+          }
+        },
+        {
+          "action": "delete",
+          "condition": {
+            "field": "from",
+            "operator": "contains",
+            "value": "newsletter@shop.example"
+          }
+        },
+        {
+          "action": "notify",
+          "condition": {
+            "field": "from",
+            "operator": "equals",
+            "value": "boss@example.org"
+          }
+        }
+      ]
+    },
+    "Gmail - Work": {
+      "address": "work@example.org",
+      "fetch": "gmail-api",
+      "oauth_provider": "google-work",
+      "no_action_clear": "read",
+      "rules": [
+        {
+          "action": "read",
+          "condition": {
+            "field": "from",
+            "operator": "contains",
+            "value": "noreply@calendar.example"
+          }
+        }
+      ]
+    },
+    "Mailhost - Work": {
+      "address": "team@example.net",
+      "fetch": "imap",
+      "shared": true,
+      "no_action_clear": "keep",
+      "imap": {
+        "host": "imap.example.net",
+        "port": 993,
+        "ssl": true,
+        "username": "team@example.net"
+      },
+      "credential_env": "CRED_EXAMPLE",
+      "rules": []
+    }
+  }
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "trg-personal",
+    "name": "Email Triage \u2014 Personal",
+    "cron_expressions": [
+      "0 0 7-21 * * *"
+    ],
+    "paused": false,
+    "next_run": "2099-01-01T08:00:00Z",
+    "last_run_status": "ok"
+  },
+  {
+    "id": "trg-work",
+    "name": "Email Triage \u2014 Work",
+    "cron_expressions": [
+      "0 0 7-21 * * *"
+    ],
+    "paused": false,
+    "next_run": "2099-01-01T08:00:00Z",
+    "last_run_status": "ok"
+  },
+  {
+    "id": "trg-mailhost-work",
+    "name": "Email Triage \u2014 Mailhost Work",
+    "cron_expressions": [
+      "0 0 7-21 * * *"
+    ],
+    "paused": false,
+    "next_run": "2099-01-01T08:00:00Z",
+    "last_run_status": "ok"
+  },
+  {
+    "id": "trg-on-demand",
+    "name": "Email Triage \u2014 on demand",
+    "cron_expressions": [],
+    "paused": false
+  },
+  {
+    "id": "trg-bridge",
+    "name": "Inbox \u2014 IMAP bridge",
+    "cron_expressions": [],
+    "paused": false
+  }
+]

@@ -13,6 +13,23 @@ An account's `fetch` value picks how its mail is read, and never via `read_email
 - `"imap-peek"` — OAuth IMAP with no REST API to use (Outlook/Exchange): a read-only inbox snapshot. See "Fetching Without Marking Read".
 - `"imap"` — a mailbox with no API and no OAuth, just a host and a password. See "IMAP Accounts".
 
+## Controls live in the Inbox plugin
+
+This plugin is the engine only: the intent, the on-demand trigger, the IMAP helpers and this
+knowhow. It ships no app. Since 0.7.0 the control panel that used to be the Email Triage app
+(`apps/email-triage`) lives in the **Inbox** plugin's app (`apps/inbox`), which also shows the
+mail itself. Each account's sidebar group in Inbox starts with a **Triage** entry (health and next
+run, pause/resume, Triage now, the rule chain editor with unreachable-rule warnings, the no-action
+mail picker, suggestions from runs, run history), and an **All accounts** strip at the top of the
+sidebar covers every account at once (Pause all, Triage all accounts). The invariants those controls
+keep on `config.json` are in Inbox's `apps/inbox/knowhow/triage.md`.
+
+Without Inbox installed, everything below still runs on schedule: edit `config.json` by hand (or ask
+Lucidos to) and fire a run with
+`lucidos events emit EmailTriageRequested --payload '{"summary": "Manual triage run for <name>", "account": "<config name>", "source": "email-triage-app"}'`.
+The on-demand trigger matches on the event type, and `source: "email-triage-app"` is what Inbox's
+"Triage now" sends, kept from the old app so the two stay indistinguishable.
+
 ## Triage Flow
 
 0. **Check `paused` before anything else** — if the account's config block has
@@ -29,7 +46,7 @@ An account's `fetch` value picks how its mail is read, and never via `read_email
      all 50. Route by the account's `fetch` value instead — see "Fetching Without
      Marking Read" below:
      - `"gmail-api"` → list and read over the Gmail REST API.
-     - `"imap-peek"` → run `python data/apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50`
+     - `"imap-peek"` → run `python data/scripts/email-triage/snapshot_imap.py --account "<name>" --limit 50`
        first and work from its output.
      - `"imap"` → `python data/scripts/email-triage/imap_helper.py list --account "<name>"` (`--unseen`
        for a personal account, `--since` for a shared one). See "IMAP Accounts" below.
@@ -60,23 +77,23 @@ An account's `fetch` value picks how its mail is read, and never via `read_email
 Set `"paused": true` on an account block to switch that account off. A paused account is
 **skipped entirely**: no fetch, no rule evaluation, no AI categorization, no clearing, no
 notification, and **no `EmailTriageCompleted` event** (a run that did nothing should not
-appear in the app's run history as if it had). Absent means running — the app deletes the
+appear in Inbox's run history as if it had). Absent means running — Inbox deletes the
 key on resume rather than writing `false`.
 
 **The config flag is the source of truth, and it has to be.** Triage has two callers: each
-account's own cron trigger, and the shared on-demand trigger that the app's "Triage now"
+account's own cron trigger, and the shared on-demand trigger that Inbox's "Triage now"
 button fires by emitting `EmailTriageRequested`. Both run the same intent, so a flag the
 intent reads is the only switch that stops both. The on-demand trigger in particular is
 shared by every account — pausing that trigger would silence the button for all of them.
 
-**Pausing the account's cron trigger is a second, best-effort layer.** The app also tries
+**Pausing the account's cron trigger is a second, best-effort layer.** Inbox also tries
 to pause that account's own cron trigger, matching it by name (a trigger whose name
 mentions triage and the account, and that actually has a cron schedule — which is what
 keeps it from grabbing the shared on-demand trigger). That layer is allowed to fail: a
-fresh install has no cron triggers yet, and the user may have renamed or deleted one. The
-app warns and carries on; the run still exits at step 0. Never treat a trigger's paused
+fresh install has no cron triggers yet, and the user may have renamed or deleted one. Inbox
+warns and carries on; the run still exits at step 0. Never treat a trigger's paused
 state as the source of truth, and never leave the two disagreeing in the "config running,
-cron paused" direction — that is an account that looks live in the app and silently never
+cron paused" direction — that is an account that looks live in Inbox and silently never
 runs.
 
 **Nothing is lost while paused.** Mail simply accumulates unread. For a shared account,
@@ -248,7 +265,7 @@ which also does the `read` / `delete` writes and keys on the Message-ID.
 ### Build it with the script, never with `read_email`
 
 ```bash
-python data/apps/email-triage/scripts/snapshot_imap.py --account "<name>" --limit 50
+python data/scripts/email-triage/snapshot_imap.py --account "<name>" --limit 50
 ```
 
 **Do not hand-roll this by looping `read_email` over the inbox.** A plain IMAP
