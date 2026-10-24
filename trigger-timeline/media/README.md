@@ -18,12 +18,15 @@ than a row per fire.
   section with what they listen for and when they last ran. Paused triggers get one too.
 - **Finding things**: filter by name, or by trigger group once your triggers sit in more than one. Which groups
   you've switched off stays switched off.
+- **A Home widget**: the Cadence widget counts down to the next trigger with a real time of day, names it, and
+  lists the fires after it. Triggers on a loop are counted rather than listed, and failed last runs are flagged. A
+  tap opens Cadence.
 - **Read-only**: Cadence projects your existing cron expressions forward and never creates, edits, pauses or runs
   a trigger.
 
 ## What it needs
 
-- Lucidos 0.39.0 or later.
+- Lucidos 0.48.0 or later (the first release that installs a plugin's widget).
 - Nothing else: no other plugin, no account, no CLI. It reads your workspace's triggers through Lucidos itself.
 - Some triggers to look at. With none, it has nothing to show.
 

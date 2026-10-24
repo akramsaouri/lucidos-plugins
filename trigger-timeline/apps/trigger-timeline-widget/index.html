@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadence</title>
+<script src="/api/v1/sdk-prefs.js"></script>
+<link rel="stylesheet" href="/api/v1/sdk-iframe.css">
+<script src="/api/v1/sdk.js"></script>
+<style>
+  /* Inline and in the Canvas the widget is content-sized and shows everything.
+     A Home board tile sets the box, and each size below keeps what fits it. */
+  body { padding: var(--space-lg); }
+  main { display: grid; gap: var(--space-xl); cursor: pointer; border-radius: var(--radius-control); outline: none; }
+  main:focus-visible { box-shadow: var(--focus-ring); }
+
+  .hero { display: grid; gap: var(--space-xs); min-width: 0; }
+  .big { font-size: var(--font-size-display); font-weight: 600; line-height: 1; color: var(--text-primary);
+    font-variant-numeric: tabular-nums; }
+  .big.idle { font-size: var(--font-size-2xl); color: var(--text-muted); }
+  .big.bump { animation: settle var(--duration-slow) ease-out; }
+  .next-name { font-size: var(--font-size-md); font-weight: 500; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .next-at { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .next-name:empty, .next-at:empty { display: none; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); font-size: var(--font-size-xs);
+    color: var(--text-muted); line-height: 1.4; }
+  .meta:empty { display: none; }
+  .fail { color: var(--accent-red); font-weight: 500; }
+  .err { font-size: var(--font-size-xs); color: var(--accent-red); }
+  .err:empty { display: none; }
+
+  .rows { list-style: none; display: grid; margin: 0; padding: 0; margin-inline: calc(-1 * var(--space-sm)); }
+  .rows:empty { display: none; }
+  .row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-md); align-items: baseline;
+    padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-control); line-height: 1.4;
+    transition: background-color var(--duration-fast); }
+  @media (hover: hover) { .row:hover { background: var(--bg-tertiary); } }
+  .row-time { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 3.5rem; }
+  .row-name { font-size: var(--font-size-sm); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-name.failed::after { content: ' · failed'; color: var(--accent-red); }
+  html[data-font-bold="none"] .big { color: var(--text-strong); }
+
+  .row.entering { animation: rise var(--duration-slow) both; animation-delay: calc(var(--i) * var(--duration-fast) / 3); }
+  @keyframes rise { from { opacity: 0; transform: translateY(0.4rem); } }
+  @keyframes settle { from { opacity: 0.3; transform: translateY(0.25rem); } }
+  :root[data-motion="reduce"] .row.entering, :root[data-motion="reduce"] .big.bump { animation: none; }
+
+  /* Home board tiles: the tile is the box. A tile has no title bar, so the
+     widget names itself top left (the tile menu sits top right). */
+  .id { display: none; align-items: center; gap: var(--space-xs); min-width: 0; line-height: 1; }
+  .id img { inline-size: 1rem; block-size: 1rem; flex: none; border-radius: var(--radius-sm); }
+  .id span { min-width: 0; font-size: var(--font-size-xs); color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html[data-widget-size], html[data-widget-size] body, html[data-widget-size] main { height: 100%; overflow: hidden; }
+  html[data-widget-size] body { box-sizing: border-box; }
+  html[data-widget-size] main { grid-template-rows: auto auto auto minmax(0, 1fr); gap: var(--space-sm); align-content: start; }
+  html[data-widget-size] .id { display: flex; }
+
+  /* Small: the countdown and what it is counting down to. */
+  html[data-widget-size="small"] body { padding: var(--space-md); }
+  html[data-widget-size="small"] .big { font-size: var(--font-size-3xl); }
+  html[data-widget-size="small"] .big.idle { font-size: var(--font-size-xl); }
+  html[data-widget-size="small"] .rows,
+  html[data-widget-size="small"] .meta span:not(.fail) { display: none; }
+
+  /* Medium: hero beside the next few fires. */
+  html[data-widget-size="medium"] main { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: "id id" "hero rows" "meta rows"; column-gap: var(--space-lg); }
+  html[data-widget-size="medium"] .id { grid-area: id; }
+  html[data-widget-size="medium"] .hero { grid-area: hero; }
+  html[data-widget-size="medium"] .meta { grid-area: meta; align-self: end; }
+  html[data-widget-size="medium"] .err { grid-area: meta; }
+  html[data-widget-size="medium"] .rows { grid-area: rows; align-content: start; overflow: hidden; min-height: 0; }
+  html[data-widget-size="medium"] .big { font-size: var(--font-size-3xl); }
+  html[data-widget-size="medium"] .row:nth-child(n+4) { display: none; }
+
+  /* Large: rows that do not fit are clipped whole, never cut in half. */
+  html[data-widget-size="large"] .rows { display: flex; flex-direction: column; flex-wrap: wrap;
+    align-content: flex-start; overflow: hidden; min-height: 0; }
+  html[data-widget-size="large"] .row { width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+  <main id="tap" role="link" tabindex="0" title="Open Cadence">
+    <div class="id"><img src="assets/icon.svg" alt=""><span>Cadence</span></div>
+    <div class="hero">
+      <span class="big" id="n">–</span>
+      <span class="next-name" id="name"></span>
+      <span class="next-at" id="at"></span>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="meta" id="meta"></div>
+    <ol class="rows" id="rows"></ol>
+  </main>
+<script>
+(function () {
+  lucidos.ui.applyPreferences();
+  lucidos.ui.watchPreferences();
+  lucidos.sse.connect();
+  const $ = id => document.getElementById(id);
+  const esc = s => lucidos.utils.escapeHtml(String(s == null ? '' : s));
+  const APP = 'trigger-timeline';
+  const WINDOW_MS = 48 * 3600000;   // looks ahead two days for the next punctual fire
+  const LOOP_PER_DAY = 8;           // same threshold as the Cadence app's loop band
+  const ROWS = 8;
+  const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const open = () => lucidos.ui.navigate('app', { app_id: APP });
+  $('tap').addEventListener('click', open);
+  $('tap').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  });
+
+  // ---- Cron projection: the same 6-field rules the Cadence app uses ----
+  function field(f, min, max, dow) {
+    if (f === '*' || f === '?') return null;
+    const set = new Set();
+    for (let part of f.split(',')) {
+      part = part.trim();
+      let step = 1, range = part;
+      const sl = part.split('/');
+      if (sl.length === 2) { range = sl[0]; step = parseInt(sl[1], 10) || 1; }
+      let lo, hi;
+      if (range === '*') { lo = min; hi = max; }
+      else if (range.includes('-')) { const [a, b] = range.split('-'); lo = parseInt(a, 10); hi = parseInt(b, 10); }
+      else { lo = hi = parseInt(range, 10); }
+      if (isNaN(lo)) continue;
+      if (isNaN(hi)) hi = lo;
+      for (let v = lo; v <= hi; v += step) set.add(dow && v === 7 ? 0 : v);
+    }
+    return set.size ? set : null;
+  }
+  function parseCron(expr) {
+    const p = expr.trim().split(/\s+/);
+    if (p.length !== 6) return null;
+    return { min: field(p[1], 0, 59), hour: field(p[2], 0, 23), dom: field(p[3], 1, 31),
+             mon: field(p[4], 1, 12), dow: field(p[5], 0, 6, true) };
+  }
+  // An entry may hold several expressions joined by ", "; field commas never carry a space.
+  const crons = list => (list || []).flatMap(e => String(e).split(/,\s+/)).map(parseCron).filter(Boolean);
+  const fmts = {};
+  function fmt(tz) {
+    if (!fmts[tz]) {
+      try {
+        fmts[tz] = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric',
+          month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      } catch (e) { fmts[tz] = fmt(LOCAL_TZ); }
+    }
+    return fmts[tz];
+  }
+  function parts(f, ms) {
+    const m = {};
+    for (const p of f.formatToParts(new Date(ms))) if (p.type !== 'literal') m[p.type] = +p.value;
+    return { mo: m.month, d: m.day, h: m.hour % 24, mi: m.minute,
+             dow: new Date(Date.UTC(m.year, m.month - 1, m.day, 12)).getUTCDay() };
+  }
+  function matches(p, c) {
+    if (c.min && !c.min.has(p.mi)) return false;
+    if (c.hour && !c.hour.has(p.h)) return false;
+    if (c.mon && !c.mon.has(p.mo)) return false;
+    const domOk = !c.dom || c.dom.has(p.d), dowOk = !c.dow || c.dow.has(p.dow);
+    return c.dom && c.dow ? domOk || dowOk : domOk && dowOk;
+  }
+  function fires(c, tz, start, end, cap) {
+    const f = fmt(tz), mins = c.min ? [...c.min].sort((a, b) => a - b) : null, out = [];
+    let t = Math.ceil(start / 60000) * 60000, guard = 0;
+    while (t <= end && out.length < cap && guard++ < 100000) {
+      const p = parts(f, t);
+      if (mins && !c.min.has(p.mi)) {
+        const nx = mins.find(v => v > p.mi);
+        t += (nx !== undefined ? nx - p.mi : mins[0] + 60 - p.mi) * 60000;
+        continue;
+      }
+      if (matches(p, c)) out.push(t);
+      t += 60000;
+    }
+    return out;
+  }
+
+  // ---- Model ----
+  let TRIGGERS = [], AGENDA = [], loops = 0, events = 0, failing = [];
+  function project() {
+    const now = Date.now(), end = now + WINDOW_MS;
+    AGENDA = []; loops = 0; events = 0;
+    failing = TRIGGERS.filter(t => t.last_run_status === 'failed');
+    for (const tr of TRIGGERS) {
+      if (tr.paused) continue;
+      const cs = crons(tr.cron_expressions);
+      if (!cs.length) { events++; continue; }
+      const tz = tr.timezone || LOCAL_TZ, seen = new Set(), list = [];
+      const add = ms => {
+        const k = Math.floor(ms / 60000);
+        if (ms < now || ms > end || seen.has(k)) return;
+        seen.add(k); list.push(ms);
+      };
+      if (tr.next_run) { const ms = Date.parse(tr.next_run); if (!isNaN(ms)) add(ms); }
+      for (const c of cs) for (const ms of fires(c, tz, now, end, 400)) add(ms);
+      if (list.length / (WINDOW_MS / 86400000) >= LOOP_PER_DAY) { loops++; continue; }
+      for (const ms of list) AGENDA.push({ ts: ms, tr });
+    }
+    AGENDA.sort((a, b) => a.ts - b.ts);
+  }
+
+  function countdown(ms) {
+    const m = Math.max(0, Math.round(ms / 60000));
+    if (m < 1) return 'now';
+    if (m < 60) return m + 'm';
+    const h = Math.floor(m / 60), r = m % 60;
+    if (h < 24) return r ? `${h}h ${r}m` : `${h}h`;
+    const d = Math.floor(h / 24), rh = h % 24;
+    return rh ? `${d}d ${rh}h` : `${d}d`;
+  }
+  function when(ms) {
+    const d = new Date(ms), now = new Date();
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return time;
+    const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
+    if (d.toDateString() === tmr.toDateString()) return 'Tmrw ' + time;
+    return d.toLocaleDateString([], { weekday: 'short' }) + ' ' + time;
+  }
+
+  // ---- Render ----
+  let first = true, loadError = '';
+  function draw() {
+    const now = Date.now();
+    const upcoming = AGENDA.filter(o => o.ts >= now - 30000);
+    const next = upcoming[0];
+    const failed = new Set(failing.map(t => t.id));
+
+    const n = $('n'), text = next ? (countdown(next.ts - now) === 'now' ? 'now' : 'in ' + countdown(next.ts - now))
+      : (loadError ? '–' : 'Nothing timed');
+    if (!first && n.textContent !== text && next && n.dataset.tr !== next.tr.id) {
+      n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump');
+    }
+    n.textContent = text;
+    n.dataset.tr = next ? next.tr.id : '';
+    n.classList.toggle('idle', !next);
+    $('name').textContent = next ? next.tr.name : '';
+    $('at').textContent = next ? when(next.ts) : (loadError ? '' : 'in the next 48 hours');
+    $('err').textContent = loadError;
+
+    $('meta').innerHTML = loadError ? '' : [
+      failing.length ? `<span class="fail">${failing.length} failed last run</span>` : '',
+      loops ? `<span>${loops} on a loop</span>` : '',
+      events ? `<span>${events} event-driven</span>` : '',
+    ].filter(Boolean).join('');
+
+    // Rows re-render only when the list itself changes, so the ticker never re-animates them.
+    const rows = upcoming.slice(1, ROWS + 1);
+    const key = rows.map(o => o.tr.id + '@' + o.ts + (failed.has(o.tr.id) ? '!' : '')).join('|');
+    if ($('rows').dataset.key !== key) {
+      $('rows').dataset.key = key;
+      $('rows').innerHTML = rows.map((o, i) => `
+        <li class="row${first ? ' entering' : ''}" style="--i:${i}">
+          <span class="row-time">${esc(when(o.ts))}</span>
+          <span class="row-name${failed.has(o.tr.id) ? ' failed' : ''}">${esc(o.tr.name)}</span>
+        </li>`).join('');
+    }
+    first = false;
+  }
+
+  let reads = 0;
+  async function load() {
+    const r = ++reads;
+    try {
+      const list = await lucidos.triggers.list();
+      if (r !== reads) return;
+      TRIGGERS = list || []; loadError = '';
+    } catch (e) {
+      if (r !== reads) return;
+      loadError = "Couldn't load triggers";
+    } finally {
+      if (r === reads) { project(); draw(); lucidos.ui.ready(); }
+    }
+  }
+
+  /* Live while visible: a trigger change or run re-reads (coalesced), and a
+     30-second tick recounts and re-projects. A hidden tile schedules nothing. */
+  let hidden = !lucidos.widget.visible(), debounce = null, tick = null;
+  const soon = () => { if (hidden) return; clearTimeout(debounce); debounce = setTimeout(load, 800); };
+  function startTick() {
+    clearInterval(tick);
+    tick = setInterval(() => {
+      const next = AGENDA[0];
+      if (next && next.ts < Date.now() - 30000) project();
+      draw();
+    }, 30000);
+  }
+  lucidos.sse.on('*', (data, raw) => {
+    const name = (raw && raw.data && raw.data.event && raw.data.event.type) || (raw && raw.type) || '';
+    if (typeof name === 'string' && /Trigger/.test(name)) soon();
+  });
+  lucidos.sse.onOpen(soon);
+  lucidos.widget.onVisibility(visible => {
+    hidden = !visible;
+    clearTimeout(debounce);
+    if (visible) { load(); startTick(); } else clearInterval(tick);
+  });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !hidden) load(); });
+  addEventListener('pageshow', e => { if (e.persisted && !hidden) load(); });
+  if (!hidden) startTick();
+  load();
+})();
+</script>
+</body>
+</html>
