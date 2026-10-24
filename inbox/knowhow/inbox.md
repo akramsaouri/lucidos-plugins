@@ -66,7 +66,13 @@ account names, exactly as in its config.
   block, Inbox tries `anthropic`, then `vertex`, with a Claude model, moving on only when the engine answers
   404 (no credential for that provider). `openai`, `openrouter`, `xai` and `local` work too, and need `model`.
 - **`accounts["<name>"].proxy`**: the `data/config/apis.json` entry that carries that Gmail mailbox's OAuth
-  token, base URL `https://www.googleapis.com`.
+  token, base URL `https://www.googleapis.com`. Setup finds one in this order: an existing proxy whose
+  `/gmail/v1/users/me/profile` reads the account's `address`; a new proxy on the account's Email Triage
+  `oauth_provider` (or another connected Google provider whose token reads that address), which needs no new
+  provider and no popup; and only then a new connection via `connect_oauth_account`. That one opens a popup
+  for a Google OAuth client ID and secret, so explain it first: the user can paste the same client as their
+  existing Google connection, must sign in as this mailbox's address, and must list it as a test user if the
+  OAuth app is in Testing.
 
 Drafts, the outbox of replies inside their undo window, folded sections and a cached copy of the list live in
 the device's own storage (`lucidos.storage.local`), not in this file. A reply still inside its undo window when
@@ -132,7 +138,7 @@ answers with `InboxImapResult`, carrying the same `request_id` and `account`.
 ## When something is wrong
 
 - **Red dot, "No Gmail proxy is recorded"**: add `accounts["<name>"].proxy` to the settings (run the plugin's
-  setup again, or see its step 2).
+  setup again, or see its step 2). Setup then wires only the accounts that lack one.
 - **"the … proxy reads x@…, not y@…"**: that proxy carries another mailbox's token. Point the account at the
   right entry. Never loosen the check.
 - **"the IMAP bridge did not answer"**: the "Inbox — IMAP bridge" trigger is missing or paused

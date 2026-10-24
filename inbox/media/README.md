@@ -53,9 +53,10 @@ sidebar with a red dot and the reason, never as an empty inbox you'd mistake for
 Setup first checks that Email Triage is installed with at least one account, and stops to offer setting it up
 first if not. After that it mostly wires things up and asks little:
 
-1. **Each Gmail account** gets its proxy, found or added, and checked to read the right mailbox. Inbox repeats
-   that check before every list and refuses to go on if the proxy reads a different address, so it can't
-   archive or reply in the wrong mailbox.
+1. **Each Gmail account** gets its proxy, found or added, and checked to read the right mailbox. A new proxy
+   reuses the Google sign-in Email Triage already has for that mailbox, so you're only asked to connect one
+   when none reads it. Inbox repeats that check before every list and refuses to go on if the proxy reads a
+   different address, so it can't archive or reply in the wrong mailbox.
 2. **Each IMAP account** gets the bridge trigger confirmed live, the credential confirmed present and a test
    sync. Setup asks about the SMTP host only when your provider's isn't the usual one.
 3. **Your name and how your replies should sound.** The name goes on outgoing mail and into the AI prompts. The
