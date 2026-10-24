@@ -1,5 +1,5 @@
 id = "inbox"
-version = "0.2.0"
+version = "0.2.1"
 name = "Inbox"
 description = "One calm inbox across every mailbox Email Triage watches, and the home of Email Triage's controls. Needs the Email Triage plugin (0.7.0 or later) installed and configured with at least one account: Inbox reads its accounts, rules and triage results and never triages mail itself. Each account's inbox shows in two zones, never mixed: what survived triage, with the reason it was kept, and what triage hasn't seen yet. Archive, delete and undo in one key or swipe, replies with AI Suggest and Polish, a one-key hand-off to Lucidos, and each account's folders and labels in the sidebar. Gmail accounts read through one engine proxy per mailbox; password IMAP accounts go through the IMAP bridge trigger this plugin ships. OAuth IMAP accounts (Email Triage's imap-peek) aren't readable yet, though their triage controls work. A Triage pane replaces the old Email Triage app: an All accounts strip at the top of the sidebar with every account's health, Pause all and Triage all accounts, and a Triage entry heading each account's folders with its health and next run, pause/resume, Triage now, the rule chain editor with unreachable-rule warnings, suggestions from runs and run history. Also ships an Inbox Home widget: how many threads need you across every account, with per-account counts and the top threads on larger tiles."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
@@ -10,9 +10,15 @@ icon = "media/icon.svg"
 setup = """
 **Already running Inbox?** If `artifacts/inbox/settings.json` exists and every Gmail account in
 Email Triage's config already has an `accounts["<name>"].proxy` in it, nothing below needs redoing:
-tell the user what changed in one line and stop. Only continue for an account that has no entry
-yet.
+tell the user what changed in one line and stop. If only some Gmail accounts lack a proxy (an
+earlier setup stopped partway), this is not a fresh install: tell the user which accounts are
+already wired and that you're wiring only the rest, run step 2 for those accounts alone, and skip
+every other step whose answer is already in the settings. Do the same when the settings file is
+missing but a `data/config/apis.json` proxy already passes step 2's check for some accounts: record
+those and carry on from there.
 
+- **Updating to 0.2.1:** setup reuses Email Triage's Gmail OAuth for each mailbox instead of asking
+  for a Google client ID.
 - **Updating to 0.2.0:** the Email Triage control panel moved into Inbox. An **All accounts** strip
   at the top of the sidebar, and a **Triage** entry heading each account's folders, open a pane with
   health and next run, Pause/Resume, Triage now, the rule chain editor, suggestions from runs and run
@@ -42,14 +48,30 @@ and the bridge protocol (`apps/inbox/knowhow/triage.md` covers the triage contro
 2. **Each Gmail account** (`"fetch": "gmail-api"`, or an older block with no `fetch` on a Gmail
    address) is read and changed through an engine proxy in `data/config/apis.json` that carries
    that mailbox's OAuth token: one proxy per mailbox.
-   - Reuse an entry if one exists; Email Triage's own Gmail access often has one already. Check it
-     with `lucidos proxy <name> /gmail/v1/users/me/profile`: its `emailAddress` must equal the
-     account's `address`. Never record a proxy that fails this check, since Inbox would then
-     archive and reply in the wrong mailbox. (The app repeats the check before every list.)
-   - If none matches, add one: base URL `https://www.googleapis.com`, authenticating with the
-     account's `oauth_provider` (see `system-knowhow/building-an-auth-handshake`). Then run the
-     same check.
-   - Record the name as `accounts["<config account name>"].proxy` in `artifacts/inbox/settings.json`.
+   Try these in order, and stop at the first that passes the check:
+   - **Reuse a proxy.** Email Triage's own Gmail access often has one already. Check it with
+     `lucidos proxy <name> /gmail/v1/users/me/profile`: its `emailAddress` must equal the account's
+     `address`. Never record a proxy that fails this check, since Inbox would then archive and reply
+     in the wrong mailbox. (The app repeats the check before every list.)
+   - **Reuse Email Triage's OAuth.** If the account's block has an `oauth_provider` that is a
+     connected OAuth account, add a proxy with base URL `https://www.googleapis.com` authenticating
+     with that provider (see `system-knowhow/building-an-auth-handshake`), then run the same check.
+     Failing that, try each other connected Google provider whose token reads this `address`. This
+     creates no provider and opens no popup.
+   - **Connect the mailbox**, only when nothing above matches. Name the provider `g<account slug>`
+     (e.g. `gprzone`). Before calling `connect_oauth_account`, tell the user in chat why (no existing
+     Google connection reads this address), and that: a popup will ask for a Google OAuth client ID
+     and secret; they can paste the same ones as their existing Google connection (Google Cloud
+     Console → APIs & Services → Credentials), since one OAuth client serves every mailbox; in the
+     browser they must sign in as this mailbox's address, not their default Google account; and if
+     the OAuth app is in Testing, that address must be a test user. Then add the proxy as above and
+     run the check.
+
+   Record the passing proxy's name as `accounts["<config account name>"].proxy` in
+   `artifacts/inbox/settings.json`. If the user dismisses the popup or a connection fails, still
+   write the settings for the accounts that worked (keeping existing keys), carry on with the other
+   steps, and tell the user which accounts are still unwired and that re-running Inbox's setup picks
+   up only those.
 
 3. **Each IMAP account** (`"fetch": "imap"`) goes through the "Inbox — IMAP bridge" trigger this
    plugin registered at install. Confirm it is live and unpaused in `lucidos triggers list`. Check
