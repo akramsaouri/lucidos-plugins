@@ -290,14 +290,14 @@ function renderSchedule() {
   $('schedule-name').innerHTML = name;
   const help = $('schedule-help');
   if (t === undefined) help.textContent = 'Couldn’t read the triggers.';
-  else if (!on) help.textContent = `${t ? 'Paused' : 'Off'}. Alerts fire only while this app or the VPN expiry widget is open.`;
+  else if (!on) help.textContent = `${t ? 'Paused' : 'Off'}. Alerts fire only while this app or the Gatekeepr widget is open.`;
   else help.textContent = `Runs gatekeepr ${custom ? 'on its own schedule' : every(S.cadence)}, so alerts arrive with Lucidos in the background${t.last_run ? `. Last run ${lucidos.utils.timeAgo(t.last_run)}` : ''}.`;
   $('cadence-help').textContent = custom ? `Custom: ${t.cron_expressions.join(', ')}`
     : on && t.next_run ? `Next check at ${clock(t.next_run)}` : 'An alert can land up to this long after its threshold.';
 
   const note = $('alerts-note');
   note.hidden = t === undefined;
-  note.textContent = !on ? 'The background check is off, so alerts fire only while this app or the VPN expiry widget is open.'
+  note.textContent = !on ? 'The background check is off, so alerts fire only while this app or the Gatekeepr widget is open.'
     : custom ? 'Alerts land at the first background check past their threshold.'
     : `The background check runs ${every(S.cadence)}, so an alert can land up to ${S.cadence === 1 ? 'a minute' : `${S.cadence} minutes`} after its threshold.`;
 }
