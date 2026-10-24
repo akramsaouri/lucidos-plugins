@@ -144,7 +144,7 @@ From a thread: `lucidos events emit GatekeeprRefreshRequested --payload '{"summa
 
 ## The widget and the app
 
-The **VPN expiry** widget (`apps/gatekeepr-widget`) and the **Gatekeepr** app read `status.json` and draw the
+The **Gatekeepr** widget (`apps/gatekeepr-widget`) and the **Gatekeepr** app read `status.json` and draw the
 session as a visual desk timer (`timer.js`, one file shipped in both app folders). A full turn is the session
 length; the solid disc from 12 o'clock is `secondsLeft / sessionLengthSeconds`, with a sliver kept while any time
 is left so expiring soon never looks empty. The dial's quarter labels come from `sessionLengthSeconds`. Between

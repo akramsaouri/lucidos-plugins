@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VPN expiry</title>
+<title>Gatekeepr</title>
 <script src="/api/v1/sdk-prefs.js"></script>
 <link rel="stylesheet" href="/api/v1/sdk-iframe.css">
 <script src="/api/v1/sdk.js"></script>
@@ -199,7 +199,7 @@ async function ask(auto) {
   render();
   setTimeout(() => { if (pending === id) { pending = null; render(); } }, 20e3);
   try {
-    await lucidos.events.emit('GatekeeprRefreshRequested', { summary: 'VPN expiry widget asked for a Gatekeepr refresh', request_id: id, source: 'widget' });
+    await lucidos.events.emit('GatekeeprRefreshRequested', { summary: 'Gatekeepr widget asked for a Gatekeepr refresh', request_id: id, source: 'widget' });
   } catch (e) {
     pending = null;
     render();
