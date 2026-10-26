@@ -1,7 +1,7 @@
 id = "email-triage"
-version = "0.7.0"
+version = "0.7.1"
 name = "Email Triage"
-description = "Per-account email triage that only interrupts you when mail genuinely needs you. Your own rule chain runs first (first-match-wins); anything unmatched falls through to AI triage that sorts it into needs-you / FYI / noise. Works with Gmail over its API and with plain IMAP mailboxes that have no API or OAuth, just a host and a password. Ships the triage engine knowhow, the per-account intent, the on-demand trigger behind “Triage now”, and peek-based IMAP helpers so reading a message to triage it never marks it read. Its controls (per-account health, Pause/Resume, Triage now, the rule chain editor, suggestions and run history) live in the Inbox plugin, which you should install alongside it; this plugin no longer ships an app of its own. Runs on a schedule you choose — ask Lucidos to set up the cron triggers after install."
+description = "The triage engine behind Inbox: install Inbox, not this on its own. It sorts each mailbox with your rules, then AI, so only mail that needs you gets through, on a schedule you ask Lucidos to set up after install."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 engine = ">=0.47.1"
 categories = ["productivity", "communication", "automation"]

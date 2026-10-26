@@ -47,8 +47,14 @@ class SetupTest(unittest.TestCase):
         self.assertIn("not a fresh install", gate)
         self.assertIn("settings file is missing", gate)
 
-    def test_the_update_note_names_the_current_version(self):
-        self.assertIn(f"**Updating to {self.manifest['version']}:**", self.setup)
+    def test_the_newest_update_note_is_this_minor_release(self):
+        # A patch release that leaves setup alone adds no note (rewording setup would ask for a re-run), but a
+        # minor release always says what changed.
+        notes = [tuple(map(int, v.split("."))) for v in re.findall(r"\*\*Updating to (\d+\.\d+\.\d+):\*\*", self.setup)]
+        version = tuple(map(int, self.manifest["version"].split(".")))
+        self.assertTrue(notes)
+        self.assertLessEqual(max(notes), version)
+        self.assertEqual(max(notes)[:2], version[:2])
 
 
 if __name__ == "__main__":
