@@ -4,5 +4,10 @@
   "icon": "assets/icon.svg",
   "kind": "widget",
   "reusable": true,
-  "origin_plugin_id": "inbox"
+  "origin_plugin_id": "inbox",
+  "params": {
+    "demo": {
+      "description": "true shows made-up demo mail instead of your own, for screenshots"
+    }
+  }
 }
