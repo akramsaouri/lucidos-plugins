@@ -137,13 +137,24 @@
   /* A small tile has no pills, so it always counts every account. */
   const scope = () => (lucidos.widget.size() === 'small' ? 'all' : pick);
 
+  /* Demo mode, for screenshots: with { "demo": true } in its params the widget loads the Inbox app's made-up
+     fixture (apps/inbox/demo.js) ahead of the data layer, so it counts demo mail and never reads the workspace's own. */
+  if (typeof lucidos.params === 'function' && lucidos.params().demo === true) {
+    const [demo, mail] = await Promise.all(['demo.js', 'mail.js'].map(f => lucidos.data.read('apps/inbox/' + f)));
+    inject(demo, 'inbox/demo.js');
+    window.InboxDemo.install();
+    inject(mail, 'inbox/mail.js');
+  }
+  function inject(src, name) {
+    const s = document.createElement('script');
+    s.textContent = src + '\n//# sourceURL=' + name;
+    document.head.appendChild(s);
+  }
+
   /* One source of truth: load the Inbox app's own data layer (Gmail through each account's proxy, IMAP from the bridge's last snapshot, triage classify). */
   async function loadMail() {
     if (window.Mail) return window.Mail;
-    const src = await lucidos.data.read('apps/inbox/mail.js');
-    const s = document.createElement('script');
-    s.textContent = src + '\n//# sourceURL=inbox/mail.js';
-    document.head.appendChild(s);
+    inject(await lucidos.data.read('apps/inbox/mail.js'), 'inbox/mail.js');
     if (!window.Mail) throw new Error('the Inbox data layer did not load');
     return window.Mail;
   }

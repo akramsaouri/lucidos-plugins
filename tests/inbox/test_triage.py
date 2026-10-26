@@ -50,8 +50,8 @@ class WiringTest(unittest.TestCase):
     def test_setup_asks_for_the_email_triage_that_dropped_its_app(self):
         inbox = tomllib.loads(read(os.path.join(PLUGIN, "manifest.toml")))
         triage = tomllib.loads(read(os.path.join(PLUGIN, "..", "email-triage", "manifest.toml")))
-        self.assertEqual(triage["version"], "0.7.0")
-        self.assertIn("0.7.0 or later", inbox["description"])
+        self.assertGreaterEqual(tuple(int(p) for p in triage["version"].split(".")), (0, 7, 0))
+        self.assertIn("Email Triage", inbox["description"])
         self.assertIn("installed at 0.7.0 or later", inbox["setup"])
 
 

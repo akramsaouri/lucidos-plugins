@@ -19,7 +19,7 @@ const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', name), 
 const CONFIG = fixture('config.json');
 const EVENTS = JSON.parse(fixture('events.json'));
 const TRIGGERS = JSON.parse(fixture('triggers.json'));
-const SCRIPTS = ['purify.min.js', 'mail.js', 'triage.js', 'app.js'].map(f => fs.readFileSync(path.join(APP, f), 'utf8'));
+const SCRIPTS = ['purify.min.js', 'demo.js', 'mail.js', 'triage.js', 'app.js'].map(f => fs.readFileSync(path.join(APP, f), 'utf8'));
 const SETTINGS = JSON.stringify({ accounts: { 'Gmail - Personal': { proxy: 'gmail-personal' }, 'Gmail - Work': { proxy: 'gmail-work' } } });
 const ADDRESS = { 'gmail-personal': 'me@example.com', 'gmail-work': 'work@example.org' };
 const ACCOUNTS = ['personal', 'work', 'mailhost-work'];
