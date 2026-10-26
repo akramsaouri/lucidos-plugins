@@ -1,11 +1,12 @@
 id = "inbox"
-version = "0.2.3"
+version = "0.2.4"
 name = "Inbox"
 description = "A smart inbox for all your mailboxes: what needs you sits apart from the rest, with the reason it was kept. It runs on the Email Triage plugin, and setup walks you through installing and setting that up."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
 engine = ">=0.48.0"
 categories = ["productivity", "communication"]
 icon = "media/icon.svg"
+screenshots = ["media/list.png", "media/reply.png", "media/triage.png"]
 
 setup = """
 **Already running Inbox?** If `artifacts/inbox/settings.json` exists and every Gmail account in
