@@ -414,7 +414,16 @@
   .tri-run-who { font-size: var(--font-size-sm); font-weight: 600; color: var(--acct); }
   .tri-run-sum { font-size: var(--font-size-sm); line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
   .tri-count { font-size: var(--font-size-2xs); }
-  .tri-pager { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-top: var(--space-sm); }
+  .tri-retro { display: grid; gap: var(--space-md); padding: var(--space-md); border: 1px solid var(--hairline); border-radius: var(--radius-surface); }
+  .tri-retro-switch { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-md); cursor: pointer; }
+  .tri-retro-switch .toggle-switch { margin-top: 0.125rem; }
+  .tri-retro-text { display: grid; gap: 0.125rem; min-width: 0; font-size: var(--font-size-sm); }
+  .tri-retro-text span { font-size: var(--font-size-xs); line-height: 1.5; color: var(--text-muted); }
+  .tri-retro-sched { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); font-size: var(--font-size-xs); color: var(--text-muted); }
+  .tri-retro-sched select { min-width: 11rem; }
+  @media (max-width: 32rem) { .tri-retro-sched select { flex: 1; min-width: 0; } }
+  .tri-retro-fix { margin-top: var(--space-xs); }
+  .tri-pager {display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-top: var(--space-sm); }
 
   @media (pointer: coarse) {
     .keys { display: none; }

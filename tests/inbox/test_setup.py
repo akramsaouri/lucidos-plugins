@@ -90,7 +90,7 @@ class SetupTest(unittest.TestCase):
     def test_a_raised_setup_revision_says_why(self):
         self.assertGreaterEqual(self.manifest["setup_revision"], 1)
         self.assertLessEqual(len(self.manifest["setup_reason"]), 200)
-        self.assertIn("stands alone", self.manifest["setup_reason"])
+        self.assertIn("retro", self.manifest["setup_reason"])
 
     def test_the_newest_update_note_is_this_minor_release(self):
         # A patch release that leaves setup alone adds no note (rewording setup would ask for a re-run), but a
