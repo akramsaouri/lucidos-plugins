@@ -7,6 +7,7 @@
  *   artifacts/email-triage/{triage,state,notified}-<slug>.json   last triage, fetch state, push ledger
  *   EmailTriageCompleted events                    run history + run_notes suggestions
  *   the workspace triggers                         each account's `Email Triage — <Account>` cron trigger
+ *   the engine's own files                         to warn when triage can't run (see engineGaps)
  * See knowhow/triage.md for the invariants. */
 (function () {
   'use strict';
@@ -27,6 +28,11 @@
   ];
   const RUN_WINDOW_DAYS = 14, RUNS_PER_PAGE = 15;
   const RUN_TIMEOUT_MS = 300000; // 5 min: an AI triage pass over a full inbox is slow
+  /* The triage engine this plugin ships. Removing the old Email Triage plugin deletes every file under its
+   * `email-triage` paths, so a cron trigger still naming one of those stops working while these stay. */
+  const ENGINE_FILES = ['triggers/inbox-triage/intents/triage.md', 'knowhow/inbox-triage.md'];
+  const ON_DEMAND = { slugs: ['inbox-triage-on-demand', 'email-triage-on-demand'], names: ['Inbox — triage on demand', 'Email Triage — on demand'] };
+  const OLD_PATHS = /\b(?:knowhow\/email-triage\.md|triggers\/email-triage\/[\w./-]+\.md|scripts\/email-triage\/[\w.-]+\.py|apps\/email-triage\/[\w./-]+\.(?:md|py))/g;
 
   const esc = s => lucidos.utils.escapeHtml(String(s == null ? '' : s));
   const attr = s => lucidos.utils.escapeHtmlAttr(String(s == null ? '' : s));
@@ -53,7 +59,7 @@
   const initial = s => { const m = String(s || '').match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '•'; };
 
   const T = {
-    config: null, err: null, loaded: false, info: {}, runs: [], triggers: [],
+    config: null, err: null, loaded: false, info: {}, runs: [], triggers: [], gaps: [],
     scope: null, editing: null, runPage: 0, lastHtml: '',
   };
   let host = { el: null, refresh() {}, onConfig() {} };
@@ -246,6 +252,29 @@
   async function readJson(path) {
     try { return JSON.parse(await lucidos.data.read(path)); } catch (e) { return null; }
   }
+  /* What stops triage from running, worded for the banner: an engine file gone, no trigger to answer Triage now, or
+   * an account's cron still naming a file the old Email Triage plugin took with it. Inbox setup repairs all three. */
+  async function engineGaps(triggers) {
+    const exists = path => lucidos.data.read(path).then(() => true, () => false);
+    const gaps = [];
+    const missing = (await Promise.all(ENGINE_FILES.map(async p => (await exists(p)) ? null : p))).filter(Boolean);
+    if (missing.length) gaps.push(`Missing ${missing.join(', ')}`);
+    if (!triggers) return gaps;
+    if (!triggers.some(t => ON_DEMAND.slugs.includes(t.slug) || ON_DEMAND.names.includes(t.name))) gaps.push('No trigger answers Triage now');
+    for (const acc of M.ORDER) {
+      const t = M.triggerFor(cfgName(acc), triggers, M.ORDER.map(cfgName));
+      const named = [...new Set(String((t && t.run && t.run.intent) || '').match(OLD_PATHS) || [])];
+      const gone = (await Promise.all(named.map(async p => (await exists(p)) ? null : p))).filter(Boolean);
+      if (gone.length) gaps.push(`${A[acc].label}'s schedule runs ${gone.join(', ')}, which is gone`);
+    }
+    return gaps;
+  }
+  function engineBannerHtml() {
+    if (!T.gaps.length) return '';
+    return `<div class="tri-engine" role="alert">${ic('alert')}<div><b>Triage engine missing.</b> Run Inbox setup to repair.` +
+      `<div class="tri-engine-why">${T.gaps.map(esc).join(' · ')}</div></div></div>`;
+  }
+
   let loading = null;
   function load() {
     if (loading) return loading;
@@ -255,12 +284,14 @@
       const [text, runs, triggers] = await Promise.all([
         lucidos.data.read(CFG).catch(() => null),
         lucidos.events.query({ event_type: 'EmailTriageCompleted', since, limit: 200 }).catch(() => []),
-        /* Best-effort: pausing the cron trigger is a second layer, so a refused list still leaves a working pause. */
-        lucidos.triggers.list().catch(() => []),
+        /* Best-effort: pausing the cron trigger is a second layer, so a refused list still leaves a working pause.
+         * null (not []) marks the refusal, so engineGaps never reports a trigger missing from a list it never got. */
+        lucidos.triggers.list().catch(() => null),
       ]);
       try { T.config = text ? JSON.parse(text) : null; T.err = text ? null : 'config.json is missing'; } catch (e) { T.config = null; T.err = 'config.json does not parse: ' + e.message; }
       T.runs = (runs || []).slice().sort((x, y) => Date.parse(y.created) - Date.parse(x.created));
       T.triggers = triggers || [];
+      T.gaps = await engineGaps(triggers);
       await Promise.all(M.ORDER.map(async acc => {
         const slug = A[acc].slug;
         const [triage, ledger, st] = await Promise.all(['triage', 'notified', 'state'].map(k => readJson(`artifacts/email-triage/${k}-${slug}.json`)));
@@ -562,7 +593,7 @@
     else if (!T.config) body = `<div class="list-empty"><p class="error-text">${esc(T.err || 'No triage config')}</p><button class="action-btn action-btn-secondary" data-t-reload>Try again</button></div>`;
     else if (scope === 'all') body = overviewAll() + activityHtml('all');
     else body = overviewOne(scope) + rulesHtml(scope) + activityHtml(scope);
-    const html = headHtml(scope, tap) + `<div class="tri-body">${body}</div>`;
+    const html = headHtml(scope, tap) + `<div class="tri-body">${engineBannerHtml()}${body}</div>`;
     if (html === T.lastHtml && el.firstChild) return;
     const focus = document.activeElement && el.contains(document.activeElement) && document.activeElement.id;
     const caret = focus && document.activeElement.selectionStart;
@@ -682,5 +713,5 @@
     return load();
   }
 
-  window.Triage = { init, load, render, sideEntryHtml, sideAllHtml, serializeLike, shadowedBy, isEditing: () => !!T.editing };
+  window.Triage = { init, load, render, sideEntryHtml, sideAllHtml, engineBannerHtml, serializeLike, shadowedBy, isEditing: () => !!T.editing };
 })();

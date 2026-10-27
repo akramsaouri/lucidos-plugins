@@ -377,7 +377,7 @@
   function renderSide() {
     const n = counts();
     $('side').innerHTML = `<div class="side-head"><button class="back-link narrow-only" data-act="mbx-close">${ic('chevL')}Back</button><h2 class="side-title">Mailboxes</h2></div>` +
-      (M.ORDER.length ? Triage.sideAllHtml(S.triage === 'all') : '') +
+      (M.ORDER.length ? Triage.engineBannerHtml() + Triage.sideAllHtml(S.triage === 'all') : '') +
       M.ORDER.map(a => {
         const sel = S.filter === a && !S.view && !S.triage, open = S.foldersOpen.has(a), l = A[a].label;
         return `<div class="mbx-acct" data-acct="${slot(a)}">

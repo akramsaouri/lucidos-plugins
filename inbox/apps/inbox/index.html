@@ -368,6 +368,9 @@
   .tri-rule.dead .tri-expr code { text-decoration: line-through; text-decoration-color: var(--text-muted); }
   .tri-dead { display: flex; align-items: flex-start; gap: var(--space-xs); font-size: var(--font-size-xs); color: var(--accent-yellow); }
   .tri-dead .ic { width: 0.875rem; height: 0.875rem; margin-top: 0.125rem; }
+  .tri-engine { display: flex; align-items: flex-start; gap: var(--space-xs); margin-bottom: var(--space-md); padding: var(--space-xs) var(--space-sm); border: 1px solid color-mix(in srgb, var(--accent-yellow) 45%, transparent); border-radius: var(--radius-surface); background: color-mix(in srgb, var(--accent-yellow) 10%, transparent); color: var(--text-primary); font-size: var(--font-size-xs); }
+  .tri-engine .ic { flex: none; width: 0.875rem; height: 0.875rem; margin-top: 0.125rem; color: var(--accent-yellow); }
+  .tri-engine-why { margin-top: 0.125rem; color: var(--text-muted); overflow-wrap: anywhere; }
   .tri-act { --tone: var(--text-secondary); background: color-mix(in srgb, var(--tone) 14%, transparent); color: var(--tone); }
   .tri-act[data-action="skip"] { --tone: var(--text-muted); }
   .tri-act[data-action="delete"] { --tone: var(--accent-red); }

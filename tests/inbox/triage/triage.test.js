@@ -23,6 +23,8 @@ const SCRIPTS = ['purify.min.js', 'demo.js', 'mail.js', 'triage.js', 'app.js'].m
 const SETTINGS = JSON.stringify({ accounts: { 'Gmail - Personal': { proxy: 'gmail-personal' }, 'Gmail - Work': { proxy: 'gmail-work' } } });
 const ADDRESS = { 'gmail-personal': 'me@example.com', 'gmail-work': 'work@example.org' };
 const ACCOUNTS = ['personal', 'work', 'mailhost-work'];
+/* The engine files Inbox ships; the triage pane warns when one is gone. */
+const ENGINE = ['triggers/inbox-triage/intents/triage.md', 'knowhow/inbox-triage.md'];
 
 /* Recorded values come from the jsdom realm; a JSON copy compares cleanly with this one. */
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -44,8 +46,10 @@ function gmailThread(id, from, subject) {
 }
 
 async function boot(opts = {}) {
-  const files = new Map([[CFG, opts.config || CONFIG], ['artifacts/inbox/settings.json', SETTINGS]]);
-  const triggers = JSON.parse(JSON.stringify(TRIGGERS));
+  const files = new Map([[CFG, opts.config || CONFIG], ['artifacts/inbox/settings.json', SETTINGS], ...ENGINE.map(p => [p, ''])]);
+  for (const p of opts.drop || []) files.delete(p);
+  for (const [p, text] of Object.entries(opts.files || {})) files.set(p, text);
+  const triggers = (opts.triggers || (t => t))(JSON.parse(JSON.stringify(TRIGGERS)));
   const calls = [], toasts = [], sse = {};
   const inbox = opts.inbox || {};
   const html = fs.readFileSync(path.join(APP, 'index.html'), 'utf8').replace(/<script\b[^>]*\bsrc=[^>]*><\/script>/g, '');
@@ -72,7 +76,7 @@ async function boot(opts = {}) {
       emit: async (type, payload) => { calls.push({ kind: 'events.emit', type, payload: clone(payload) }); return { success: true }; },
     },
     triggers: {
-      list: async () => JSON.parse(JSON.stringify(triggers)),
+      list: async () => { if (opts.failList) throw new Error('refused'); return JSON.parse(JSON.stringify(triggers)); },
       update: async (id, patch) => {
         calls.push({ kind: 'triggers.update', id, patch: clone(patch) });
         if (opts.failTrigger) throw new Error('refused');
@@ -323,4 +327,58 @@ test('a new rule lands in sorted key order, and its reason reaches the inbox lis
     await app.until(() => row() && /Your rules would delete it/.test(row().textContent), 'the new reason on the row');
     assert.equal(app.calls.filter(c => c.kind === 'proxy').length, 0, 'no mail was touched');
   } finally { await app.close(); }
+});
+
+/* Gap 4 of the move off Email Triage: uninstalling Email Triage 0.7.x deletes the files under its email-triage paths,
+ * so a cron that still names one stops running. The app must say so rather than fail silently. */
+const banner = app => app.$('#side .tri-engine');
+const cronIntent = (id, intent) => list => list.map(t => (t.id === id ? Object.assign(t, { run: { type: 'intent', intent } }) : t));
+
+test('no engine banner when the engine and the on-demand trigger are in place', async () => {
+  const app = await boot();
+  try { assert.equal(banner(app), null); } finally { await app.close(); }
+});
+
+test('a missing engine file shows the banner in the sidebar and the triage pane', async () => {
+  const app = await boot({ drop: ['triggers/inbox-triage/intents/triage.md'] });
+  try {
+    const b = await app.until(() => banner(app), 'the engine banner');
+    assert.match(b.textContent, /Triage engine missing\. Run Inbox setup to repair\./);
+    assert.match(b.textContent, /triggers\/inbox-triage\/intents\/triage\.md/);
+    await app.openTriage('personal');
+    assert.ok(app.$('#triage .tri-engine'));
+  } finally { await app.close(); }
+});
+
+test('a missing on-demand trigger shows the banner', async () => {
+  const app = await boot({ triggers: list => list.filter(t => t.id !== 'trg-on-demand') });
+  try {
+    assert.match((await app.until(() => banner(app), 'the engine banner')).textContent, /No trigger answers Triage now/);
+  } finally { await app.close(); }
+});
+
+test('Email Triage\'s old on-demand trigger counts while it is still installed', async () => {
+  const app = await boot({ triggers: list => list.map(t => (t.id === 'trg-on-demand' ? Object.assign(t, { name: 'Email Triage \u2014 on demand', slug: 'email-triage-on-demand' }) : t)) });
+  try { assert.equal(banner(app), null); } finally { await app.close(); }
+});
+
+test('a cron still naming an Email Triage file that is gone shows the banner for that account', async () => {
+  const intent = 'Run the email triage intent at triggers/email-triage/intents/triage.md for Gmail - Work.';
+  const app = await boot({ triggers: cronIntent('trg-work', intent) });
+  try {
+    const b = await app.until(() => banner(app), 'the engine banner');
+    assert.match(b.textContent, /Work's schedule runs triggers\/email-triage\/intents\/triage\.md, which is gone/);
+    assert.doesNotMatch(b.textContent, /Personal/);
+  } finally { await app.close(); }
+});
+
+test('a cron naming an Email Triage file that is still there shows no banner', async () => {
+  const intent = 'Run the email triage intent at triggers/email-triage/intents/triage.md for Gmail - Work.';
+  const app = await boot({ triggers: cronIntent('trg-work', intent), files: { 'triggers/email-triage/intents/triage.md': '' } });
+  try { assert.equal(banner(app), null); } finally { await app.close(); }
+});
+
+test('a refused trigger list reports no trigger as missing', async () => {
+  const app = await boot({ failList: true });
+  try { assert.equal(banner(app), null); } finally { await app.close(); }
 });
