@@ -134,7 +134,7 @@
     return null;
   }
 
-  /* ---------- what Email Triage left behind ---------- */
+  /* ---------- what triage left behind ---------- */
   function files() {
     const out = new Map([['artifacts/email-triage/config.json', JSON.stringify(CONFIG, null, 2)], ['artifacts/inbox/settings.json', JSON.stringify(SETTINGS)],
       /* The engine files the triage pane checks for, so the demo never shows the missing-engine banner. */
@@ -164,7 +164,7 @@
     payload: Object.assign({ summary, account_results: { [acc]: counts } }, notes ? { run_notes: notes } : {}),
   }));
   const triggers = () => ACCOUNTS.map(a => ({
-    id: 'demo-trg-' + slug(a.name), name: 'Email Triage — ' + a.name, cron_expressions: ['0 0 7-21 * * *'], paused: !!a.paused,
+    id: 'demo-trg-' + slug(a.name), name: 'Inbox triage — ' + a.name, cron_expressions: ['0 0 7-21 * * *'], paused: !!a.paused,
     next_run: a.paused ? null : iso(Math.ceil(NOW / HOUR) * HOUR), last_run_status: 'ok',
   })).concat([{ id: 'demo-trg-on-demand', name: 'Inbox — triage on demand', slug: 'inbox-triage-on-demand', cron_expressions: [], paused: false }]);
 

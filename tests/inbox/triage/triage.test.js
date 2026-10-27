@@ -3,7 +3,7 @@
  *
  * fixtures/ holds a made-up workspace: three accounts (two Gmail, one password IMAP whose name contains another
  * account's), their cron triggers plus the shared on-demand and bridge triggers, and a few EmailTriageCompleted
- * payloads. config.json is written the way Email Triage writes it (Python's json.dump, indent 2).
+ * payloads. config.json is written the way triage writes it (Python's json.dump, indent 2).
  *
  *   cd tests/inbox/triage && npm install && npm test */
 'use strict';
@@ -194,8 +194,8 @@ test('pause writes paused: true, pauses only that account\'s cron trigger, and r
     assert.equal(app.w.Triage.serializeLike(CONFIG, cfg), CONFIG, 'nothing else changed');
     await app.until(() => app.calls.some(c => c.kind === 'triggers.update'), 'trigger update');
     const ups = app.calls.filter(c => c.kind === 'triggers.update');
-    /* "Email Triage — Mailhost Work" also names Work, but belongs to the longer account name. */
-    assert.deepEqual(ups.map(u => [TRIGGERS.find(t => t.id === u.id).name, u.patch]), [['Email Triage — Work', { paused: true }]]);
+    /* "Inbox triage — Mailhost Work" also names Work, but belongs to the longer account name. */
+    assert.deepEqual(ups.map(u => [TRIGGERS.find(t => t.id === u.id).name, u.patch]), [['Inbox triage — Work', { paused: true }]]);
     await app.until(() => /Paused/.test(app.$('[data-triage="work"]').textContent), 'sidebar shows paused');
     assert.ok(app.$('[data-t-run="work"]').disabled, 'Triage now is off while paused');
 
@@ -204,6 +204,16 @@ test('pause writes paused: true, pauses only that account\'s cron trigger, and r
     assert.equal(w2.content, CONFIG, 'resume deletes the key: the file is back byte for byte');
     await app.until(() => app.calls.filter(c => c.kind === 'triggers.update').length === 2, 'trigger resume');
     assert.deepEqual(app.calls.filter(c => c.kind === 'triggers.update')[1].patch, { paused: false });
+  } finally { await app.close(); }
+});
+
+test('pause still finds a cron named the way setup named them before 1.0.0', async () => {
+  const app = await boot({ triggers: list => list.map(t => (t.id === 'trg-work' ? Object.assign(t, { name: 'Email Triage — Work' }) : t)) });
+  try {
+    await app.openTriage('work');
+    app.click(app.$('[data-t-pause="work"]'));
+    await app.until(() => app.calls.some(c => c.kind === 'triggers.update'), 'trigger update');
+    assert.deepEqual(app.calls.filter(c => c.kind === 'triggers.update').map(u => [u.id, u.patch]), [['trg-work', { paused: true }]]);
   } finally { await app.close(); }
 });
 
@@ -252,7 +262,7 @@ test('Triage now emits EmailTriageRequested with the payload the on-demand trigg
     await app.openTriage('work');
     app.click(app.$('[data-t-run="work"]'));
     await app.until(() => app.emits('EmailTriageRequested').length, 'emit');
-    assert.deepEqual(app.emits('EmailTriageRequested').map(e => e.payload), [{ summary: 'Manual triage run for Work', account: 'Gmail - Work', source: 'email-triage-app' }]);
+    assert.deepEqual(app.emits('EmailTriageRequested').map(e => e.payload), [{ summary: 'Manual triage run for Work', account: 'Gmail - Work', source: 'inbox-app' }]);
     await app.until(() => app.$('[data-t-run="work"]').disabled, 'button busy');
     const done = EVENTS.find(e => Object.keys(e.payload.account_results || {}).join() === 'Gmail - Work');
     app.fire('EmailTriageCompleted', done.payload);
@@ -261,7 +271,7 @@ test('Triage now emits EmailTriageRequested with the payload the on-demand trigg
     await app.openTriage('mailhost-work');
     app.click(app.$('[data-t-run="mailhost-work"]'));
     await app.until(() => app.emits('EmailTriageRequested').length === 2, 'IMAP account emit');
-    assert.deepEqual(app.emits('EmailTriageRequested')[1].payload, { summary: 'Manual triage run for Mailhost - Work', account: 'Mailhost - Work', source: 'email-triage-app' });
+    assert.deepEqual(app.emits('EmailTriageRequested')[1].payload, { summary: 'Manual triage run for Mailhost - Work', account: 'Mailhost - Work', source: 'inbox-app' });
   } finally { await app.close(); }
 });
 
@@ -329,8 +339,8 @@ test('a new rule lands in sorted key order, and its reason reaches the inbox lis
   } finally { await app.close(); }
 });
 
-/* Gap 4 of the move off Email Triage: uninstalling Email Triage 0.7.x deletes the files under its email-triage paths,
- * so a cron that still names one stops running. The app must say so rather than fail silently. */
+/* A cron whose intent names a workspace file that is gone stops running. The app must say so rather than fail
+ * silently. */
 const banner = app => app.$('#side .tri-engine');
 const cronIntent = (id, intent) => list => list.map(t => (t.id === id ? Object.assign(t, { run: { type: 'intent', intent } }) : t));
 
@@ -357,24 +367,26 @@ test('a missing on-demand trigger shows the banner', async () => {
   } finally { await app.close(); }
 });
 
-test('Email Triage\'s old on-demand trigger counts while it is still installed', async () => {
-  const app = await boot({ triggers: list => list.map(t => (t.id === 'trg-on-demand' ? Object.assign(t, { name: 'Email Triage \u2014 on demand', slug: 'email-triage-on-demand' }) : t)) });
-  try { assert.equal(banner(app), null); } finally { await app.close(); }
+test('an on-demand trigger from another plugin does not count', async () => {
+  const app = await boot({ triggers: list => list.map(t => (t.id === 'trg-on-demand' ? Object.assign(t, { name: 'Other \u2014 on demand', slug: 'other-on-demand' }) : t)) });
+  try {
+    assert.match((await app.until(() => banner(app), 'the engine banner')).textContent, /No trigger answers Triage now/);
+  } finally { await app.close(); }
 });
 
-test('a cron still naming an Email Triage file that is gone shows the banner for that account', async () => {
-  const intent = 'Run the email triage intent at triggers/email-triage/intents/triage.md for Gmail - Work.';
+test('a cron naming a workspace file that is gone shows the banner for that account', async () => {
+  const intent = 'Run the triage intent at data/triggers/old-triage/intents/triage.md for Gmail - Work.';
   const app = await boot({ triggers: cronIntent('trg-work', intent) });
   try {
     const b = await app.until(() => banner(app), 'the engine banner');
-    assert.match(b.textContent, /Work's schedule runs triggers\/email-triage\/intents\/triage\.md, which is gone/);
+    assert.match(b.textContent, /Work's schedule runs triggers\/old-triage\/intents\/triage\.md, which is gone/);
     assert.doesNotMatch(b.textContent, /Personal/);
   } finally { await app.close(); }
 });
 
-test('a cron naming an Email Triage file that is still there shows no banner', async () => {
-  const intent = 'Run the email triage intent at triggers/email-triage/intents/triage.md for Gmail - Work.';
-  const app = await boot({ triggers: cronIntent('trg-work', intent), files: { 'triggers/email-triage/intents/triage.md': '' } });
+test('a cron naming only files that exist shows no banner', async () => {
+  const intent = 'Execute the email triage intent at triggers/inbox-triage/intents/triage.md for Gmail - Work. Read knowhow/inbox-triage.md, not system-knowhow/x.md.';
+  const app = await boot({ triggers: cronIntent('trg-work', intent) });
   try { assert.equal(banner(app), null); } finally { await app.close(); }
 });
 

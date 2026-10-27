@@ -6,7 +6,7 @@ browse and fetch with BODY.PEEK. Messages are addressed by their Message-ID
 header (stable across sessions and folder moves) and resolved to a UID inside
 the same session, just before a write.
 
-Connection settings come from the account's block in Email Triage's
+Connection settings come from the account's block in triage's
 data/artifacts/email-triage/config.json, the same `"fetch": "imap"` schema its
 own scripts/inbox-triage/imap_helper.py reads:
 
@@ -32,7 +32,7 @@ LIST_RE = re.compile(r'^\((?P<flags>[^)]*)\) (?P<delim>"(?:[^"\\]|\\.)*"|NIL) (?
 
 
 def accounts():
-    """Email Triage's accounts as {name: block}. The config keys them by name; tolerate a list of blocks too."""
+    """Triage's accounts as {name: block}. The config keys them by name; tolerate a list of blocks too."""
     raw = json.load(open(CONFIG, encoding="utf-8")).get("accounts", {})
     if isinstance(raw, list):
         raw = {a.get("name"): a for a in raw}
@@ -48,7 +48,7 @@ def settings(name):
     """(block, imap settings) for one account, with defaults filled in. Raises ValueError naming what is missing."""
     block = accounts().get(name)
     if not isinstance(block, dict):
-        raise ValueError(f"no account {name!r} in Email Triage's config")
+        raise ValueError(f"no account {name!r} in the triage config")
     if block.get("fetch") != "imap":
         raise ValueError(f"{name!r} is not an IMAP account (fetch is {block.get('fetch')!r})")
     c = dict(block.get("imap") or {})

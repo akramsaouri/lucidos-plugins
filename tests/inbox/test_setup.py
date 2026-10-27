@@ -1,5 +1,5 @@
 """Inbox setup: triage first, then each Gmail account wired from its OAuth before it ever asks for a Google client
-ID, and a safe move off the old Email Triage plugin."""
+ID. Inbox stands alone: setup never migrates from the old Email Triage plugin."""
 import os
 import re
 import tomllib
@@ -50,7 +50,7 @@ class SetupTest(unittest.TestCase):
         self.assertIn("settings file is missing", gate)
 
     def test_triage_comes_before_the_inbox_wiring(self):
-        order = ["## Moving from Email Triage", "**Connect the mailbox** if", "**Build a starting rule chain.**", "**Ask what happens to mail",
+        order = ["## Check the engine resolves", "**Connect the mailbox** if", "**Build a starting rule chain.**", "**Ask what happens to mail",
                  "create the cron trigger", "**Each Gmail account**", "**Each IMAP account**", "display name",
                  "**AI Suggest"]
         at = [self.setup.index(o) for o in order]
@@ -61,34 +61,20 @@ class SetupTest(unittest.TestCase):
         self.assertIn("Never create an on-demand trigger", self.setup)
         self.assertIn("reuse it rather than adding another", self.setup)
 
-    def move(self):
-        return self.setup[self.setup.index("## Moving from Email Triage"):self.setup.index("**Check the engine resolves.**")]
+    def test_it_no_longer_moves_anyone_off_email_triage(self):
+        self.assertNotIn("Moving from Email Triage", self.setup)
+        self.assertNotIn("email-triage-on-demand", self.setup)
+        self.assertNotIn('id="email-triage"', self.setup)
+        self.assertNotRegex(self.setup, r"(?:knowhow|triggers|scripts|apps)/email-triage\b")
 
-    def test_it_tells_the_user_before_removing_email_triage(self):
-        move = self.move()
-        tell = move.index("Inbox now includes triage, so I'll remove the old Email Triage plugin. Your rules, "
-                          "accounts, history and schedules stay.")
-        self.assertLess(tell, move.index("**Point each per-account cron"))
-        self.assertLess(tell, move.index("**Uninstall Email Triage**"))
+    def test_a_cron_naming_a_missing_file_is_repaired_in_place(self):
+        check = self.setup[self.setup.index("## Check the engine resolves"):self.setup.index("## Triage, per account")]
+        self.assertIn("no per-account cron names a file that is missing", check)
+        self.assertIn("triggers/inbox-triage/intents/triage.md", check)
+        self.assertIn("Never recreate, pause or delete one", check)
 
-    def test_crons_move_to_inbox_before_email_triage_goes(self):
-        # Uninstalling Email Triage deletes its email-triage files, so a cron still naming one would stop.
-        move = self.move()
-        self.assertLess(move.index("**Point each per-account cron"), move.index("**Uninstall Email Triage**"))
-        for old, new in (("triggers/email-triage/intents/triage.md", "triggers/inbox-triage/intents/triage.md"),
-                         ("knowhow/email-triage.md", "knowhow/inbox-triage.md")):
-            self.assertIn(old, move)
-            self.assertIn(new, move)
-        self.assertIn("Never recreate, pause or delete one", move)
-        self.assertIn("even when Email Triage is already gone", move)
-
-    def test_any_version_uninstalls_directly(self):
-        # The two plugins share no file, so no Email Triage version needs updating before it goes.
-        self.assertIn("at whatever version it is: no update first", self.move())
-        self.assertNotIn("Update Email Triage to 0.8.0", self.setup)
-
-    def test_the_move_checks_the_engine_and_the_crons(self):
-        check = self.setup[self.setup.index("**Check the engine resolves.**"):]
+    def test_the_check_covers_the_engine_and_the_crons(self):
+        check = self.setup[self.setup.index("## Check the engine resolves"):]
         for path in ("knowhow/inbox-triage.md", "triggers/inbox-triage/intents/triage.md",
                      "scripts/inbox-triage/imap_helper.py", "scripts/inbox-triage/snapshot_imap.py"):
             self.assertIn(path, check)
@@ -99,21 +85,26 @@ class SetupTest(unittest.TestCase):
     def test_new_crons_run_inbox_engine(self):
         cron = self.setup[self.setup.index("create the cron trigger"):self.setup.index("**Write the account into")]
         self.assertIn("triggers/inbox-triage/intents/triage.md", cron)
-        self.assertNotIn("email-triage/intents", cron)
+        self.assertIn("`Inbox triage — <Account>`", cron)
 
     def test_a_raised_setup_revision_says_why(self):
         self.assertGreaterEqual(self.manifest["setup_revision"], 1)
         self.assertLessEqual(len(self.manifest["setup_reason"]), 200)
-        self.assertIn("Email Triage is no longer needed", self.manifest["setup_reason"])
+        self.assertIn("stands alone", self.manifest["setup_reason"])
 
     def test_the_newest_update_note_is_this_minor_release(self):
         # A patch release that leaves setup alone adds no note (rewording setup would ask for a re-run), but a
-        # minor release always says what changed.
+        # minor or major release always says what changed.
         notes = [tuple(map(int, v.split("."))) for v in re.findall(r"\*\*Updating to (\d+\.\d+\.\d+):\*\*", self.setup)]
         version = tuple(map(int, self.manifest["version"].split(".")))
         self.assertTrue(notes)
         self.assertLessEqual(max(notes), version)
         self.assertEqual(max(notes)[:2], version[:2])
+
+    def test_the_1_0_0_note_says_to_uninstall_and_install_fresh(self):
+        note = self.setup[self.setup.index("**Updating to 1.0.0:**"):self.setup.index("---")]
+        for must in ("uninstall Email Triage and Inbox", "install Inbox fresh", "run this setup"):
+            self.assertIn(must, note)
 
 
 if __name__ == "__main__":
