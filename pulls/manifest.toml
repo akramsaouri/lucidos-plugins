@@ -1,5 +1,5 @@
 id = "pulls"
-version = "0.1.0"
+version = "0.1.1"
 name = "Pulls"
 description = "A Home widget for the Pulls app: how many pull requests are on you right now, split into your own PRs blocked on you (comments, conflicts, failing CI, re-requests), others' PRs waiting on your review and your PRs ready to merge. Needs the Pulls app (review-cockpit) installed in the workspace, and its sweeps writing artifacts/review-cockpit/my-prs.json and review-queue.json. This plugin ships only the widget, not the Pulls app, so without Pulls and its data the widget shows nothing to count: it says the Pulls app isn't installed, or that Pulls has no data yet."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/pulls"

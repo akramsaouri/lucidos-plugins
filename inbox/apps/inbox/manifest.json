@@ -1,6 +1,6 @@
 {
   "name": "Inbox",
   "reveal": "on-ready",
-  "description": "One calm inbox across your mail accounts: what triage kept, with the reason, apart from what it hasn't seen yet. Archive, reply with AI help, and run triage: rules, pause, Triage now.",
+  "description": "All your mail accounts in one calm inbox. Archive, reply and run triage from here.",
   "icon": "assets/icon.svg"
 }

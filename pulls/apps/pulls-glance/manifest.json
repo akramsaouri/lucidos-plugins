@@ -1,6 +1,6 @@
 {
   "name": "Pulls",
-  "description": "What's on you in Pulls: the number of PRs needing you now, counted the way Pulls counts them. It splits into your own PRs blocked on you (comments, conflicts, failing CI, re-requests), others' PRs waiting on your review, and your PRs ready to merge, with your other open PRs counted as waiting on someone else. On the Home board a small tile shows the number and the most urgent bucket, medium adds the breakdown, and large adds the top PRs, most urgent first. Reads the Pulls app's (review-cockpit) artifacts/review-cockpit/my-prs.json and review-queue.json, refreshes when either sweep writes, and a tap opens the Pulls app. Without the Pulls app it says so, and before its first sweep it says there is nothing yet.",
+  "description": "How many pull requests need you right now. Tap to open Pulls.",
   "icon": "assets/icon.svg",
   "kind": "widget",
   "reusable": true,
