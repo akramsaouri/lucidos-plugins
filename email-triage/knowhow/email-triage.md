@@ -13,25 +13,22 @@ An account's `fetch` value picks how its mail is read, and never via `read_email
 - `"imap-peek"` — OAuth IMAP with no REST API to use (Outlook/Exchange): a read-only inbox snapshot. See "Fetching Without Marking Read".
 - `"imap"` — a mailbox with no API and no OAuth, just a host and a password. See "IMAP Accounts".
 
-## Part of the Inbox plugin
+## Controls live in the Inbox plugin
 
-The triage engine ships with the **Inbox** plugin since Inbox 0.3.0: the intent, the on-demand
-trigger ("Inbox — triage on demand"), the IMAP helpers and this knowhow. Until then it was the
-separate Email Triage plugin, now deprecated; the paths here are unchanged, and runtime state still
-lives in `artifacts/email-triage/`. Inbox's setup has the safe order for moving a workspace off the
-old plugin.
+This plugin is the engine only: the intent, the on-demand trigger, the IMAP helpers and this
+knowhow. It ships no app. Since 0.7.0 the control panel that used to be the Email Triage app
+(`apps/email-triage`) lives in the **Inbox** plugin's app (`apps/inbox`), which also shows the
+mail itself. Each account's sidebar group in Inbox starts with a **Triage** entry (health and next
+run, pause/resume, Triage now, the rule chain editor with unreachable-rule warnings, the no-action
+mail picker, suggestions from runs, run history), and an **All accounts** strip at the top of the
+sidebar covers every account at once (Pause all, Triage all accounts). The invariants those controls
+keep on `config.json` are in Inbox's `apps/inbox/knowhow/triage.md`.
 
-The controls live in the Inbox app (`apps/inbox`), which also shows the mail itself. Each account's
-sidebar group starts with a **Triage** entry (health and next run, pause/resume, Triage now, the rule
-chain editor with unreachable-rule warnings, the no-action mail picker, suggestions from runs, run
-history), and an **All accounts** strip at the top of the sidebar covers every account at once (Pause
-all, Triage all accounts). The invariants those controls keep on `config.json` are in
-`apps/inbox/knowhow/triage.md`.
-
-To fire a run without the app, emit
+Without Inbox installed, everything below still runs on schedule: edit `config.json` by hand (or ask
+Lucidos to) and fire a run with
 `lucidos events emit EmailTriageRequested --payload '{"summary": "Manual triage run for <name>", "account": "<config name>", "source": "email-triage-app"}'`.
 The on-demand trigger matches on the event type, and `source: "email-triage-app"` is what Inbox's
-"Triage now" sends, kept from the old Email Triage app so the two stay indistinguishable.
+"Triage now" sends, kept from the old app so the two stay indistinguishable.
 
 ## Triage Flow
 

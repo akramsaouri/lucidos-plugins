@@ -1,5 +1,7 @@
-# The one on-demand triage trigger. Email Triage shipped it as `email-triage-on-demand` until 0.7.x; the slug is
-# new so the two plugins never record the same trigger.toml while a workspace moves from one to the other.
+# The one on-demand triage trigger. Email Triage ships its own as `email-triage-on-demand`; this slug is new so the
+# two plugins never record the same trigger.toml (uninstalling either would delete it). While Email Triage is still
+# installed both answer `EmailTriageRequested`, so this one stands down whenever the old one is live: the old
+# plugin's trigger can't be changed on installed copies, and it disappears on its own when Email Triage goes.
 name = "Inbox — triage on demand"
 slug = "inbox-triage-on-demand"
 app_id = "inbox"
@@ -10,4 +12,4 @@ event_type = "EmailTriageRequested"
 
 [run]
 type = "intent"
-intent = "When I ask for a triage run from the Inbox app's triage pane (its Triage now button), execute the email triage intent at triggers/email-triage/intents/triage.md for the account named in the request."
+intent = "When I ask for a triage run from the Inbox app's triage pane (its Triage now button), triage the account named in the request, once. First list the triggers: if one with slug `email-triage-on-demand` (\"Email Triage — on demand\", from the old Email Triage plugin) exists and is not paused, stop here and do nothing, because that trigger answers this same request. Otherwise execute the email triage intent at triggers/inbox-triage/intents/triage.md for that account."

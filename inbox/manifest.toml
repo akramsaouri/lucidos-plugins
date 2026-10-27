@@ -12,7 +12,7 @@ setup_reason = "Inbox now includes the triage engine; Email Triage is no longer 
 
 setup = """
 **Every run starts with "Moving from Email Triage" below**, even when nothing else needs doing: a workspace
-that still has the Email Triage plugin installed must be moved off it safely, and the order matters.
+that used the Email Triage plugin has cron triggers to point at Inbox's engine before that plugin goes.
 
 **Already running Inbox?** After that step, if `artifacts/email-triage/config.json` has every account the user
 wants, each with its cron trigger (step 4), and `artifacts/inbox/settings.json` exists with an
@@ -24,12 +24,11 @@ whose answer is already in the settings. Do the same when the settings file is m
 `data/config/apis.json` proxy already passes step 6's check for some accounts: record those and carry on from
 there. Never ask again for what `config.json` or the settings already answer.
 
-- **Updating to 0.3.0:** Inbox now ships the triage engine that used to be the Email Triage plugin: the triage
-  intent (`triggers/email-triage/intents/triage.md`), its knowhow (`knowhow/email-triage.md`), the IMAP helpers
-  (`scripts/email-triage/`) and the on-demand trigger behind Triage now, now named "Inbox — triage on demand".
-  The `data/` paths are the same, so cron triggers that name them keep working, and runtime state stays in
-  `artifacts/email-triage/`, so there is no data to migrate. Email Triage itself is deprecated: "Moving from
-  Email Triage" below takes it out without losing a file.
+- **Updating to 0.3.0:** Inbox now ships the triage engine that used to be the Email Triage plugin, at its own
+  paths: the triage intent (`triggers/inbox-triage/intents/triage.md`), its knowhow (`knowhow/inbox-triage.md`),
+  the IMAP helpers (`scripts/inbox-triage/`) and the on-demand trigger behind Triage now, "Inbox — triage on
+  demand". Runtime state stays in `artifacts/email-triage/`, so there is no data to migrate. Email Triage itself
+  is deprecated: "Moving from Email Triage" below points the crons at Inbox's engine, then removes it.
 - **Updating to 0.2.1:** setup reuses the account's Gmail OAuth for each mailbox instead of asking for a Google
   client ID.
 - **Updating to 0.2.0:** the triage control panel moved into Inbox. An **All accounts** strip at the top of the
@@ -46,7 +45,7 @@ there. Never ask again for what `config.json` or the settings already answer.
 Inbox is a mail client with triage built in. Accounts, rules and schedules are workspace state, not plugin
 files: `artifacts/email-triage/config.json` holds the accounts and their rule chains, one cron trigger per
 account runs triage, and `artifacts/inbox/settings.json` holds Inbox's wiring and your name and voice. Walk the
-user through it conversationally. **Read `knowhow/email-triage.md` and `knowhow/inbox.md` first.** The first has
+user through it conversationally. **Read `knowhow/inbox-triage.md` and `knowhow/inbox.md` first.** The first has
 the `config.json` schema, the rule-chain semantics, the notified-ledger dedup and the shared-account fetch state;
 the second has the settings schema, how each account type is read, and the bridge protocol
 (`apps/inbox/knowhow/triage.md` covers the triage controls). Keep every key already in either file when you write
@@ -62,52 +61,50 @@ Two rules hold throughout:
 
 ## Moving from Email Triage
 
-Until Inbox 0.3.0 the engine was the separate Email Triage plugin. Both plugins now ship the same files at the
-same paths, and the plugin engine works by path: an install overwrites what is there, an uninstall deletes every
-file the plugin recorded (even one another plugin also records), and an update deletes only the files its new
-version dropped, never a path another installed plugin still records. So **uninstalling Email Triage 0.7.x while
-Inbox 0.3.0 is installed deletes the triage engine out from under Inbox.** Updating Email Triage to 0.8.0 first,
-a deprecated version that ships none of those files, hands them to Inbox; after that its uninstall removes only
-its own note. Accounts, rules, run history and cron triggers survive every step: they are workspace state.
+Until Inbox 0.3.0 the engine was the separate Email Triage plugin, at `knowhow/email-triage.md`,
+`triggers/email-triage/intents/triage.md` and `scripts/email-triage/`. Inbox ships its own copy at its own paths:
+`knowhow/inbox-triage.md`, `triggers/inbox-triage/intents/triage.md` and `scripts/inbox-triage/`. The two plugins
+share no file on purpose: uninstalling a plugin deletes every file it recorded, even one another plugin also
+records. So removing Email Triage, at any version, deletes only its own copy. What that can break is a per-account
+cron trigger that still names an `email-triage` path, so those move first. Accounts, rules, run history and the
+crons themselves are workspace state and survive every step.
 
-Check the newest `PluginInstalled` event for `email-triage`, and whether a `PluginUninstalled` follows it:
+Check the newest `PluginInstalled` event for `email-triage`, and whether a `PluginUninstalled` follows it. Then, in
+this order:
 
-- **Never installed, or uninstalled already:** go to "Check the engine resolves" below.
-- **Installed at 0.8.0 or later:** offer to uninstall it (the Plugins panel, or `plugins(action="uninstall",
-  id="email-triage")`). It deletes only `knowhow/email-triage-deprecated.md`. Then check the engine resolves.
-- **Installed below 0.8.0:** do NOT uninstall it yet. In this order:
-  1. Tell the user why in one or two lines: Email Triage is now part of Inbox, and it has to be updated before
-     it's removed, or removing it deletes files Inbox needs.
-  2. Update Email Triage to 0.8.0 (the Plugins panel, or `plugins(action="update", id="email-triage")`). Its
-     update drops the engine files from its own record but leaves them on disk, because Inbox records them too.
-     It also removes Email Triage's own on-demand trigger, "Email Triage — on demand". Until then two triggers
-     answer `EmailTriageRequested`, so a Triage now press starts two runs of the same account at once:
-     ask the user not to press it until this step is done. Don't delete either trigger by hand. The update starts Email
-     Triage's own short setup thread, which only offers the same uninstall.
-  3. Uninstall Email Triage. It now deletes only its deprecated note.
-  4. Check the engine resolves.
-
-Never pause, edit or delete the per-account cron triggers during the move: the triage intent stays at
-`triggers/email-triage/intents/triage.md` throughout, so they never need it. A panel along the way may warn
-about triggers that use removed files; the check below says whether anything is actually missing.
+1. **If Email Triage is installed, at any version, tell the user before anything else**, in these words or close
+   to them: "Inbox now includes triage, so I'll remove the old Email Triage plugin. Your rules, accounts, history
+   and schedules stay." Skip this when it isn't installed.
+2. **Point each per-account cron at Inbox's engine.** In `lucidos triggers list`, find every cron trigger whose
+   intent names `triggers/email-triage/intents/triage.md`, `knowhow/email-triage.md`, a `scripts/email-triage/`
+   script, or `apps/email-triage/scripts/snapshot_imap.py` (the path before Email Triage 0.7.0). Update each with
+   `triggers(action="update")`, swapping only those paths for `triggers/inbox-triage/intents/triage.md`,
+   `knowhow/inbox-triage.md` and `scripts/inbox-triage/`, and keeping the rest of its text, its schedule, name and
+   settings as they are. Never recreate, pause or delete one. A cron that names the knowhow only by its title
+   ("the Email Triage knowhow") can stay: Inbox's knowhow keeps that title. Do this step even when Email Triage
+   is already gone, since its crons broke when it left and this repairs them.
+3. **Uninstall Email Triage**, if it is installed, at whatever version it is: no update first (the Plugins panel,
+   or `plugins(action="uninstall", id="email-triage")`). Its panel lists only `email-triage` paths, and its own
+   "Email Triage — on demand" trigger goes with it. If the panel still lists a cron under "Triggers that use
+   these files", step 2 missed it: cancel, fix that cron, and stage the uninstall again. If the user declines,
+   that's fine: triage already runs on Inbox's engine, and Inbox's on-demand trigger stands down while the old
+   one is live, so Triage now still runs once. Tell them they can remove it from Plugins any time.
+4. **Check the engine resolves**, below.
 
 **Check the engine resolves.**
 
-- These exist in `data/`: `knowhow/email-triage.md`, `triggers/email-triage/intents/triage.md`,
-  `scripts/email-triage/imap_helper.py`, `scripts/email-triage/snapshot_imap.py`.
-- In `lucidos triggers list`, every per-account cron trigger names `triggers/email-triage/intents/triage.md` (or
-  `knowhow/email-triage.md`), and no file it names is missing. One that still runs
-  `apps/email-triage/scripts/snapshot_imap.py` (the path before Email Triage 0.7.0) should be updated to
-  `scripts/email-triage/snapshot_imap.py`: offer it.
-- Exactly one trigger answers `EmailTriageRequested`: "Inbox — triage on demand". A leftover "Email Triage — on
-  demand" means Email Triage is still installed below 0.8.0: finish the steps above.
+- These exist in `data/`: `knowhow/inbox-triage.md`, `triggers/inbox-triage/intents/triage.md`,
+  `scripts/inbox-triage/imap_helper.py`, `scripts/inbox-triage/snapshot_imap.py`.
+- In `lucidos triggers list`, no per-account cron names a file that is missing. Once Email Triage is gone, none
+  names an `email-triage` path at all.
+- Exactly one trigger answers `EmailTriageRequested`: "Inbox — triage on demand". A second one, "Email Triage —
+  on demand", means Email Triage is still installed, which is fine only if the user chose to keep it.
 - `artifacts/email-triage/config.json` is untouched. Don't rewrite it as part of the move.
 
-**If an engine file is missing**, Email Triage below 0.8.0 was uninstalled after Inbox 0.3.0 landed. Restore
-each missing path from the workspace history: find the uninstall commit with
-`git -C data log --format='%H %s' --grep='Uninstall plugin: email-triage' -1`, then
-`git -C data checkout <that commit>^ -- <path>` for each missing path. That parent holds exactly what Inbox 0.3.0
-shipped. Then run the check again.
+**If an Inbox engine file is missing** (deleted by hand, say), restore it from the workspace history:
+`git -C data log --format=%H --diff-filter=D -1 -- <path>` finds the commit that deleted it, and
+`git -C data checkout <that commit>^ -- <path>` brings it back. Then run the check again. The Inbox app shows a
+"Triage engine missing" banner until it passes.
 
 When the check passes, tell the user in one line that triage now runs from Inbox alone, and that their accounts,
 rules and schedules carried over. Then go on with "Already running Inbox?" at the top.
@@ -133,8 +130,8 @@ Per account the user wants triaged:
    3. Set `"credential_env"` in that block to the credential's env var *name*: list the names, never the values,
       with `env | cut -d= -f1 | grep '^CRED_'`.
 
-   Check it with `python data/scripts/email-triage/imap_helper.py list --account "<name>"`, which is read-only.
-   The "IMAP Accounts" section of `knowhow/email-triage.md` has the full schema and commands.
+   Check it with `python data/scripts/inbox-triage/imap_helper.py list --account "<name>"`, which is read-only.
+   The "IMAP Accounts" section of `knowhow/inbox-triage.md` has the full schema and commands.
 
 2. **Build a starting rule chain.** Don't ask them to write rules: ask what they want gone (`delete`), what they
    want silenced but kept (`read`), and what should always escalate (`notify` / `flag`), then turn the answers
@@ -150,7 +147,7 @@ Per account the user wants triaged:
    account, and reuse it rather than adding another. A good default is hourly during waking hours plus one
    early-morning run; offer that, let them adjust. Each account gets its OWN trigger, named
    `Email Triage — <Account>` (Inbox's pause finds it by that name), running the intent at
-   `triggers/email-triage/intents/triage.md` for that account.
+   `triggers/inbox-triage/intents/triage.md` for that account.
 
    **Pin the trigger's `reasoning_effort` to `low`.** The rule chain is first-match-wins and already written
    down, so the only judgement left is a three-way classification against a rubric. The one exception is an

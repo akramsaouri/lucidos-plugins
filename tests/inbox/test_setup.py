@@ -61,18 +61,45 @@ class SetupTest(unittest.TestCase):
         self.assertIn("Never create an on-demand trigger", self.setup)
         self.assertIn("reuse it rather than adding another", self.setup)
 
-    def test_email_triage_is_updated_before_it_is_uninstalled(self):
-        move = self.setup[self.setup.index("**Installed below 0.8.0:**"):self.setup.index("**Check the engine resolves.**")]
-        self.assertIn("do NOT uninstall it yet", move)
-        self.assertLess(move.index("Update Email Triage to 0.8.0"), move.index("Uninstall Email Triage"))
+    def move(self):
+        return self.setup[self.setup.index("## Moving from Email Triage"):self.setup.index("**Check the engine resolves.**")]
 
-    def test_the_move_checks_the_crons_still_resolve(self):
+    def test_it_tells_the_user_before_removing_email_triage(self):
+        move = self.move()
+        tell = move.index("Inbox now includes triage, so I'll remove the old Email Triage plugin. Your rules, "
+                          "accounts, history and schedules stay.")
+        self.assertLess(tell, move.index("**Point each per-account cron"))
+        self.assertLess(tell, move.index("**Uninstall Email Triage**"))
+
+    def test_crons_move_to_inbox_before_email_triage_goes(self):
+        # Uninstalling Email Triage deletes its email-triage files, so a cron still naming one would stop.
+        move = self.move()
+        self.assertLess(move.index("**Point each per-account cron"), move.index("**Uninstall Email Triage**"))
+        for old, new in (("triggers/email-triage/intents/triage.md", "triggers/inbox-triage/intents/triage.md"),
+                         ("knowhow/email-triage.md", "knowhow/inbox-triage.md")):
+            self.assertIn(old, move)
+            self.assertIn(new, move)
+        self.assertIn("Never recreate, pause or delete one", move)
+        self.assertIn("even when Email Triage is already gone", move)
+
+    def test_any_version_uninstalls_directly(self):
+        # The two plugins share no file, so no Email Triage version needs updating before it goes.
+        self.assertIn("at whatever version it is: no update first", self.move())
+        self.assertNotIn("Update Email Triage to 0.8.0", self.setup)
+
+    def test_the_move_checks_the_engine_and_the_crons(self):
         check = self.setup[self.setup.index("**Check the engine resolves.**"):]
-        for path in ("knowhow/email-triage.md", "triggers/email-triage/intents/triage.md",
-                     "scripts/email-triage/imap_helper.py", "scripts/email-triage/snapshot_imap.py"):
+        for path in ("knowhow/inbox-triage.md", "triggers/inbox-triage/intents/triage.md",
+                     "scripts/inbox-triage/imap_helper.py", "scripts/inbox-triage/snapshot_imap.py"):
             self.assertIn(path, check)
             self.assertTrue(os.path.exists(os.path.join(PLUGIN, path)), path)
+        self.assertIn("no per-account cron names a file that is missing", check)
         self.assertIn("Exactly one trigger answers `EmailTriageRequested`", check)
+
+    def test_new_crons_run_inbox_engine(self):
+        cron = self.setup[self.setup.index("create the cron trigger"):self.setup.index("**Write the account into")]
+        self.assertIn("triggers/inbox-triage/intents/triage.md", cron)
+        self.assertNotIn("email-triage/intents", cron)
 
     def test_a_raised_setup_revision_says_why(self):
         self.assertGreaterEqual(self.manifest["setup_revision"], 1)

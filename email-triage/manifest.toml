@@ -8,22 +8,20 @@ categories = ["productivity", "communication", "automation"]
 icon = "media/icon.svg"
 
 setup = """
-Email Triage is deprecated: since Inbox 0.3.0 the Inbox plugin ships the whole triage engine (the intent,
-the knowhow, the IMAP helpers and the on-demand trigger), at the same `data/` paths. This version of Email
-Triage ships only `knowhow/email-triage-deprecated.md`. Do NOT create triggers, edit
+Email Triage is deprecated: since Inbox 0.3.0 the Inbox plugin ships the whole triage engine (the intent, the
+knowhow, the IMAP helpers and the on-demand trigger) at its own `inbox-triage` paths. This version of Email Triage
+still ships its own engine unchanged, so this update stopped nothing. Do NOT create triggers, edit
 `artifacts/email-triage/config.json` or connect mailboxes from here.
 
 Check the newest `PluginInstalled` event for `inbox` (and that no later `PluginUninstalled` follows it):
 
-- **Inbox is 0.3.0 or later.** This update removed none of the engine files, because Inbox records them too.
-  Offer to uninstall Email Triage now: it deletes only the deprecated note. Before you stage the uninstall,
-  check that `knowhow/email-triage.md`, `triggers/email-triage/intents/triage.md` and
-  `scripts/email-triage/imap_helper.py` exist in `data/`. If one is missing, stop and point the user at
-  Inbox's setup, which repairs it. After the uninstall, check `lucidos triggers list` shows exactly one
-  trigger answering `EmailTriageRequested`, Inbox's "Inbox — triage on demand".
-- **Inbox is older than 0.3.0, or not installed.** This update removed the engine files, so the per-account
-  cron triggers point at a triage intent that is gone, and nothing triages until Inbox 0.3.0 lands. Tell the
-  user that plainly, and offer to update (or install) Inbox now. Its setup moves them over: accounts, rules,
-  run history and cron triggers all carry over untouched. Uninstalling Email Triage is safe either before
-  or after that update.
+- **Inbox is 0.3.0 or later.** Tell the user: "Inbox now includes triage, so Email Triage can go. Your rules,
+  accounts, history and schedules stay." Then hand over to Inbox's setup, which points each per-account cron at
+  Inbox's engine before it uninstalls Email Triage: offer to open it (Plugins, then Inbox, then Setup). Don't
+  uninstall from here while any cron in `lucidos triggers list` still names an `email-triage` path such as
+  `triggers/email-triage/intents/triage.md`, because the uninstall deletes those files. If none does, you may
+  offer the uninstall here instead.
+- **Inbox is older than 0.3.0, or not installed.** Nothing changed: triage keeps running on this plugin. Offer to
+  update (or install) Inbox; its setup moves the user over, and their accounts, rules, run history and schedules
+  all carry over.
 """

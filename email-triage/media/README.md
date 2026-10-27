@@ -8,13 +8,12 @@ account, with one notification for what needs you. Nothing about how triage runs
 
 ## If you have Email Triage installed
 
-1. Update Inbox to 0.3.0 or later. Its setup finds Email Triage and walks you through the rest.
-2. Setup has you update Email Triage to this version (0.8.0), which hands its files over to Inbox, and then
-   uninstall it.
+1. Update Inbox to 0.3.0 or later. Its setup tells you it will remove Email Triage, points your triage schedules
+   at Inbox, then uninstalls Email Triage.
+2. That's it. Your accounts, rules, run history and schedules stay: they're workspace state, not plugin files.
 
-Your accounts, rules, run history and cron triggers carry over untouched: they're workspace state, not plugin
-files.
+Updating Email Triage to this version (0.8.0) changes nothing about how triage runs, so it's safe at any time,
+even with an older Inbox.
 
-**Don't uninstall an older Email Triage after updating Inbox.** Both plugins then record the same triage files,
-and uninstalling Email Triage would delete them. Update Email Triage to 0.8.0 first, or let Inbox's setup handle
-it. Uninstalling Email Triage *before* updating Inbox is fine: triage just pauses until the Inbox update lands.
+If you uninstall Email Triage yourself before Inbox's setup has run, scheduled triage stops until it does. Inbox
+shows a "Triage engine missing" banner when that happens; run Inbox's setup to fix it.

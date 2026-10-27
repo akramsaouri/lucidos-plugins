@@ -7,8 +7,9 @@ schedule, applies your rules first, then AI, and sends one notification for what
 splits each account in two: *Needs you*, the mail that survived triage, with the reason it was kept, and *Not
 triaged yet*, the mail triage hasn't seen.
 
-**Had the Email Triage plugin?** It's now part of Inbox. Update Inbox and its setup moves you over: accounts,
-rules, schedules and run history carry over untouched.
+**Had the Email Triage plugin?** It's now part of Inbox. Update Inbox and its setup moves you over: it points
+your schedules at Inbox, then removes Email Triage. Accounts, rules, schedules and run history carry over
+untouched.
 
 ## What you get
 

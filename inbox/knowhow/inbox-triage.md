@@ -1,0 +1,518 @@
+---
+name: Email Triage
+description: Per-account email triage with configurable schedules, rules, and AI categorization
+---
+
+## Overview
+
+Automated email triage system. Each account has its own schedule and rule chain. Config lives in `artifacts/email-triage/config.json`, as `{"accounts": {"<account name>": {...block...}}}`, keyed by account name.
+
+An account's `fetch` value picks how its mail is read, and never via `read_email`:
+
+- `"gmail-api"` — Gmail, over the Gmail REST API with the account's OAuth token.
+- `"imap-peek"` — OAuth IMAP with no REST API to use (Outlook/Exchange): a read-only inbox snapshot. See "Fetching Without Marking Read".
+- `"imap"` — a mailbox with no API and no OAuth, just a host and a password. See "IMAP Accounts".
+
+## Part of the Inbox plugin
+
+The triage engine ships with the **Inbox** plugin since Inbox 0.3.0: the intent, the on-demand
+trigger ("Inbox — triage on demand"), the IMAP helpers and this knowhow. Until then it was the
+separate Email Triage plugin, now deprecated. Inbox ships it at its own paths
+(`knowhow/inbox-triage.md`, `triggers/inbox-triage/intents/triage.md`, `scripts/inbox-triage/`), so
+removing Email Triage, which deletes every file it recorded under `email-triage`, never touches them.
+Runtime state still lives in `artifacts/email-triage/`. Inbox's setup points each account's cron
+trigger at these paths and then removes the old plugin.
+
+While Email Triage is still installed, its "Email Triage — on demand" trigger answers
+`EmailTriageRequested` too. Inbox's trigger then stands down, so a Triage now press runs once.
+
+The controls live in the Inbox app (`apps/inbox`), which also shows the mail itself. Each account's
+sidebar group starts with a **Triage** entry (health and next run, pause/resume, Triage now, the rule
+chain editor with unreachable-rule warnings, the no-action mail picker, suggestions from runs, run
+history), and an **All accounts** strip at the top of the sidebar covers every account at once (Pause
+all, Triage all accounts). The invariants those controls keep on `config.json` are in
+`apps/inbox/knowhow/triage.md`.
+
+To fire a run without the app, emit
+`lucidos events emit EmailTriageRequested --payload '{"summary": "Manual triage run for <name>", "account": "<config name>", "source": "email-triage-app"}'`.
+The on-demand trigger matches on the event type, and `source: "email-triage-app"` is what Inbox's
+"Triage now" sends, kept from the old Email Triage app so the two stay indistinguishable.
+
+## Triage Flow
+
+0. **Check `paused` before anything else** — if the account's config block has
+   `"paused": true`, stop the run immediately. See "Paused Accounts" below.
+1. **Read config** — load `artifacts/email-triage/config.json`
+2. **Fetch emails** — depends on account type:
+   - **Personal (non-shared)**: the unread set (`is:unread in:inbox` over the Gmail API, or `unread: true` in the snapshot)
+   - **Whatever the account type, bodies never come from `read_email`.** Opening a
+     message with `read_email` sets IMAP's `\Seen` flag, so inspecting mail to decide
+     whether it needs the user marks it read — including mail they never opened.
+     Verified on Gmail (2026-09-23): an unread message stayed unread through
+     `read_emails(search="UNSEEN")` and turned read after one `read_email`. Also
+     observed against Exchange Online, where `read_emails(limit=50)` itself cleared
+     all 50. Route by the account's `fetch` value instead — see "Fetching Without
+     Marking Read" below:
+     - `"gmail-api"` → list and read over the Gmail REST API.
+     - `"imap-peek"` → run `python data/scripts/inbox-triage/snapshot_imap.py --account "<name>" --limit 50`
+       first and work from its output.
+     - `"imap"` → `python data/scripts/inbox-triage/imap_helper.py list --account "<name>"` (`--unseen`
+       for a personal account, `--since` for a shared one). See "IMAP Accounts" below.
+   - **Shared accounts** (`"shared": true`): Use date-based fetch with state file:
+     1. Load state file (e.g. `artifacts/email-triage/state-<slug>.json`)
+     2. Fetch everything since `<last_run - 1 day>` (1-day overlap for safety): `q=in:inbox after:YYYY/MM/DD` over the Gmail API, or filter the snapshot by `date`
+     3. Filter out UIDs already in `state.processed`
+     4. After processing, append new UIDs with today's date to `state.processed`
+     5. Update `state.last_run` to current ISO timestamp
+     6. Prune `state.processed` entries older than 30 days
+     7. Save state file
+   - On **first run** (last_run is null), use `since=<today - 2 days>` as bootstrap window
+3. **For each email**, evaluate rules in order:
+   - First matching rule's action is applied
+   - If no rule matches → `default_action` applies (usually "triage")
+4. **Execute actions**:
+   - `skip` — do nothing, move on
+   - `read` — mark email as read (remove the `UNREAD` label) but keep it in the inbox. Non-destructive way to clear noise. Gmail API: `POST /gmail/v1/users/me/messages/{id}/modify` with body `{"removeLabelIds": ["UNREAD"]}` for OAuth accounts; set the IMAP `\Seen` flag for non-OAuth accounts (`"imap"` accounts: `imap_helper.py mark-read`).
+   - `delete` — move email to Trash (Gmail API: `POST /gmail/v1/users/me/messages/{id}/trash`; `"imap"` accounts: `imap_helper.py trash`)
+   - `todo` — create reminder in Apple Reminders "Tasks" list via osascript
+   - `notify` — send push notification with sender + subject
+   - `flag` — add to high-priority list in summary
+   - `triage` — AI reads the email and categorizes as actionable / FYI / noise. **Anything that needs no action (both FYI and noise) is "cleared" according to the account's `no_action_clear` setting** (see below): `read` (mark read, keep), `delete` (trash it), or `keep` (leave untouched, count only). Only `actionable` items survive to the summary. The legacy `no_auto_delete` flag is subsumed by `no_action_clear: "read"`. Note: explicit `delete` **rules** still fire regardless.
+5. **Summary notification** — collect all actionable + flagged items, then **filter out any already in the notified-ledger** (see "Notification Dedup" below). Send one consolidated push notification **only if new (not-yet-notified) actionable/flagged items remain**, then append their ids to the ledger. If every actionable item was already notified on a prior run, **stay silent** — do not re-notify. If nothing is actionable, stay silent (exception-based alerting).
+
+## Paused Accounts (`paused`)
+
+Set `"paused": true` on an account block to switch that account off. A paused account is
+**skipped entirely**: no fetch, no rule evaluation, no AI categorization, no clearing, no
+notification, and **no `EmailTriageCompleted` event** (a run that did nothing should not
+appear in Inbox's run history as if it had). Absent means running — Inbox deletes the
+key on resume rather than writing `false`.
+
+**The config flag is the source of truth, and it has to be.** Triage has two callers: each
+account's own cron trigger, and the shared on-demand trigger that Inbox's "Triage now"
+button fires by emitting `EmailTriageRequested`. Both run the same intent, so a flag the
+intent reads is the only switch that stops both. The on-demand trigger in particular is
+shared by every account — pausing that trigger would silence the button for all of them.
+
+**Pausing the account's cron trigger is a second, best-effort layer.** Inbox also tries
+to pause that account's own cron trigger, matching it by name (a trigger whose name
+mentions triage and the account, and that actually has a cron schedule — which is what
+keeps it from grabbing the shared on-demand trigger). That layer is allowed to fail: a
+fresh install has no cron triggers yet, and the user may have renamed or deleted one. Inbox
+warns and carries on; the run still exits at step 0. Never treat a trigger's paused
+state as the source of truth, and never leave the two disagreeing in the "config running,
+cron paused" direction — that is an account that looks live in Inbox and silently never
+runs.
+
+**Nothing is lost while paused.** Mail simply accumulates unread. For a shared account,
+`state.last_run` is not advanced (the run never reaches that step), so the `since` window
+naturally widens and the first run after resuming picks up everything from the pause. Watch
+for one edge: the mail fetch caps at 50 messages, so a shared account paused for a long
+stretch may need more than one run to work through the backlog.
+
+## Rule Evaluation
+
+```
+condition:
+  field: "from" | "to" | "cc" | "subject" | "body"
+  operator: "contains" | "equals" | "regex"
+  value: string to match (case-insensitive for contains/equals)
+
+action: "skip" | "read" | "todo" | "notify" | "flag" | "triage"
+```
+
+Rules are evaluated top-to-bottom per account. First match wins.
+
+## Account Flag: `no_auto_delete`
+
+Set `"no_auto_delete": true` on an account block to guard against the triage system *guessing wrong* and trashing something it shouldn't. The flag's scope is narrow and deliberate:
+
+- It blocks **only the fuzzy AI judgment** — when the `triage` action's AI categorizes an email as "noise", that email is NOT deleted; it stays in the inbox and is only counted.
+- It does **NOT** block explicit `delete` **rules**. Rules are deterministic and author-reviewed — if you wrote a rule that says "delete anything from `business-updates.facebook.com`", that's an intentional instruction, and it fires normally.
+
+In short: with this flag on, the system deletes exactly what your rules tell it to and nothing more — it never deletes on a hunch. This is the right setting for a work mailbox where you want aggressive deletion of *known* noise (ad-platform notifications, duplicate alerts) but no surprise deletions from the AI fallback. Put every category you're sure about into an explicit `delete` rule; let the AI only flag/surface the rest.
+
+## No-Action Clearing (`no_action_clear`)
+
+Set `"no_action_clear"` per account to control what happens to emails that triage decides need **no action** — i.e. anything categorized FYI or noise. Previously FYI mail was left unread (piling up) and noise was deleted (or kept on `no_auto_delete` accounts). Now both outcomes are *cleared* uniformly so the inbox doesn't accumulate read-but-untouched clutter:
+
+- `"read"` — mark read (remove `UNREAD`), keep in inbox. Non-destructive; clears the unread badge without losing anything. Right for work / shared mailboxes where deleting could hide a cofounder's mail.
+- `"delete"` — move to Trash. Right for a personal mailbox where no-action mail is just clutter.
+- `"keep"` — leave untouched, count only (the old default behavior). Use when you want zero automated changes.
+
+If `no_action_clear` is absent, fall back to the legacy behavior: noise deleted unless `no_auto_delete: true`, FYI left in the inbox.
+
+Choosing per account: prefer `read` for work or shared mailboxes, where deleting could bury
+mail someone else also depends on. Prefer `delete` for a personal mailbox where no-action mail
+is just clutter. Use `keep` when the account should see zero automated changes.
+
+This setting governs only the AI's no-action verdict (FYI / noise) — author-written `delete` **rules** always fire regardless.
+
+## Notification Dedup (Notified Ledger)
+
+**The bug this prevents:** non-shared accounts (e.g. Personal) re-fetch *all* `UNSEEN` mail every run. Actionable emails are deliberately **left unread** (so the user can still act on them) and are never `read`/`delete`d — so without dedup, the *same* unread actionable email is re-discovered and re-notified on every hourly run. (Classic case: an App Store Connect "submission is complete" email sits unread for days because the release happens in App Store Connect, not by replying to the email — and the user got the same approval push ~once an hour.)
+
+**The fix:** keep a per-account ledger of email ids we've already sent a notification about, and only notify about emails *not* in the ledger.
+
+- **Ledger file:** `artifacts/email-triage/notified-<account-slug>.json` (the slug is the account name lowercased and hyphenated, with only a `Gmail - ` prefix dropped: `Gmail - Work` -> `work`, but `Mailhost - Support` -> `mailhost-support`. The app reads the files by exactly this rule, so a slug built any other way leaves that account's card empty). Create it on first run if absent.
+- **Schema:**
+  ```json
+  {
+    "account": "Gmail - Personal",
+    "notified": [
+      {"id": "19efb1badde27730", "subject": "Review of your … submission is complete.", "date": "2026-06-25"}
+    ]
+  }
+  ```
+- **Key (`id`):** the stable message id. **For an OAuth-connected account, always use the provider's API message id — never the IMAP UID**, even when that particular run fetched over IMAP. The API id is the only identity that survives a transport switch. **For an `"imap"` account, it is the `Message-ID` header** (see "IMAP Accounts").
+
+  ⚠️ **Mixed-id-scheme hazard.** It is tempting to write "API id for OAuth accounts, IMAP UID otherwise" and key on whatever the run happened to have. That breaks, because the IMAP-timeout fallback below silently switches a run to the API mid-flight: the same email then gets two different identities depending on which transport that run used, and the ledger's dedup check misses.
+
+  Observed in the wild: a ledger holding UID `999` for an item whose API id was `19ff420f49286535`, so the next API-transport run pushed it again. The state file showed the same drift — a block of numeric UIDs with one API-style id in the middle, marking the exact run where IMAP timed out.
+
+  It is easy to miss, because the duplicate push only happens when an actionable item is *still inside the fetch window* AND the transport flips between runs. Shared accounts re-fetch by date, so a long-lived alert is exactly the shape that gets pushed twice.
+
+  **Rules:**
+  1. Key the ledger and `triage-<slug>.json` on the API message id. If a run fetched over IMAP, resolve the API id before writing (for Gmail: `GET /gmail/v1/users/me/messages?q=rfc822msgid:<Message-ID>`) rather than persisting a bare UID.
+  2. Treat a purely-numeric `id` in either file as **legacy**. Never write a new one.
+  3. The dedup check must tolerate legacy entries: an item counts as already-notified if *either* its API id or its IMAP UID is present. Do not delete the old numeric entries — they are still load-bearing for mail inside the 30-day window.
+- **Notification step:**
+  1. After rules + AI categorization, build the set of items that *would* notify (actionable + flagged).
+  2. Drop any whose `id` is already in `notified`.
+  3. If the remaining (new) set is non-empty → send the consolidated notification covering **only** those new items, then append each to `notified` with today's date.
+  4. If the remaining set is empty → **send nothing** (the user has already been told about everything still in the inbox).
+- **Pruning:** on each run, drop `notified` entries with `date` older than 30 days (matches the state-file convention). Once an email leaves `UNSEEN`/the fetch window it won't be re-fetched anyway, so the ledger stays small.
+- **Relationship to the triage output file:** `triage-<slug>.json` still lists **all** currently-actionable items (so downstream consumers see the full picture). The ledger gates only the *push notification*, not the output file.
+- **Relationship to shared-account state files:** shared accounts already avoid re-notification because processed UIDs land in `state.processed` and aren't re-fetched. The ledger is the equivalent guarantee for **non-shared** accounts, and a harmless belt-and-suspenders safety net for shared ones — apply it uniformly so the invariant "never push the same actionable item twice" holds for every account.
+
+## Todo Creation
+
+When action is `todo`, create a reminder in Apple Reminders via osascript:
+
+```bash
+osascript -e 'tell application "Reminders"
+  tell list "Tasks"
+    make new reminder with properties {name:"<subject>", body:"From: <sender>\n\n<brief summary>"}
+  end tell
+end tell'
+```
+
+- **List**: "Tasks"
+- **Name**: email subject (or a short actionable summary)
+- **Body**: sender + brief summary of what needs to be done
+- No external credentials needed — runs locally via AppleScript.
+
+## Event Tracking
+
+After processing, emit `EmailTriageCompleted` with per-account results:
+```json
+{
+  "summary": "Triaged 3 emails across Work and Personal...",
+  "account_results": {
+    "Gmail - Work": {
+      "unseen": 2, "processed": 2, "skipped": 0,
+      "actionable": 2, "fyi": 0, "noise": 0
+    }
+  }
+}
+```
+
+Include all accounts that were processed, even those with 0 unseen. This keeps the event queryable for monitoring.
+
+## Triage Output Files
+
+Write actionable results to `artifacts/email-triage/triage-<account-slug>.json` so downstream systems can consume them without re-scanning inboxes:
+```json
+{
+  "account": "Gmail - Work",
+  "triaged_at": "ISO timestamp",
+  "emails": [
+    {
+      "id": "919",
+      "from": "sender", "subject": "...",
+      "action": "respond|act|review",
+      "summary": "brief description"
+    }
+  ]
+}
+```
+
+**Every email entry MUST carry `id`** — the stable message id (Gmail API message id for `gmail-api`, the `Message-ID` header for `imap`, IMAP UID for `imap-peek`), the same identity used in the notified-ledger and state files. Downstream consumers key their persistent "done"/resolved state on `email:<slug>:<id>`, so a missing or unstable id means either (a) resolved items re-surface, or (b) a genuinely new email that happens to reuse a subject gets wrongly hidden. Never omit it.
+
+**The output file is a fresh snapshot, not an append log.** On every run, rewrite `emails` to contain *only the items that are still actionable right now*. Do NOT carry forward stale entries. This matters most for shared accounts: their `state.processed` list stops old UIDs being re-fetched, but that also means an item that has aged out of the fetch window will never be re-evaluated — so if you append instead of replacing, the output file keeps advertising items that are long gone and downstream consumers keep showing them. Concretely: build the new `emails` array from this run's fetch window, and for shared accounts also drop any prior entry whose id is no longer within the current window. When nothing is actionable, write `"emails": []` (do not leave the previous run's list in place).
+
+## Fetching Without Marking Read
+
+`read_email` does a non-peek IMAP body fetch, which sets `\Seen`. That is the single
+easiest way to damage a mailbox with this plugin: every triage run silently clears the
+unread state of whatever it inspected. So no account reads bodies through it.
+
+### Gmail (`"fetch": "gmail-api"`)
+
+Fetching over the Gmail REST API is a pure read — verified: `messages.get` with
+`format=full` left `UNREAD` on the message. Use the account's own OAuth token
+(`OAUTH_<PROVIDER>_ACCESS_TOKEN`, from `oauth_provider` on the account block) and verify
+the mailbox first (see the wrong-mailbox hazard below).
+
+1. List: `GET https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread%20in:inbox&maxResults=50`
+   (shared accounts: `q=in:inbox after:YYYY/MM/DD`).
+2. Per message: `format=metadata` with `From`, `Subject`, `Date`, `To` headers — its
+   `snippet` usually suffices. Use `format=full` only when a rule matches on `body` or the
+   snippet is too thin.
+
+This also settles the ledger identity: every id is an API message id, which is what the
+notified-ledger rules require.
+
+### Plain IMAP (`"fetch": "imap-peek"`)
+
+Outlook/Exchange Online, Fastmail, a self-hosted dovecot: no REST API to fall back on, so
+use the snapshot script. Pick this for an IMAP mailbox connected over OAuth. A mailbox that
+only has a host and a password is better served by `"fetch": "imap"` (see "IMAP Accounts"),
+which also does the `read` / `delete` writes and keys on the Message-ID.
+
+### Build it with the script, never with `read_email`
+
+```bash
+python data/scripts/inbox-triage/snapshot_imap.py --account "<name>" --limit 50
+```
+
+**Do not hand-roll this by looping `read_email` over the inbox.** A plain IMAP
+`FETCH BODY[]` / `RFC822` sets the `\Seen` flag as a side effect, so building the
+snapshot that way marks every message it touches as read — including mail the user
+has never opened, which then shows up read in their phone client. This was a real
+bug in a live workspace: the snapshot step was quietly clearing the whole inbox's
+unread state on every run.
+
+The script avoids it two ways: it opens INBOX with `EXAMINE` (`readonly=True`), so
+the server is not permitted to change a flag at all, and it fetches bodies with
+`BODY.PEEK[]` instead of `BODY[]`. Keep both. If a future edit needs read-write
+access for something else, it must still peek.
+
+The same rule applies to triage itself: **reading a message's body to categorize
+it must not mark it read.** Take bodies from the snapshot the script produced
+(run it first, categorize from its `body_text` / `body_html`) rather than calling
+`read_email` per message. `\Seen` is only ever set deliberately, by the `read`
+action or a `no_action_clear: "read"` verdict.
+
+Write the snapshot at the **start** of the run — it is the run's only read of the
+mailbox, and everything downstream (rules, categorization, the ledger, the
+actionable output file) works from it. If the run then changes flags via a `read`
+action or a `no_action_clear: "read"` verdict, patch those `unread` values in the
+snapshot before writing it out, so the file reflects the post-triage state rather
+than the state the run walked in on.
+
+Include the most recent 50 inbox messages **regardless of read state**. A consumer
+that offers an "All" view would otherwise be shown a filtered mailbox and lie
+about it; filtering to unread is the consumer's job, not the snapshot's.
+
+### Account config
+
+```json
+{
+  "name": "Outlook",
+  "slug": "outlook",
+  "address": "someone@example.com",
+  "fetch": "imap-peek",
+  "imap_host": "outlook.office365.com",
+  "imap_port": 993,
+  "oauth_provider": "microsoft"
+}
+```
+
+- **`fetch: "imap-peek"`** is the marker the intent keys off to route this account
+  through the script instead of `read_emails`.
+- **`oauth_provider`** — omit for password auth, where the script falls back to
+  `CRED_<NAME>_PASSWORD` / `CRED_<NAME>`. With it set, the script uses XOAUTH2
+  with `OAUTH_<PROVIDER>_ACCESS_TOKEN`, which the engine injects and refreshes.
+- **`imap_host`** is required; `imap_port` defaults to 993.
+
+### Snapshot file
+
+`artifacts/email-triage/inbox-<slug>.json`, newest message first:
+
+```json
+{
+  "account": "Outlook",
+  "synced_at": "2026-08-08T05:40:00Z",
+  "messages": [
+    {
+      "uid": 4821,
+      "from_name": "School Portal",
+      "from_addr": "noreply@example.com",
+      "subject": "Message from school",
+      "date": "2026-08-08T05:12:00Z",
+      "preview": "First ~200 chars of the plain-text body",
+      "unread": true,
+      "body_text": "Full plain-text body",
+      "body_html": "<html>…</html>"
+    }
+  ]
+}
+```
+
+- **`uid`** is the IMAP UID — the same identity the notified-ledger and
+  `triage-<slug>.json` use, so downstream "done" state keys line up.
+- **`body_html` / `body_text`** — both when present; a renderer should prefer HTML
+  and fall back to text. Anything rendering this must sandbox it (iframe, remote
+  images blocked until the user opts in).
+- **Bodies are capped** at ~100 KB each and attachments are dropped entirely.
+
+## IMAP Accounts (`"fetch": "imap"`)
+
+**When to use it:** a mailbox with no Gmail API and no OAuth, where `configure_email` takes
+only a host and a password (a hosting provider's mailbox, a small business domain). An IMAP
+mailbox connected over OAuth (Outlook/Exchange) uses `imap-peek` instead. Everything else in
+the flow applies unchanged: rules, `no_action_clear`, the shared-mode state file, the ledger,
+the output file, `EmailTriageCompleted`.
+
+**Never use `read_emails` / `read_email` on these accounts.** `read_email` does a non-peek
+body fetch and sets `\Seen`, which is the bug that moved Gmail onto its API. Every read
+goes through the helper instead.
+
+### Account config
+
+```json
+{
+  "accounts": {
+    "Mailhost - Support": {
+      "address": "support@example.com",
+      "fetch": "imap",
+      "imap": {
+        "host": "imap.example.com",
+        "port": 993,
+        "ssl": true,
+        "username": "support@example.com",
+        "credential_env": "CRED_MAILHOST___SUPPORT",
+        "mailbox": "INBOX",
+        "trash_folder": "Trash"
+      },
+      "default_action": "triage",
+      "no_action_clear": "read",
+      "rules": [],
+      "schedule": ["0 0 9-18 * * *"]
+    }
+  }
+}
+```
+
+- **`host`** and **`credential_env`** are required. Everything else is optional.
+- **`credential_env`** is the *name* of the env var that holds the mailbox password, never
+  the password itself. `configure_email` stores the password as a credential, and the
+  engine injects it into every subprocess as `CRED_<NAME>`. Copy the exact name from the
+  list of names (never values): `env | cut -d= -f1 | grep '^CRED_'`.
+- **`port`** defaults to 993. **`ssl: false`** means STARTTLS on port 143 by default; the
+  helper never logs in over plaintext.
+- **`username`** defaults to the account's `address`.
+- **`mailbox`** defaults to `INBOX`, the only folder triaged.
+- **`trash_folder`** is only a fallback. The helper uses the folder the server flags `\Trash`
+  (SPECIAL-USE, RFC 6154) and falls back to this name, default `Trash`, when the server
+  flags none.
+
+Any of these can also be passed to the helper as a flag (`--host`, `--port`, `--no-ssl`,
+`--username`, `--credential-env`, `--mailbox`, `--trash-folder`), which wins over the config.
+
+### Helper commands
+
+Run from the workspace root. Every command takes `--account "<name>"`:
+
+```bash
+python data/scripts/inbox-triage/imap_helper.py list --account "<name>" --unseen                # personal account
+python data/scripts/inbox-triage/imap_helper.py list --account "<name>" --since YYYY-MM-DD      # shared account
+python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --id '<msgid>'
+python data/scripts/inbox-triage/imap_helper.py mark-read --account "<name>" --id '<msgid>' [--id ...]
+python data/scripts/inbox-triage/imap_helper.py trash --account "<name>" --id '<msgid>' [--id ...]
+```
+
+- **`list`** prints JSON `[{id, from, to, cc, subject, date, seen, snippet}]`, oldest first,
+  capped at the newest 50 (`--limit`). A personal account lists `--unseen`. A shared account
+  lists `--since <last_run - 1 day>`, bootstrapping with today − 2 days when `last_run` is
+  null; with no flag, `list` uses that bootstrap window.
+- **`peek`** prints the body text (up to 8,000 chars). Use it only when a rule matches on
+  `body` or the snippet is too thin to judge.
+- **`mark-read`** sets `\Seen`. It is how the `read` action and `no_action_clear: "read"`
+  land.
+- **`trash`** moves the message to Trash. It is how the `delete` action and
+  `no_action_clear: "delete"` land. With `MOVE` the server moves it atomically. Without
+  `MOVE` the helper COPYs it to Trash, flags the original `\Deleted` and expunges. That uses
+  `UID EXPUNGE` (scoped to that message) when the server has `UIDPLUS`, and a plain
+  `EXPUNGE` otherwise, which also purges anything another client already flagged
+  `\Deleted`. If the COPY fails, the original is left untouched.
+- **`mark-read` and `trash`** print `{"id", "ok"}` per message and exit 1 if any failed.
+  A failed write is a failed action: report it in the run summary, never count it as done.
+
+### Seen state
+
+`list` and `peek` open the mailbox read-only (`EXAMINE`) and fetch with `BODY.PEEK[]`, so
+they cannot set `\Seen`. Keep both if you ever edit the helper. Only `mark-read` changes
+read state.
+
+On a **shared** account, `seen` is informational only. Other people read the mailbox too,
+so mail can already be `seen: true` when triage reaches it. Triage it anyway; dedup is by
+`state.processed`.
+
+### The id is the Message-ID
+
+- **The `id` is the `Message-ID` header, angle brackets included.** It keys
+  `state.processed` (stored in the legacy-named `uid` field), the notified-ledger and
+  `triage-<slug>.json`.
+- **Never persist an IMAP UID.** UIDs are per folder, change when a message moves, and reset
+  whenever the server bumps `UIDVALIDITY`. The helper resolves Message-ID → UID inside its
+  own session, right before a write, and the UID never leaves that session.
+- **A message with no Message-ID gets `uid:<n>`.** It works within a run but is not stable
+  across runs, so treat it as a one-off.
+
+### Failures
+
+- **Auth failure:** the password changed. Re-run `configure_email` for that account, and
+  never ask for the password in chat (the run is unattended): put it in the run summary.
+- **Connect timeout:** there is no API to fall back to, so the run fails. The next run's
+  window picks the mail up.
+
+## Operational Notes
+
+- **Fetching over the provider API: pass the account's OWN token explicitly.** `http_request` auto-injects the workspace's *default* credential for a provider's domain, whichever account the run is for. On Gmail that means a call to `gmail.googleapis.com` returns HTTP 200 with a perfectly plausible message list — from the wrong inbox. Message ids are per-mailbox, so those ids then 404 against the intended account, and that 404 is the *only* reason the swap gets caught: a run that stopped at the list step would have triaged one mailbox's mail into another's output file and ledger.
+
+  For any account that is not the default connection, fetch via `run_python` with that account's own token from the environment:
+
+  ```python
+  tok = os.environ["OAUTH_<PROVIDER>_ACCESS_TOKEN"]   # the account's own connection name
+  req = urllib.request.Request(url, headers={"Authorization": f"Bearer {tok}"})
+  ```
+
+  **Verify the mailbox before triaging a single message** — for Gmail, `GET /gmail/v1/users/me/profile` returns `emailAddress`; assert it matches the account's configured `address`. One cheap call, and a token mix-up becomes impossible to act on.
+
+- **IMAP can time out — fall back to the provider API for OAuth accounts.** `read_emails` connects over IMAP (Gmail: `imap.gmail.com:993`) and sometimes fails with `IMAP connect ... timed out after 30s`. An OAuth-connected account does **not** have to abort the run — fetch the same mail over REST instead, which is the transport already used for the `read`/`delete` actions. For Gmail:
+  1. List: `GET https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread%20in:inbox&maxResults=50` (for shared accounts use `q=in:inbox after:YYYY/MM/DD` to mirror the `since` window).
+  2. Per message: `GET .../messages/{id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To` — which returns `snippet` too, usually enough to categorize without pulling the body.
+
+  Reach for `format=full` only when a rule matches on the `body` field or the snippet is too thin to judge. Note the id consequence: this path yields API message ids, which is why the ledger must key on those uniformly — see the mixed-id-scheme hazard above.
+
+- **Empty inboxes are normal.** Most hourly runs find 0 unseen emails — exit silently.
+- When all accounts report 0 unseen, do not emit an event or send any notification.
+- Crash/error alerts (Sentry and similar) are typically categorized as `actionable`.
+
+## State File Schema (Shared Accounts)
+
+```json
+{
+  "account": "Gmail - Work",
+  "last_run": "2026-04-27T16:00:00Z",
+  "processed": [
+    {"uid": 12345, "date": "2026-04-27"},
+    {"uid": 12340, "date": "2026-04-26"}
+  ]
+}
+```
+
+- **last_run**: ISO 8601 timestamp of the last triage run (null on first run)
+- **processed**: list of `{uid, date}` entries — ids already triaged. For an `"imap"` account, `uid` holds the Message-ID string, never an IMAP UID
+- **Cleanup**: prune entries with `date` older than 30 days on each run
+- State files live at `artifacts/email-triage/state-<account-slug>.json`
+- Config points to state files via `"state_file"` key on shared accounts
+
+## Design Principles
+
+- **Exception-based**: only notify when something needs attention
+- **Per-account config**: schedules and rules are independent per account
+- **First-match-wins**: rule order matters — put specific rules before general ones
+- **AI fallback**: emails that don't match any rule get AI categorization

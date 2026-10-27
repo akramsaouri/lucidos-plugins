@@ -5,8 +5,8 @@ description: How the Inbox app (the inbox plugin) reads triage's accounts and re
 
 # Inbox
 
-Inbox is a mail client with triage built in. The plugin ships the triage engine (`knowhow/email-triage.md`, the
-intent at `triggers/email-triage/intents/triage.md`, the "Inbox — triage on demand" trigger) as well as the app.
+Inbox is a mail client with triage built in. The plugin ships the triage engine (`knowhow/inbox-triage.md`, the
+intent at `triggers/inbox-triage/intents/triage.md`, the "Inbox — triage on demand" trigger) as well as the app.
 The app itself never triages: everything it shows comes from triage's config and the files its runs leave
 behind. Each account's inbox is split into two zones that never mix:
 
