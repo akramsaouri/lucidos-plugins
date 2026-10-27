@@ -5,6 +5,7 @@
  *   #demo/open      the list with one conversation open
  *   #demo/reply     that conversation with a reply drafted by Suggest
  *   #demo/triage    the Triage pane for the first account: health, rule chain, suggestions, run history
+ *   #demo/retro     the Triage pane for all accounts, scrolled to the Retro section and its last retro
  * install() swaps the lucidos.* calls the apps make (data, proxy, events, triggers, sse, storage, startThread) for
  * in-memory fakes before mail.js loads, so the normal code paths render the fixture and nothing reaches the
  * workspace: no proxy, bridge, data or event call, and no write. The inbox-glance widget calls install() itself
@@ -48,6 +49,7 @@
     display_name: 'Alex Rivera',
     voice: 'Warm and direct. Short sentences, no corporate filler.',
     accounts: { Personal: { proxy: 'demo-personal' }, Work: { proxy: 'demo-work' }, 'Side project': { proxy: 'demo-studio' } },
+    retro: { enabled: true, schedule: 'twice-weekly' },
   };
 
   /* Each thread: its messages oldest first, and for a kept one the reason triage kept it. A message dated after
@@ -163,10 +165,23 @@
     id: 'demo-run-' + i, event_type: 'EmailTriageCompleted', created: iso(NOW - back),
     payload: Object.assign({ summary, account_results: { [acc]: counts } }, notes ? { run_notes: notes } : {}),
   }));
+  const RETRO = [{
+    id: 'demo-retro-0', event_type: 'InboxTriageRetroCompleted', created: iso(NOW - 2 * DAY - 3 * HOUR),
+    payload: {
+      summary: 'Reviewed 38 cleared mails, restored 2: a card receipt on Personal and a contract to sign on Work.',
+      reviewed: 38, restored: 2, per_account: { Personal: { reviewed: 26, restored: 1 }, Work: { reviewed: 12, restored: 1 } },
+      suggestions: ['Personal: flag mail from receipts@cards.example, above rule 2 (it was archived as a promotion)',
+        'Work: notify on subjects containing "please sign", above the AI'],
+    },
+  }];
+  /* The evening the schedule check next fires: 20:00 today, or tomorrow once it's past. */
+  const nextEvening = () => { const d = new Date(NOW); d.setHours(20, 0, 0, 0); if (d.getTime() <= NOW) d.setDate(d.getDate() + 1); return iso(d.getTime()); };
   const triggers = () => ACCOUNTS.map(a => ({
     id: 'demo-trg-' + slug(a.name), name: 'Inbox triage — ' + a.name, cron_expressions: ['0 0 7-21 * * *'], paused: !!a.paused,
     next_run: a.paused ? null : iso(Math.ceil(NOW / HOUR) * HOUR), last_run_status: 'ok',
-  })).concat([{ id: 'demo-trg-on-demand', name: 'Inbox — triage on demand', slug: 'inbox-triage-on-demand', cron_expressions: [], paused: false }]);
+  })).concat([{ id: 'demo-trg-on-demand', name: 'Inbox — triage on demand', slug: 'inbox-triage-on-demand', cron_expressions: [], paused: false },
+    { id: 'demo-trg-retro-check', name: 'Inbox — triage retro schedule', cron_expressions: ['0 0 20 * * *'], paused: false, next_run: nextEvening(),
+      run: { type: 'script', path: 'scripts/inbox-triage/retro_tick.py' } }]);
 
   /* ---------- AI: a canned answer per prompt ---------- */
   function aiText(system, user) {
@@ -204,7 +219,7 @@
         write: (p, content) => later(() => { store.set(p, content); return { success: true }; }, 40),
       },
       events: {
-        query: q => later(() => (!q || q.event_type === 'EmailTriageCompleted' ? events() : []), 40),
+        query: q => later(() => (!q || q.event_type === 'EmailTriageCompleted' ? events() : q.event_type === 'InboxTriageRetroCompleted' ? RETRO : []), 40),
         /* Triage now gets a made-up result, so its spinner settles the way a real run's does. */
         emit: (type, payload) => {
           if (type === 'EmailTriageRequested' && payload && payload.account) {
@@ -248,6 +263,12 @@
       const acc = slug(ACCOUNTS[0].name);
       if (!q(`[data-triage="${acc}"]`)) click(await until(() => q(`[data-folders="${acc}"]`)));
       click(await until(() => q(`[data-triage="${acc}"]`)));
+      return;
+    }
+    if (view === 'retro') {
+      click(await until(() => q('[data-triage="all"]')));
+      const sec = await until(() => q('#triage [data-t-retro-on]') && q('#triage .tri-retro').closest('.tri-sec'));
+      if (sec.scrollIntoView) sec.scrollIntoView({ block: 'start' });
       return;
     }
     if (view === 'all') { click(await until(() => q('[data-filter="all"]'))); return; }

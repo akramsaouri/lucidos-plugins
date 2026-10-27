@@ -28,6 +28,10 @@ fresh and run its setup. Inbox no longer knows about Email Triage.
   **Summarize** (`s`) condenses a long thread. A sent reply waits 8 seconds, so you can undo it.
 - **A hand-off to Lucidos**: `a` starts a Lucidos thread about the email, such as "draft a polite no".
 - **Folders and labels** in the sidebar, opening in the same list.
+- **A retro that catches triage's mistakes**: twice a week by default, it goes back over the mail triage
+  archived or trashed, brings back anything you'd want to see, unread and with the reason, and suggests rule
+  changes in its own thread. It never changes your rules. Switch it on or off, or pick how often, in the Triage
+  pane.
 - **Triage controls**: each account has a **Triage** entry with its health and next run, Pause / Resume,
   **Triage now**, the rule editor, suggestions from runs and run history. An **All accounts** strip pauses or
   runs every account at once.
@@ -45,7 +49,8 @@ fresh and run its setup. Inbox no longer knows about Email Triage.
   xAI or a local model.
 - A Mac, only for the reminder rule action, which adds to Apple Reminders.
 
-Each scheduled triage run is a short AI run at low reasoning effort, even when there's no new mail.
+Each scheduled triage run is a short AI run at low reasoning effort, even when there's no new mail. A retro is
+a longer AI run that reads each cleared mail in full. The daily check that decides whether one is due uses no AI.
 
 **Not supported yet:** reading OAuth IMAP accounts such as Outlook and Exchange in the app. They're triaged as
 usual and their controls work, but their mail shows as a red dot with the reason, never as an empty inbox.
@@ -60,19 +65,22 @@ Setup is a conversation, one account at a time. You write no rules or cron expre
 4. **A schedule.** Setup suggests hourly during waking hours plus an early-morning run, and you adjust it.
 5. **Your name and reply voice**, a sentence or two on how replies should sound, and an AI provider only if you
    have neither Anthropic nor Vertex.
+6. **Whether to turn on the retro, and how often**: twice a week, once a week, or every evening.
 
 Gmail accounts get a proxy checked to read the right mailbox, and Inbox repeats that check before every list, so
 it can't archive or reply in the wrong mailbox. Password IMAP accounts get a test sync.
 
 ## How it works
 
-Setup creates one cron trigger per account. The plugin ships the triage instructions, the IMAP helpers and two
-triggers: "Inbox — triage on demand", which **Triage now** fires, and "Inbox — IMAP bridge". An app can't speak
+Setup creates one cron trigger per account, plus a daily check for the retro when you turn it on. The plugin
+ships the triage instructions, the IMAP helpers and three triggers: "Inbox — triage on demand", which **Triage
+now** fires, "Inbox — triage retro", and "Inbox — IMAP bridge". An app can't speak
 IMAP or SMTP, so password IMAP accounts go through the bridge. Only the Inbox app can make it change or send
 mail, so a crafted email can't trick a triage run into trashing or sending anything.
 
 Accounts and rules live in `artifacts/email-triage/config.json`, settings in `artifacts/inbox/settings.json`,
-and IMAP snapshots in `artifacts/inbox/cache/`, which the workspace repo never commits. Pause is a flag in the
+and IMAP snapshots in `artifacts/inbox/cache/`, which the workspace repo never commits. Triage logs what it clears
+to `artifacts/inbox/retro/`, beside the retro's ledger, so the retro never brings back the same mail twice. Pause is a flag in the
 config file, which every run checks first; mail that arrives while paused waits for the first run after you
 resume. Drafts stay on the device. A reply still in its undo window when you close the app comes back as a
 draft, never sent behind your back.

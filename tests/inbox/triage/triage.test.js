@@ -72,11 +72,18 @@ async function boot(opts = {}) {
       write: async (p, content) => { calls.push({ kind: 'data.write', path: p, content }); files.set(p, content); return { success: true }; },
     },
     events: {
-      query: async q => (q.event_type === 'EmailTriageCompleted' ? JSON.parse(JSON.stringify(EVENTS)) : []),
+      query: async q => (q.event_type === 'EmailTriageCompleted' ? JSON.parse(JSON.stringify(EVENTS))
+        : q.event_type === 'InboxTriageRetroCompleted' ? clone(opts.retroEvents || []) : []),
       emit: async (type, payload) => { calls.push({ kind: 'events.emit', type, payload: clone(payload) }); return { success: true }; },
     },
     triggers: {
       list: async () => { if (opts.failList) throw new Error('refused'); return JSON.parse(JSON.stringify(triggers)); },
+      create: async def => {
+        calls.push({ kind: 'triggers.create', def: clone(def) });
+        if (opts.failCreate) return { success: false, message: 'refused' };
+        triggers.push(Object.assign({ id: 'trg-created-' + triggers.length, paused: false, next_run: '2099-01-01T19:00:00Z' }, clone(def)));
+        return { success: true };
+      },
       update: async (id, patch) => {
         calls.push({ kind: 'triggers.update', id, patch: clone(patch) });
         if (opts.failTrigger) throw new Error('refused');
@@ -103,7 +110,7 @@ async function boot(opts = {}) {
   const click = el => { assert.ok(el, 'element to click exists'); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); };
   const app = {
     w, $, click, calls, toasts, files, triggers,
-    writes: () => calls.filter(c => c.kind === 'data.write' && c.path === CFG),
+    writes: (p = CFG) => calls.filter(c => c.kind === 'data.write' && c.path === p),
     emits: type => calls.filter(c => c.kind === 'events.emit' && c.type === type),
     async until(fn, what) {
       for (let i = 0; i < 200; i++) { const v = fn(); if (v) return v; await new Promise(r => setTimeout(r, 10)); }
@@ -393,4 +400,136 @@ test('a cron naming only files that exist shows no banner', async () => {
 test('a refused trigger list reports no trigger as missing', async () => {
   const app = await boot({ failList: true });
   try { assert.equal(banner(app), null); } finally { await app.close(); }
+});
+
+/* ---------- the triage retro ---------- */
+const SETTINGS_PATH = 'artifacts/inbox/settings.json';
+const RETRO_CHECK = { id: 'trg-retro-check', name: 'Inbox — triage retro schedule', cron_expressions: ['0 0 20 * * *'], paused: false,
+  next_run: '2099-01-01T19:00:00Z', run: { type: 'script', path: 'scripts/inbox-triage/retro_tick.py' } };
+const withRetro = (retro, extra = {}) => JSON.stringify(Object.assign(JSON.parse(SETTINGS), { retro }, extra), null, 2);
+async function openAll(app) {
+  app.click(app.$('[data-triage="all"]'));
+  return app.until(() => app.$('#triage [data-t-retro-on]'), 'the Retro section');
+}
+function change(app, el, value) {
+  if (typeof value === 'boolean') el.checked = value; else el.value = value;
+  el.dispatchEvent(new app.w.Event('change', { bubbles: true }));
+}
+
+test('the Retro section is off by default: nothing to run, no schedule to pick', async () => {
+  const app = await boot();
+  try {
+    const sw = await openAll(app);
+    assert.equal(sw.checked, false);
+    assert.equal(sw.getAttribute('role'), 'switch');
+    assert.ok(app.$('[data-t-retro-schedule]').disabled);
+    assert.ok(app.$('[data-t-retro-run]').disabled);
+    assert.equal(app.$('[data-t-retro-schedule]').value, 'twice-weekly');
+    assert.match(app.$('#triage').textContent, /Re-check what triage cleared/);
+    /* Only the All accounts view carries it: the retro covers every account at once. */
+    await app.openTriage('work');
+    assert.equal(app.$('#triage [data-t-retro-on]'), null);
+  } finally { await app.close(); }
+});
+
+test('turning the retro on writes the setting, keeps every other key, and adds the missing schedule check', async () => {
+  const app = await boot();
+  try {
+    change(app, await openAll(app), true);
+    const [w1] = await app.until(() => app.writes(SETTINGS_PATH).length === 1 && app.writes(SETTINGS_PATH), 'settings write');
+    const st = JSON.parse(w1.content);
+    assert.deepEqual(st.retro, { enabled: true, schedule: 'twice-weekly' });
+    assert.deepEqual(st.accounts, JSON.parse(SETTINGS).accounts);
+    const [made] = await app.until(() => app.calls.filter(c => c.kind === 'triggers.create').length && app.calls.filter(c => c.kind === 'triggers.create'), 'check created');
+    assert.deepEqual(made.def, { name: RETRO_CHECK.name, cron_expressions: ['0 0 20 * * *'], run: { type: 'script', path: 'scripts/inbox-triage/retro_tick.py' } });
+    await app.until(() => !app.$('[data-t-retro-run]').disabled, 'Retro now enabled');
+    assert.ok(!app.$('[data-t-retro-schedule]').disabled);
+    assert.equal(app.$('[data-t-retro-fix]'), null, 'no warning once the check exists');
+    assert.match(app.$('#triage').textContent, /Wednesday and Sunday evenings/);
+    assert.equal(app.writes().length, 0, 'config.json untouched');
+  } finally { await app.close(); }
+});
+
+test('with the check in place, the switch and the schedule only write the setting', async () => {
+  const app = await boot({ files: { [SETTINGS_PATH]: withRetro({ enabled: true, schedule: 'twice-weekly' }) }, triggers: t => t.concat([RETRO_CHECK]) });
+  try {
+    const sw = await openAll(app);
+    assert.equal(sw.checked, true);
+    change(app, app.$('[data-t-retro-schedule]'), 'weekly');
+    await app.until(() => app.writes(SETTINGS_PATH).length === 1, 'schedule write');
+    assert.deepEqual(JSON.parse(app.writes(SETTINGS_PATH)[0].content).retro, { enabled: true, schedule: 'weekly' });
+    await app.until(() => /Sunday evenings/.test(app.$('#triage').textContent) && !/Wednesday/.test(app.$('#triage').textContent), 'hint follows');
+    change(app, app.$('[data-t-retro-on]'), false);
+    await app.until(() => app.writes(SETTINGS_PATH).length === 2, 'off write');
+    const off = app.writes(SETTINGS_PATH)[1].content;
+    assert.deepEqual(JSON.parse(off).retro, { enabled: false, schedule: 'weekly' });
+    assert.equal(off, withRetro({ enabled: false, schedule: 'weekly' }), 'written in the file\'s own style');
+    assert.equal(app.calls.filter(c => c.kind === 'triggers.create' || c.kind === 'triggers.update').length, 0, 'no trigger touched');
+    await app.until(() => app.$('[data-t-retro-run]').disabled, 'Retro now off');
+  } finally { await app.close(); }
+});
+
+test('a refused check shows the warning, and the button adds it', async () => {
+  const app = await boot({ files: { [SETTINGS_PATH]: withRetro({ enabled: true }) }, failCreate: true });
+  try {
+    await openAll(app);
+    const fix = await app.until(() => app.$('[data-t-retro-fix]'), 'the warning');
+    assert.match(app.$('#triage').textContent, /No schedule check yet/);
+    app.click(fix);
+    await app.until(() => app.toasts.some(t => /Run Inbox setup/.test(t.m)), 'a refusal says what to do');
+    assert.ok(app.$('[data-t-retro-fix]'), 'still warned');
+  } finally { await app.close(); }
+});
+
+test('a paused check offers to resume it', async () => {
+  const app = await boot({ files: { [SETTINGS_PATH]: withRetro({ enabled: true }) }, triggers: t => t.concat([Object.assign({}, RETRO_CHECK, { paused: true })]) });
+  try {
+    await openAll(app);
+    app.click(await app.until(() => app.$('[data-t-retro-resume]'), 'resume button'));
+    await app.until(() => app.calls.some(c => c.kind === 'triggers.update'), 'resume');
+    assert.deepEqual(app.calls.filter(c => c.kind === 'triggers.update').map(c => [c.id, c.patch]), [['trg-retro-check', { paused: false }]]);
+    await app.until(() => !app.$('[data-t-retro-resume]'), 'warning gone');
+  } finally { await app.close(); }
+});
+
+test('Retro now emits what the retro trigger answers, and its completion releases the button', async () => {
+  const app = await boot({ files: { [SETTINGS_PATH]: withRetro({ enabled: true }) }, triggers: t => t.concat([RETRO_CHECK]) });
+  try {
+    await openAll(app);
+    app.click(app.$('[data-t-retro-run]'));
+    const [e] = await app.until(() => app.emits('InboxTriageRetroRequested').length && app.emits('InboxTriageRetroRequested'), 'emit');
+    assert.equal(e.payload.source, 'inbox-app');
+    assert.ok(e.payload.summary);
+    await app.until(() => /Retro running/.test(app.$('[data-t-retro-run]').textContent), 'spinner');
+    assert.ok(app.$('[data-t-retro-run]').disabled);
+    app.fire('InboxTriageRetroCompleted', { summary: 'Reviewed 3, restored 1', reviewed: 3, restored: 1 });
+    await app.until(() => /Retro now/.test(app.$('[data-t-retro-run]').textContent), 'released');
+    assert.ok(app.toasts.some(t => /Reviewed 3, restored 1/.test(t.m)));
+  } finally { await app.close(); }
+});
+
+test('the last retro shows its summary, counts and rule suggestions', async () => {
+  const retroEvents = [{ id: 'r1', created: new Date().toISOString(), payload: {
+    summary: 'Reviewed 12 cleared mails, restored 1 receipt.', reviewed: 12, restored: 1,
+    per_account: { 'Gmail - Work': { reviewed: 12, restored: 1 } },
+    suggestions: ['Work: flag from contains billing@example.com, above rule 2'] } }];
+  const app = await boot({ files: { [SETTINGS_PATH]: withRetro({ enabled: true }) }, triggers: t => t.concat([RETRO_CHECK]), retroEvents });
+  try {
+    await openAll(app);
+    const text = app.$('#triage').textContent;
+    assert.match(text, /Reviewed 12 cleared mails, restored 1 receipt\./);
+    assert.match(text, /reviewed 12/);
+    assert.match(text, /restored 1/);
+    assert.match(text, /flag from contains billing@example\.com/);
+  } finally { await app.close(); }
+});
+
+test('a settings file that does not parse is never overwritten', async () => {
+  const app = await boot({ files: { [SETTINGS_PATH]: '{ "accounts": ' } });
+  try {
+    const sw = await openAll(app);
+    assert.ok(sw.disabled);
+    assert.match(app.$('#triage').textContent, /Can’t read the Retro setting/);
+    assert.equal(app.writes(SETTINGS_PATH).length, 0);
+  } finally { await app.close(); }
 });

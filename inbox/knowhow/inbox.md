@@ -1,6 +1,6 @@
 ---
 name: Inbox
-description: How the Inbox app (the inbox plugin) reads triage's accounts and results, its settings file (Gmail proxy per account, display name, reply voice, AI provider), the IMAP bridge trigger and its event protocol, where the triage controls live (the Triage pane), and what to check when an account shows a red dot or the bridge doesn't answer. Load when setting up Inbox, adding an account to it, or debugging it
+description: How the Inbox app (the inbox plugin) reads triage's accounts and results, its settings file (Gmail proxy per account, display name, reply voice, AI provider, the triage retro switch), the IMAP bridge trigger and its event protocol, where the triage controls live (the Triage pane), and what to check when an account shows a red dot or the bridge doesn't answer. Load when setting up Inbox, adding an account to it, or debugging it
 ---
 
 # Inbox
@@ -56,6 +56,7 @@ account names, exactly as in its config.
   "voice": "Friendly and brief. No exclamation marks.",
   "undo_send_seconds": 8,
   "ai": { "provider": "anthropic", "model": "claude-sonnet-5-5" },
+  "retro": { "enabled": true, "schedule": "twice-weekly" },
   "accounts": {
     "Gmail - Work": { "proxy": "gmail-work", "signature": "Alex\nExample Co" },
     "Mailhost - Support": { "from_name": "Example Support", "voice": "Formal; sign off as the support team." }
@@ -71,6 +72,10 @@ account names, exactly as in its config.
 - **`ai`**: Suggest, Polish and Summarize call one of the engine's built-in model proxies. With no `ai`
   block, Inbox tries `anthropic`, then `vertex`, with a Claude model, moving on only when the engine answers
   404 (no credential for that provider). `openai`, `openrouter`, `xai` and `local` work too, and need `model`.
+- **`retro`**: the triage retro, which goes back over what triage archived or trashed and brings back what the
+  user would want. Off unless `enabled` is `true`. `schedule` is `twice-weekly` (Wednesday and Sunday evenings,
+  the default), `weekly` (Sunday) or `daily`. Setup asks, and the Retro section of the triage pane changes it.
+  See `knowhow/inbox-triage-retro.md`.
 - **`accounts["<name>"].proxy`**: the `data/config/apis.json` entry that carries that Gmail mailbox's OAuth
   token, base URL `https://www.googleapis.com`. Setup finds one in this order: an existing proxy whose
   `/gmail/v1/users/me/profile` reads the account's `address`; a new proxy on the account's triage

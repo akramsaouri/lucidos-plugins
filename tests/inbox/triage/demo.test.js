@@ -143,6 +143,21 @@ test('#demo/triage shows the rule chain and run history, and its writes stay in 
   } finally { await app.close(); }
 });
 
+test('#demo/retro shows the Retro section on with its last retro, and calls nothing live', async () => {
+  const app = await boot('#demo/retro');
+  try {
+    await app.w.InboxDemo.show('retro');
+    const sw = await app.until(() => app.$('#triage [data-t-retro-on]'), 'the Retro section');
+    assert.equal(sw.checked, true);
+    const pane = app.$('#triage').textContent;
+    assert.match(pane, /Wednesday and Sunday evenings/);
+    assert.match(pane, /restored 2/);
+    assert.match(pane, /please sign/);
+    assert.equal(app.$('[data-t-retro-fix]'), null, 'the demo has its schedule check');
+    assert.deepEqual(app.live, []);
+  } finally { await app.close(); }
+});
+
 test('the inbox-glance widget with { demo: true } counts the demo mail and reads only the app\'s code', async () => {
   const GLANCE = path.resolve(APP, '../inbox-glance/index.html');
   const reads = [], live = [];

@@ -8,6 +8,8 @@
  *   EmailTriageCompleted events                    run history + run_notes suggestions
  *   the workspace triggers                         each account's `Inbox triage — <Account>` cron trigger
  *   the engine's own files                         to warn when triage can't run (see engineGaps)
+ *   artifacts/inbox/settings.json `retro`          the triage retro's switch and schedule (written here, see saveSettings)
+ *   InboxTriageRetroCompleted events               the last retro's summary and rule suggestions
  * See knowhow/triage.md for the invariants. */
 (function () {
   'use strict';
@@ -31,6 +33,20 @@
   /* The triage engine this plugin ships. */
   const ENGINE_FILES = ['triggers/inbox-triage/intents/triage.md', 'knowhow/inbox-triage.md'];
   const ON_DEMAND = { slug: 'inbox-triage-on-demand', name: 'Inbox — triage on demand' };
+  /* The triage retro (knowhow/inbox-triage-retro.md). Its setting is the one switch: a daily schedule check reads it
+   * and asks for a retro when one is due, and the retro itself stops when it is off. Plugins can't ship a cron, so
+   * the check is a workspace trigger that setup creates, and this pane adds it when the retro is on and it's gone. */
+  const SETTINGS = 'artifacts/inbox/settings.json';
+  const RETRO_TICK = 'artifacts/inbox/retro/tick.json';
+  /* `days` are Date.getDay() numbers (Sunday 0), the same days retro_tick.py runs on. */
+  const RETRO_SCHEDULES = [
+    { value: 'twice-weekly', label: 'Twice a week', hint: 'Wednesday and Sunday evenings', days: [3, 0] },
+    { value: 'weekly', label: 'Once a week', hint: 'Sunday evenings', days: [0] },
+    { value: 'daily', label: 'Every evening', hint: 'Every evening', days: [0, 1, 2, 3, 4, 5, 6] },
+  ];
+  const RETRO_DEFAULT = 'twice-weekly';
+  const RETRO_CHECK = { name: 'Inbox — triage retro schedule', path: 'scripts/inbox-triage/retro_tick.py', cron: '0 0 20 * * *' };
+  const RETRO_WINDOW_DAYS = 60, RETRO_TIMEOUT_MS = 900000; // 15 min: a retro reads every cleared mail in full
   /* A workspace file a cron's intent names (an optional `data/` prefix dropped), checked so a schedule pointing at a
    * file that is gone shows up rather than failing on every run. */
   const NAMED_FILE = /(?<![\w/-])(?:data\/)?((?:knowhow|triggers|scripts|apps)\/[\w./-]+\.(?:md|py))/g;
@@ -61,6 +77,7 @@
 
   const T = {
     config: null, err: null, loaded: false, info: {}, runs: [], triggers: [], gaps: [],
+    settings: {}, settingsErr: null, retroRuns: [], retroAsked: null,
     scope: null, editing: null, runPage: 0, lastHtml: '',
   };
   let host = { el: null, refresh() {}, onConfig() {} };
@@ -282,13 +299,20 @@
     loading = (async () => {
       /* Fetch runs by time, not by count: a few accounts running hourly fill a flat limit in days. */
       const since = new Date(Date.now() - RUN_WINDOW_DAYS * 864e5).toISOString();
-      const [text, runs, triggers] = await Promise.all([
+      const retroSince = new Date(Date.now() - RETRO_WINDOW_DAYS * 864e5).toISOString();
+      const [text, runs, triggers, settingsText, retroRuns, tick] = await Promise.all([
         lucidos.data.read(CFG).catch(() => null),
         lucidos.events.query({ event_type: 'EmailTriageCompleted', since, limit: 200 }).catch(() => []),
         /* Best-effort: pausing the cron trigger is a second layer, so a refused list still leaves a working pause.
          * null (not []) marks the refusal, so engineGaps never reports a trigger missing from a list it never got. */
         lucidos.triggers.list().catch(() => null),
+        lucidos.data.read(SETTINGS).catch(() => null),
+        lucidos.events.query({ event_type: 'InboxTriageRetroCompleted', since: retroSince, limit: 20 }).catch(() => []),
+        readJson(RETRO_TICK),
       ]);
+      try { T.settings = settingsText ? JSON.parse(settingsText) : {}; T.settingsErr = null; } catch (e) { T.settings = {}; T.settingsErr = 'settings.json does not parse: ' + e.message; }
+      T.retroRuns = (retroRuns || []).slice().sort((x, y) => Date.parse(y.created) - Date.parse(x.created));
+      T.retroAsked = (tick && tick.last_requested) || null;
       try { T.config = text ? JSON.parse(text) : null; T.err = text ? null : 'config.json is missing'; } catch (e) { T.config = null; T.err = 'config.json does not parse: ' + e.message; }
       T.runs = (runs || []).slice().sort((x, y) => Date.parse(y.created) - Date.parse(x.created));
       T.triggers = triggers || [];
@@ -358,6 +382,110 @@
     if (failed.length) {
       host.refresh();
       lucidos.ui.toast(`Could not start triage for ${failed.join(', ')}`, 'error', { key: 'run-fail' });
+    }
+  }
+
+  /* ---------- triage retro ---------- */
+  const retroOf = () => { const r = T.settings && T.settings.retro; return r && typeof r === 'object' ? r : {}; };
+  const retroOn = () => retroOf().enabled === true;
+  const retroSchedule = () => RETRO_SCHEDULES.find(x => x.value === (retroOf().schedule || RETRO_DEFAULT)) || null;
+  /* The schedule check, by its script or its name: the user may have renamed it, or moved its evening. */
+  const retroCheck = () => T.triggers.find(t => (t.cron_expressions || []).length &&
+    ((t.run && t.run.path) === RETRO_CHECK.path || t.name === RETRO_CHECK.name)) || null;
+  const localDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  /* The check's next evening that falls on a scheduled day, skipping today when it already asked. */
+  function nextRetro() {
+    const sched = retroSchedule(), t = retroCheck();
+    if (!retroOn() || !sched || !t || t.paused) return null;
+    const at = (t.next_run && new Date(t.next_run)) || cronNext(t.cron_expressions);
+    if (!at || isNaN(at)) return null;
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(at.getTime() + i * 864e5);
+      if (sched.days.includes(d.getDay()) && localDay(d) !== T.retroAsked) return d;
+    }
+    return null;
+  }
+  const dayLabel = d => `${d.toLocaleDateString([], { weekday: 'short' })} ${clockOf(d)}`;
+
+  /* settings.json, re-read and changed in place like saveConfig, so a key setup or another device wrote survives.
+   * A file that doesn't parse is never overwritten. */
+  async function saveSettings(mutate, message) {
+    let text = null, st = {};
+    try { text = await lucidos.data.read(SETTINGS); } catch (e) { /* missing: start one */ }
+    if (text != null) {
+      try { st = JSON.parse(text); } catch (e) {
+        lucidos.ui.toast(`settings.json does not parse, so it was left alone: ${e.message}`, 'error');
+        await load();
+        return false;
+      }
+    }
+    const before = JSON.stringify(st);
+    mutate(st);
+    if (JSON.stringify(st) !== before) {
+      try { await lucidos.data.write(SETTINGS, text != null ? serializeLike(text, st) : JSON.stringify(st, null, 2) + '\n'); } catch (e) {
+        lucidos.ui.toast(`Could not save: ${e.message}`, 'error');
+        await load();
+        return false;
+      }
+      lucidos.ui.toast(message, 'success');
+    }
+    T.settings = st;
+    T.settingsErr = null;
+    host.refresh();
+    return true;
+  }
+
+  async function setRetro(patch, message) {
+    const saved = await saveSettings(st => {
+      const r = st.retro && typeof st.retro === 'object' ? st.retro : {};
+      st.retro = Object.assign({}, r, patch);
+      if (!st.retro.schedule) st.retro.schedule = RETRO_DEFAULT;
+    }, message);
+    if (!saved) { rerender(); return; }
+    if (retroOn() && !retroCheck()) await addRetroCheck();
+  }
+
+  /* Creates the daily check setup would have. Without it the switch is on and nothing ever asks for a retro. */
+  async function addRetroCheck() {
+    try {
+      const res = await lucidos.triggers.create({ name: RETRO_CHECK.name, cron_expressions: [RETRO_CHECK.cron], run: { type: 'script', path: RETRO_CHECK.path } });
+      if (!res || !res.success) throw new Error((res && res.message) || 'refused');
+      lucidos.ui.toast('Added the retro’s schedule check: every evening at 20:00', 'success', { key: 'retro-check' });
+    } catch (e) {
+      lucidos.ui.toast(`Couldn't add the retro’s schedule check (${e.message}). Run Inbox setup to add it.`, 'warning', { key: 'retro-check' });
+    }
+    await load();
+  }
+
+  async function resumeRetroCheck() {
+    const t = retroCheck();
+    if (!t) return;
+    try {
+      const res = await lucidos.triggers.update(t.id, { paused: false });
+      if (!res || !res.success) throw new Error((res && res.message) || 'refused');
+    } catch (e) { lucidos.ui.toast(`Couldn't resume the retro’s schedule check: ${e.message}`, 'warning', { key: 'retro-check' }); }
+    await load();
+  }
+
+  /* Retro now: the same request the schedule check sends. The "Inbox — triage retro" trigger answers it, and its
+   * InboxTriageRetroCompleted releases the button. */
+  let retroRunning = null;
+  async function requestRetro() {
+    if (!retroOn() || retroRunning) return;
+    retroRunning = setTimeout(() => {
+      retroRunning = null;
+      host.refresh();
+      lucidos.ui.toast('No result came back from the retro yet: it may still be running', 'warning', { key: 'retro-run' });
+    }, RETRO_TIMEOUT_MS);
+    host.refresh();
+    try {
+      await lucidos.events.emit('InboxTriageRetroRequested', { summary: 'Triage retro from Inbox', source: 'inbox-app' });
+      lucidos.ui.toast('Retro started. Its thread lands in Review when it’s done.', 'info', { key: 'retro-run' });
+    } catch (e) {
+      clearTimeout(retroRunning);
+      retroRunning = null;
+      host.refresh();
+      lucidos.ui.toast(`Could not start the retro: ${e.message}`, 'error', { key: 'retro-run' });
     }
   }
 
@@ -453,6 +581,49 @@
       <button class="action-btn btn-ic" data-t-run-all ${running.size || !active.length ? 'disabled' : ''} data-tooltip="${active.length ? 'Run every unpaused account’s triage now, in parallel' : 'Every account is paused'}">${running.size ? `${SPINNER}Triaging ${plural(running.size, 'account')}…` : 'Triage all accounts'}</button>
     </div>`;
     return section('Health', null, null, actions + `<div class="tri-group">${rows}</div>`);
+  }
+
+  function retroHtml() {
+    const on = retroOn(), sched = retroSchedule(), check = retroCheck(), busy = !!retroRunning, last = T.retroRuns[0];
+    const bad = !!T.settingsErr;
+    const current = retroOf().schedule || RETRO_DEFAULT;
+    const opts = (sched ? RETRO_SCHEDULES : RETRO_SCHEDULES.concat([{ value: current, label: current }]))
+      .map(x => `<option value="${attr(x.value)}"${x.value === current ? ' selected' : ''}>${esc(x.label)}</option>`).join('');
+    const intro = `<div class="tri-retro">
+        <label class="tri-retro-switch">
+          <span class="toggle-switch${bad ? ' toggle-switch-disabled' : ''}"><input type="checkbox" role="switch" data-t-retro-on${on ? ' checked' : ''}${bad ? ' disabled' : ''}><span class="toggle-slider"></span></span>
+          <span class="tri-retro-text"><b>Re-check what triage cleared</b><span>Goes back over the mail triage archived or trashed, brings back anything you’d want to see, and suggests rule changes. It never changes your rules.</span></span>
+        </label>
+        <label class="tri-retro-sched"><span>How often</span><select class="lucidos-select" data-t-retro-schedule${on && !bad ? '' : ' disabled'}>${opts}</select></label>
+      </div>`;
+    let alert = '';
+    if (bad) alert = `<div class="tri-engine" role="alert">${ic('alert')}<div><b>Can’t read the Retro setting.</b><div class="tri-engine-why">${esc(T.settingsErr)}</div></div></div>`;
+    else if (on && !check) alert = `<div class="tri-engine" role="alert">${ic('alert')}<div><b>No schedule check yet.</b> Until it’s added, the retro runs only when you press Retro now.` +
+      `<div class="button-group tri-retro-fix"><button class="action-btn action-btn-secondary" data-t-retro-fix>Add the schedule check</button></div></div></div>`;
+    else if (on && check.paused) alert = `<div class="tri-engine" role="alert">${ic('alert')}<div><b>The schedule check is paused.</b> The retro runs only when you press Retro now.` +
+      `<div class="button-group tri-retro-fix"><button class="action-btn action-btn-secondary" data-t-retro-resume>Resume it</button></div></div></div>`;
+    const next = nextRetro();
+    const details = on ? `<dl class="tri-details">
+        <div><dt>Next retro</dt><dd>${next ? esc(dayLabel(next)) : '—'}</dd></div>
+        <div><dt>Last retro</dt><dd>${last ? esc(timeAgo(last.created)) : 'Not run yet'}</dd></div>
+      </dl>` : '';
+    const actions = `<div class="button-group tri-actions"><button class="action-btn action-btn-secondary btn-ic" data-t-retro-run ${!on || busy || bad ? 'disabled' : ''} data-tooltip="${on ? 'Run the retro now, without waiting for its evening' : 'Turn the retro on first'}">${busy ? SPINNER + 'Retro running…' : 'Retro now'}</button></div>`;
+    let lastHtml = '';
+    if (last) {
+      const p = last.payload || {};
+      const sugg = (Array.isArray(p.suggestions) ? p.suggestions : p.suggestions ? [p.suggestions] : []).map(x => typeof x === 'string' ? x : (x && (x.text || x.rule)) || '').filter(Boolean);
+      const counts = [['reviewed', p.reviewed], ['restored', p.restored]].filter(([, v]) => typeof v === 'number')
+        .map(([k, v]) => `<span class="label pill ${k === 'restored' && v ? 'label-warning' : 'label-neutral'} tri-count">${esc(k)} ${v}</span>`).join('');
+      lastHtml = `<div class="tri-group">
+          <div class="tri-run"><div class="tri-run-main">
+            <div class="tri-run-top"><b class="tri-run-who">Last retro</b><span class="tri-when">${esc(timeAgo(last.created))} · ${esc(lucidos.utils.formatDate(last.created))}</span></div>
+            <div class="tri-run-sum">${esc(p.summary || '')}</div>
+            ${counts ? `<div class="tri-pills">${counts}</div>` : ''}
+          </div></div>
+          ${sugg.map(x => `<div class="tri-sugg">${ic('bulb')}<div><p>${esc(x)}</p></div></div>`).join('')}
+        </div>`;
+    }
+    return section('Retro', null, on && sched ? sched.hint : 'Off', intro + alert + details + actions + lastHtml);
   }
 
   function overviewOne(acc) {
@@ -591,7 +762,7 @@
     let body;
     if (!T.loaded) body = '<div class="sk"></div><div class="sk tall"></div>';
     else if (!T.config) body = `<div class="list-empty"><p class="error-text">${esc(T.err || 'No triage config')}</p><button class="action-btn action-btn-secondary" data-t-reload>Try again</button></div>`;
-    else if (scope === 'all') body = overviewAll() + activityHtml('all');
+    else if (scope === 'all') body = overviewAll() + retroHtml() + activityHtml('all');
     else body = overviewOne(scope) + rulesHtml(scope) + activityHtml(scope);
     const html = headHtml(scope, tap) + `<div class="tri-body">${engineBannerHtml()}${body}</div>`;
     if (html === T.lastHtml && el.firstChild) return;
@@ -624,6 +795,9 @@
     }
     if ((b = g('[data-t-run]'))) return requestRun([b.dataset.tRun]);
     if (g('[data-t-run-all]')) return requestRun(M.ORDER);
+    if (g('[data-t-retro-run]')) return requestRetro();
+    if (g('[data-t-retro-fix]')) return addRetroCheck();
+    if (g('[data-t-retro-resume]')) return resumeRetroCheck();
     if ((b = g('[data-t-page]'))) {
       T.runPage += Number(b.dataset.tPage);
       rerender();
@@ -686,6 +860,12 @@
     }
   }
   function onChange(e) {
+    const t = e.target;
+    if (t.matches && t.matches('[data-t-retro-on]')) return setRetro({ enabled: t.checked }, t.checked ? 'Retro on' : 'Retro off');
+    if (t.matches && t.matches('[data-t-retro-schedule]')) {
+      const x = RETRO_SCHEDULES.find(o => o.value === t.value);
+      return setRetro({ schedule: t.value }, `Retro: ${x ? x.label.toLowerCase() : t.value}`);
+    }
     const s = e.target.closest && e.target.closest('[data-t-clear]');
     if (!s) return;
     const acc = s.dataset.tClear, mode = s.value;
@@ -701,6 +881,17 @@
     if (done.length) {
       const n = ((p.account_results || {})[cfgName(done[0])] || {}).actionable || 0;
       lucidos.ui.toast(`${A[done[0]].label}: ${p.summary || 'triage finished'}`, n ? 'info' : 'success', { key: `run-${done[0]}`, durationMs: 6000 });
+    }
+    if (T.editing) { host.refresh(); return; }
+    load();
+  });
+
+  lucidos.sse.on('InboxTriageRetroCompleted', data => {
+    const p = data && data.summary != null ? data : (data && data.payload) || data || {};
+    if (retroRunning) {
+      clearTimeout(retroRunning);
+      retroRunning = null;
+      lucidos.ui.toast(`Retro: ${p.summary || 'finished'}`, p.restored ? 'info' : 'success', { key: 'retro-run', durationMs: 6000 });
     }
     if (T.editing) { host.refresh(); return; }
     load();
