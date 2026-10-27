@@ -1,6 +1,6 @@
 {
   "name": "Inbox",
-  "description": "What's waiting across the mailboxes triage watches: how many threads survived triage (Needs you), with how many aren't triaged yet. Small shows the one number; medium adds per-account counts that double as the filter; large adds the top few threads with the reason triage kept them. The accounts are triage's, in its config order, read through the Inbox app's own data layer; tap the number or a thread to open the Inbox.",
+  "description": "How many emails need you across your accounts. Tap to open the Inbox.",
   "icon": "assets/icon.svg",
   "kind": "widget",
   "reusable": true,

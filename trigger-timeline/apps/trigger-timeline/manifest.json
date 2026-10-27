@@ -1,5 +1,5 @@
 {
-  "description": "Agenda for your scheduled triggers that stays readable at volume. Steady triggers fold into a \"Running on a loop\" band with 24h sparklines, and failed runs get an attention rail.",
+  "description": "An agenda of your scheduled triggers. Failed runs stand out so you can fix them.",
   "name": "Cadence",
   "icon": "assets/icon.svg"
 }

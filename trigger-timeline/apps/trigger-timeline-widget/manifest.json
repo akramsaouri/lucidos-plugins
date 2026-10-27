@@ -1,6 +1,6 @@
 {
   "name": "Cadence",
-  "description": "What runs next among your scheduled triggers: a countdown to the next trigger with a real time of day, its name and time, and the fires after it. Triggers on a steady loop (8+ fires a day) are left out of the list and counted, the way the Cadence app folds them into its loop band, and any trigger whose last run failed is flagged. On the Home board a small tile shows the countdown and name, medium adds the next few fires, and large adds more. Reads the workspace's triggers, recounts every 30 seconds while visible, refreshes when a trigger changes or runs, and a tap opens the Cadence app. Read-only.",
+  "description": "A countdown to your next scheduled trigger. Tap to open Cadence.",
   "icon": "assets/icon.svg",
   "kind": "widget",
   "reusable": true,

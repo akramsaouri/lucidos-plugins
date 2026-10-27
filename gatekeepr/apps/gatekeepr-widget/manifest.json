@@ -1,5 +1,5 @@
 {
-  "description": "The Appgate VPN session as a desk countdown timer: a full turn is the session, and a solid disc shrinks back to 12 as it runs out, coloured by state (normal, expiring soon, expired, signed out), with the time left and the local expiry time under it. Reads the Gatekeepr plugin's latest check, recounts every minute, and redraws on each new check.",
+  "description": "A countdown to when your VPN session runs out. It changes colour as time gets short.",
   "icon": "assets/icon.svg",
   "kind": "widget",
   "name": "Gatekeepr",

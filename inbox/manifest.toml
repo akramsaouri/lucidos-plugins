@@ -1,5 +1,5 @@
 id = "inbox"
-version = "0.3.0"
+version = "0.3.1"
 name = "Inbox"
 description = "A smart inbox for all your mailboxes, with triage built in: your rules first, then AI, sort each mailbox on a schedule, and what needs you sits apart from the rest with the reason it was kept. Install Inbox, that's all: setup connects your mailboxes and schedules triage."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
