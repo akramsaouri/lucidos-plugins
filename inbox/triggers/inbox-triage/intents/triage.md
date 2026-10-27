@@ -24,9 +24,15 @@ Triage unseen emails for the specified account.
        Message-IDs; never persist an IMAP UID. See "IMAP Accounts" in the knowhow.
    - Non-shared accounts: search `UNSEEN`
    - Shared accounts (`"shared": true`): load state file, fetch with `since` (last_run - 1 day), filter out already-processed UIDs
+   - Leave alone any message the triage retro restored: an `id` held for this account with
+     `outcome: "restored"` in `artifacts/inbox/retro/ledger.json`. It is the user's now, so it
+     gets no rule, no AI verdict and no clearing.
 3. Apply rules in order — first match wins
 4. AI-categorize anything that doesn't match a rule (actionable / FYI / noise)
 5. Clear no-action emails (FYI + noise) per the account's `no_action_clear` setting: `read` (mark read, keep), `delete` (trash), or `keep` (leave, count only). Explicit `delete` rules always fire regardless.
+   Log every message this run moved out of the inbox (archived or trashed, by a rule or by
+   `no_action_clear`) to `artifacts/inbox/retro/cleared-<slug>.json`, for the triage retro. See
+   "Cleared Log" in the knowhow.
 6. Of the actionable/flagged items, drop any already in the notified-ledger (`artifacts/email-triage/notified-<slug>.json`). If new ones remain, send one consolidated push notification covering only those, then append them to the ledger. If all were already notified, stay silent.
 7. If nothing noteworthy, stay silent — exception-based alerting
 8. For `imap-peek` accounts, patch the `unread` values the run changed into the snapshot

@@ -3,7 +3,7 @@
 
 Never marks mail read as a side effect: `list` and `peek` open the mailbox
 read-only (EXAMINE) and every fetch uses BODY.PEEK[]. Only `mark-read` sets
-\\Seen, and only `trash` moves mail.
+\\Seen, `trash` moves mail to Trash, and `restore` (the triage retro's) moves it back.
 
 Messages are addressed by their Message-ID header, which survives sessions and
 folder moves. IMAP UIDs are resolved inside the session, right before a write,
@@ -15,10 +15,13 @@ Usage (cwd = workspace root):
   python data/scripts/inbox-triage/imap_helper.py peek      --account NAME --id '<abc@host>'
   python data/scripts/inbox-triage/imap_helper.py mark-read --account NAME --id '<abc@host>' [--id ...]
   python data/scripts/inbox-triage/imap_helper.py trash     --account NAME --id '<abc@host>' [--id ...]
+  python data/scripts/inbox-triage/imap_helper.py peek      --account NAME --from-trash --id '<abc@host>'
+  python data/scripts/inbox-triage/imap_helper.py restore   --account NAME --id '<abc@host>' [--id ...]
 
 `list` prints JSON [{id, from, to, cc, subject, date, seen, snippet}], oldest
 first, capped at --limit. `peek` prints one JSON line per id with the body text.
-`mark-read` / `trash` print one JSON line per id with `ok`, and exit 1 if any failed.
+`mark-read` / `trash` / `restore` print one JSON line per id with `ok`, and exit 1 if any failed.
+`restore` moves a message from Trash back to the inbox and clears \\Seen, so it comes back unread.
 
 Connection settings come from the account's `imap` block in
 data/artifacts/email-triage/config.json:
@@ -136,8 +139,8 @@ def cmd_list(M, c, criteria, limit):
     return 0
 
 
-def cmd_peek(M, c, ids):
-    M.select(q(c.get("mailbox", "INBOX")), readonly=True)
+def cmd_peek(M, c, ids, from_trash=False):
+    M.select(trash_folder(M, c) if from_trash else q(c.get("mailbox", "INBOX")), readonly=True)
     for i in ids:
         uids = uids_for(M, i)
         typ, r = M.uid("FETCH", uids[-1], "(BODY.PEEK[])") if uids else ("NO", None)
@@ -146,6 +149,23 @@ def cmd_peek(M, c, ids):
             continue
         print(json.dumps({"id": i, "body": text_of(email.message_from_bytes(r[0][1]), 8000)}, ensure_ascii=False))
     return 0
+
+
+def move(M, caps, uids, dest):
+    """Move UIDs out of the selected folder: (ok, error). With `MOVE` the server moves them atomically. Without it,
+    COPY, flag the original \\Deleted and expunge: `UID EXPUNGE` (scoped to these UIDs) with UIDPLUS, a plain
+    EXPUNGE otherwise. Never flags \\Deleted without a copy."""
+    if "MOVE" in caps:
+        return (True, None) if M.uid("MOVE", ",".join(uids), dest)[0] == "OK" else (False, f"MOVE to {dest} failed")
+    if M.uid("COPY", ",".join(uids), dest)[0] != "OK":
+        return False, f"COPY to {dest} failed, message left in place"
+    if M.uid("STORE", ",".join(uids), "+FLAGS.SILENT", r"(\Deleted)")[0] != "OK":
+        return False, f"copied to {dest} but could not flag the original \\Deleted"
+    if "UIDPLUS" in caps:
+        M.uid("EXPUNGE", ",".join(uids))
+    else:  # ponytail: plain EXPUNGE also removes mail another client already flagged \Deleted
+        M.expunge()
+    return True, None
 
 
 def cmd_write(M, c, ids, action):
@@ -159,27 +179,39 @@ def cmd_write(M, c, ids, action):
             ok, err = False, "not found"
         elif action == "mark-read":
             ok, err = M.uid("STORE", ",".join(uids), "+FLAGS.SILENT", r"(\Seen)")[0] == "OK", "STORE failed"
-        elif "MOVE" in caps:
-            ok, err = M.uid("MOVE", ",".join(uids), trash)[0] == "OK", f"MOVE to {trash} failed"
-        elif M.uid("COPY", ",".join(uids), trash)[0] != "OK":
-            ok, err = False, f"COPY to {trash} failed, message left in place"  # never flag \Deleted without a copy
-        elif M.uid("STORE", ",".join(uids), "+FLAGS.SILENT", r"(\Deleted)")[0] != "OK":
-            ok, err = False, f"copied to {trash} but could not flag the original \\Deleted"
         else:
-            if "UIDPLUS" in caps:
-                M.uid("EXPUNGE", ",".join(uids))
-            else:  # ponytail: plain EXPUNGE also removes mail another client already flagged \Deleted
-                M.expunge()
-            ok, err = True, None
+            ok, err = move(M, caps, uids, trash)
         failed += not ok
         print(json.dumps({"id": i, "ok": ok, "action": action, **({"error": err} if not ok else {})}))
+    return 1 if failed else 0
+
+
+def cmd_restore(M, c, ids):
+    """The triage retro's undo of `trash`: back to the inbox, unread."""
+    caps = M.capability()[1][0].decode().upper().split()
+    trash, inbox = trash_folder(M, c), q(c.get("mailbox", "INBOX"))
+    results = {}
+    M.select(trash)  # read-write
+    for i in ids:
+        uids = uids_for(M, i)
+        results[i] = move(M, caps, uids, inbox) if uids else (False, "not found")
+    M.select(inbox)  # read-write
+    failed = 0
+    for i in ids:
+        ok, err = results[i]
+        if ok:
+            uids = uids_for(M, i)
+            if uids and M.uid("STORE", ",".join(uids), "-FLAGS.SILENT", r"(\Seen)")[0] != "OK":
+                ok, err = False, "restored to the inbox but could not mark it unread"
+        failed += not ok
+        print(json.dumps({"id": i, "ok": ok, "action": "restore", **({"error": err} if not ok else {})}))
     return 1 if failed else 0
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  epilog="Never use read_email on these accounts: it sets \\Seen.")
-    ap.add_argument("cmd", choices=["list", "peek", "mark-read", "trash"])
+    ap.add_argument("cmd", choices=["list", "peek", "mark-read", "trash", "restore"])
     ap.add_argument("--account", help="account name (key under `accounts` in config.json)")
     ap.add_argument("--since", help="list: YYYY-MM-DD, default today - 2 days")
     ap.add_argument("--unseen", action="store_true", help="list: every unread message instead of a date window")
@@ -193,6 +225,7 @@ def main():
     ap.add_argument("--credential-env", help="env var holding the mailbox password")
     ap.add_argument("--mailbox", help="default INBOX")
     ap.add_argument("--trash-folder", help="used only when the server has no \\Trash SPECIAL-USE folder")
+    ap.add_argument("--from-trash", action="store_true", help="peek: read the message in Trash instead of the inbox")
     a = ap.parse_args()
     if a.cmd != "list" and not a.id:
         ap.error(f"{a.cmd} needs at least one --id")
@@ -204,7 +237,9 @@ def main():
             since = dt.date.fromisoformat(a.since) if a.since else dt.date.today() - dt.timedelta(days=2)
             return cmd_list(M, c, ["UNSEEN"] if a.unseen else ["SINCE", since.strftime("%d-%b-%Y")], a.limit)
         if a.cmd == "peek":
-            return cmd_peek(M, c, a.id)
+            return cmd_peek(M, c, a.id, a.from_trash)
+        if a.cmd == "restore":
+            return cmd_restore(M, c, a.id)
         return cmd_write(M, c, a.id, a.cmd)
     finally:
         M.logout()

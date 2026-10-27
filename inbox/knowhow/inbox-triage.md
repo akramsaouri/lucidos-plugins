@@ -18,7 +18,8 @@ An account's `fetch` value picks how its mail is read, and never via `read_email
 The triage engine ships with the **Inbox** plugin: the intent
 (`triggers/inbox-triage/intents/triage.md`), the on-demand trigger ("Inbox — triage on demand"), the
 IMAP helpers (`scripts/inbox-triage/`) and this knowhow. Runtime state lives in
-`artifacts/email-triage/`.
+`artifacts/email-triage/`. The triage retro, which re-checks what triage cleared, ships with it too:
+see `knowhow/inbox-triage-retro.md`.
 
 The controls live in the Inbox app (`apps/inbox`), which also shows the mail itself. Each account's
 sidebar group starts with a **Triage** entry (health and next run, pause/resume, Triage now, the rule
@@ -194,6 +195,34 @@ end tell'
 - **Name**: email subject (or a short actionable summary)
 - **Body**: sender + brief summary of what needs to be done
 - No external credentials needed — runs locally via AppleScript.
+
+## Cleared Log (for the triage retro)
+
+Inbox's triage retro (`knowhow/inbox-triage-retro.md`) goes back over what triage cleared and restores
+what the user would have wanted. It only knows what triage cleared from this log, so **every run appends
+one entry per message it moved out of the inbox**, archived or trashed, whether a rule or
+`no_action_clear` did it, to `artifacts/inbox/retro/cleared-<account-slug>.json` (the ledger's slug rule):
+
+```json
+{
+  "account": "Gmail - Work",
+  "cleared": [
+    {"id": "19efb1badde27730", "thread_id": "19efb1badde27730", "date": "2026-10-26T18:04:00Z",
+     "action": "archive", "by": "rule 3", "from": "Billing <billing@example.com>",
+     "subject": "Your receipt", "snippet": "Thanks for your payment of…"}
+  ]
+}
+```
+
+- `id` is the same id the notified-ledger uses. `action` is `archive` or `delete`. `by` is `rule <n>`
+  (1-based) or `ai`. `snippet` is up to 200 characters, from what the run already fetched.
+- Log only a write that succeeded. `read`, `keep` and `skip` leave mail in the inbox: never log them.
+- Create the file when absent, keep every entry already in it, and prune entries older than 30 days.
+- Log whether or not the retro is switched on, so turning it on has the recent past to review.
+
+**A message the retro restored is the user's.** Its `id` is in `artifacts/inbox/retro/ledger.json`,
+in `reviewed`, with this account's name and `outcome: "restored"`. Skip it before evaluating rules: no
+action, no AI verdict, no clearing. Otherwise the next run would clear it again.
 
 ## Event Tracking
 
@@ -414,6 +443,8 @@ python data/scripts/inbox-triage/imap_helper.py list --account "<name>" --since 
 python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --id '<msgid>'
 python data/scripts/inbox-triage/imap_helper.py mark-read --account "<name>" --id '<msgid>' [--id ...]
 python data/scripts/inbox-triage/imap_helper.py trash --account "<name>" --id '<msgid>' [--id ...]
+python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --from-trash --id '<msgid>'   # triage retro
+python data/scripts/inbox-triage/imap_helper.py restore --account "<name>" --id '<msgid>' [--id ...]  # triage retro
 ```
 
 - **`list`** prints JSON `[{id, from, to, cc, subject, date, seen, snippet}]`, oldest first,
@@ -430,14 +461,17 @@ python data/scripts/inbox-triage/imap_helper.py trash --account "<name>" --id '<
   `UID EXPUNGE` (scoped to that message) when the server has `UIDPLUS`, and a plain
   `EXPUNGE` otherwise, which also purges anything another client already flagged
   `\Deleted`. If the COPY fails, the original is left untouched.
-- **`mark-read` and `trash`** print `{"id", "ok"}` per message and exit 1 if any failed.
+- **`restore`** is the triage retro's undo of `trash`: it moves the message from Trash back to the
+  inbox and clears `\Seen`, so it comes back unread. `peek --from-trash` reads it in Trash first, still
+  read-only.
+- **`mark-read`, `trash` and `restore`** print `{"id", "ok"}` per message and exit 1 if any failed.
   A failed write is a failed action: report it in the run summary, never count it as done.
 
 ### Seen state
 
 `list` and `peek` open the mailbox read-only (`EXAMINE`) and fetch with `BODY.PEEK[]`, so
-they cannot set `\Seen`. Keep both if you ever edit the helper. Only `mark-read` changes
-read state.
+they cannot set `\Seen`. Keep both if you ever edit the helper. Only `mark-read` (sets it) and
+`restore` (clears it) change read state.
 
 On a **shared** account, `seen` is informational only. Other people read the mailbox too,
 so mail can already be `seen: true` when triage reaches it. Triage it anyway; dedup is by

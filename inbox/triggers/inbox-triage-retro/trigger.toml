@@ -1,0 +1,16 @@
+# The triage retro: goes back over what triage archived or trashed, restores misses and suggests rules. Inbox's
+# daily schedule check (scripts/inbox-triage/retro_tick.py, on a cron setup creates) emits the request when the
+# Retro setting is on and a retro is due; the Inbox app's Retro now button emits it too.
+name = "Inbox — triage retro"
+slug = "inbox-triage-retro"
+app_id = "inbox"
+go_to_review = true
+# It reads whole mails and decides which to bring back, so it gets more thought than triage's low.
+reasoning_effort = "medium"
+
+[[on]]
+event_type = "InboxTriageRetroRequested"
+
+[run]
+type = "intent"
+intent = "Go back over the mail triage archived or trashed on all my accounts, bring back anything I'd want to see, and suggest rule changes here so it gets caught next time. Don't change the rules yourself: execute the retro intent at triggers/inbox-triage/intents/retro.md."
