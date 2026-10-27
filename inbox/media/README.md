@@ -21,6 +21,8 @@ untouched.
 - **One notification, never twice**: a single push per run, and a ledger so an unread message doesn't ping you
   every hour. A run that finds nothing says nothing.
 - **Two zones per account, never mixed**, so a long list never hides what matters.
+- **All inboxes**: every account's mail in one list, newest first, each row tagged with its account. Archive and
+  reply still go to the right mailbox, and one account failing to load never blanks the rest.
 - **Quick actions**: `e` archives, `#` deletes, `z` undoes, or swipe right and left on a touch screen. `?` lists
   every shortcut.
 - **Replies with AI help**: **Suggest** drafts a reply in your voice, **Polish** tidies what you wrote, and

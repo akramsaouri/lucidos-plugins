@@ -14,6 +14,11 @@ behind. Each account's inbox is split into two zones that never mix:
 - **Not triaged yet**: mail that arrived since the account's last run, or that triage never saw (read before an
   unread-only account's run, or missing from a shared account's `state.processed`).
 
+With two or more accounts, **All inboxes** leads the account list: every account's mail in the same two zones,
+newest first, each row tagged with its account. Actions on a row go to that row's own account; folders and the
+per-account Triage entry stay under each account. An account that fails to load keeps its red dot and a quiet
+"not loaded" line while the others still show. The last mailbox picked (All or one account) is remembered.
+
 Folders and labels are browsed on demand outside the zones: see `apps/inbox/knowhow/folders.md`.
 
 Inbox is also triage's control panel (it replaced the old Email Triage app). A **Triage** entry heads each
