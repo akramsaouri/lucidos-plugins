@@ -68,6 +68,55 @@ test('#demo renders made-up accounts in both zones and calls nothing live', asyn
   } finally { await app.close(); }
 });
 
+test('#demo/all merges every account newest first, tags each row and remembers the pick', async () => {
+  const app = await boot('#demo/all');
+  try {
+    await app.w.InboxDemo.show('all');
+    await app.until(() => app.$('#list .row-acct'), 'the account tags');
+    assert.match(app.$('#count').textContent, /6 need you · 4 not triaged/);
+    const side = [...app.w.document.querySelectorAll('#side [data-filter]')].map(b => b.dataset.filter);
+    assert.deepEqual(side, ['all', 'personal', 'work', 'side-project']);
+    assert.equal(app.$('#filters [data-filter]').dataset.filter, 'all');
+    const kept = [...app.w.document.querySelectorAll('#list .sec:first-child .row')];
+    assert.deepEqual(kept.map(r => r.dataset.key), ['personal:dinner', 'work:roadmap', 'personal:dentist', 'work:contract', 'personal:lease', 'personal:bank']);
+    assert.deepEqual(kept.slice(0, 2).map(r => r.querySelector('.row-acct').textContent), ['Personal', 'Work']);
+    assert.equal(app.w.lucidos.storage.local.getItem('inbox.filter'), 'all');
+    /* All inboxes has no folders of its own. */
+    assert.equal(app.$('#side .mbx-all [data-folders]'), null);
+    assert.deepEqual(app.live, []);
+  } finally { await app.close(); }
+});
+
+test('All inboxes archives through the row\'s own account, and one failing account leaves the rest', async () => {
+  const app = await boot('#demo/all');
+  try {
+    await app.w.InboxDemo.show('all');
+    await app.until(() => app.$('#list .row-acct'), 'the account tags');
+    const real = app.w.lucidos.proxy, calls = [];
+    app.w.lucidos.proxy = name => {
+      const p = real(name);
+      return { fetch: (path, init) => {
+        calls.push([name, String((init && init.method) || 'GET').toUpperCase()]);
+        if (name === 'demo-work' && app.w.failWork) return Promise.reject(new Error('token expired'));
+        return p.fetch(path, init);
+      } };
+    };
+    app.$('#list .row[data-key="work:roadmap"]').dispatchEvent(new app.w.MouseEvent('click', { bubbles: true }));
+    await app.until(() => app.$('#reader [data-act="done"]'), 'the reader');
+    calls.length = 0;
+    app.$('#reader [data-act="done"]').dispatchEvent(new app.w.MouseEvent('click', { bubbles: true }));
+    await app.until(() => calls.some(([, m]) => m !== 'GET'), 'the archive call');
+    assert.deepEqual([...new Set(calls.filter(([, m]) => m !== 'GET').map(([n]) => n))], ['demo-work']);
+
+    app.w.failWork = true;
+    app.$('[data-act="refresh"]').dispatchEvent(new app.w.MouseEvent('click', { bubbles: true }));
+    await app.until(() => /Work: not loaded/.test(app.$('#fresh').textContent), 'the quiet error');
+    assert.ok(app.$('#side .mbx-all .mbx-err'));
+    assert.ok(app.$('#list .row[data-key="personal:dinner"]'));
+    assert.deepEqual(app.live, []);
+  } finally { await app.close(); }
+});
+
 test('#demo/reply opens a conversation and drafts a reply with Suggest', async () => {
   const app = await boot('#demo/reply');
   try {

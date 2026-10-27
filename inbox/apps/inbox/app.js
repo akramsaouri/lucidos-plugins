@@ -126,8 +126,16 @@
   const isImap = t => (A[t.account] || {}).kind === 'imap';
   /* The colour slot an account wears (index.html's --acct-0 … --acct-4), shared with Email Triage. */
   const slot = acc => (A[acc] || {}).slot || '';
-  /* Exactly one account is always picked: the first on every open, until the user picks another. */
-  const ensureFilter = () => { if (!A[S.filter]) S.filter = M.ORDER[0] || null; };
+  /* One mailbox is always picked: an account, or 'all' (every account merged, offered once there are two). The
+   * pick survives a reopen; one that no longer exists falls back to the first account. */
+  const PICK = 'inbox.filter';
+  const hasAll = () => M.ORDER.length > 1;
+  const isAll = () => S.filter === 'all' && hasAll();
+  const ensureFilter = () => { if (!A[S.filter] && !isAll()) S.filter = M.ORDER[0] || null; };
+  function pick(f) {
+    S.filter = f;
+    try { lucidos.storage.local.setItem(PICK, f); } catch (e) { /* quota */ }
+  }
   const folderName = t => { const l = S.folderLists.get(t.account), f = l && l.items && l.items.find(x => x.id === t.folder); return f ? f.name : t.folder; };
   /* Folder rows only offer what means something there: IMAP folders are read-only (the bridge writes to INBOX
    * only), archiving needs the thread to still be in the inbox, and deleting from Trash would only bounce it. */
@@ -355,7 +363,7 @@
   /* ---------- list ---------- */
   function visible() {
     const q = S.q.trim().toLowerCase();
-    const src = S.view ? folderThreads() : S.threads.filter(t => S.filter === 'all' || t.account === S.filter);
+    const src = S.view ? folderThreads() : S.threads.filter(t => isAll() || t.account === S.filter);
     return src.filter(t => (!S.hidden.has(t.key) || (S.view && S.keepInFolder.has(t.key))) &&
       (!q || [t.from, t.fromAddr, t.subject, t.snippet, t.why].join(' ').toLowerCase().includes(q)));
   }
@@ -378,6 +386,7 @@
     const n = counts();
     $('side').innerHTML = `<div class="side-head"><button class="back-link narrow-only" data-act="mbx-close">${ic('chevL')}Back</button><h2 class="side-title">Mailboxes</h2></div>` +
       (M.ORDER.length ? Triage.engineBannerHtml() + Triage.sideAllHtml(S.triage === 'all') : '') +
+      sideAllInboxesHtml(n) +
       M.ORDER.map(a => {
         const sel = S.filter === a && !S.view && !S.triage, open = S.foldersOpen.has(a), l = A[a].label;
         return `<div class="mbx-acct" data-acct="${slot(a)}">
@@ -388,6 +397,18 @@
           ${open ? foldersHtml(a) : ''}
         </div>`;
       }).join('');
+  }
+
+  /* All inboxes leads the accounts. It has no folders or Triage entry of its own: those belong to one account. */
+  const failed = () => M.ORDER.filter(a => S.errors[a] && A[a].kind !== 'none');
+  function sideAllInboxesHtml(n) {
+    if (!hasAll()) return '';
+    const sel = isAll() && !S.view && !S.triage, total = M.ORDER.reduce((s, a) => s + (n[a] || 0), 0), bad = failed();
+    return `<div class="mbx-acct mbx-all">
+      <div class="mbx-row${sel ? ' sel' : ''}">
+        <button class="mbx-main" data-filter="all"${sel ? ' aria-current="page"' : ''}><span class="chip chip-all" aria-hidden="true">${ic('inbox')}</span><span class="mbx-name">All inboxes</span>${bad.length ? `<span class="mbx-err" data-tooltip="${attr('Not loaded: ' + bad.map(a => A[a].label).join(', '))}" aria-label="Some accounts not loaded"></span>` : ''}${total ? `<span class="mbx-n">${total}</span>` : ''}</button>
+      </div>
+    </div>`;
   }
 
   /* The account's Triage entry leads its group and never waits on the folder list. */
@@ -422,15 +443,17 @@
   /* Eyebrow = the account, title = the mailbox. Below three panes the block opens the mailbox screen. */
   function renderHead() {
     const a = S.filter, tap = !three();
-    const inner = `<span class="eyebrow" data-acct="${slot(a)}"><span class="adot"></span><span class="eyebrow-text">${esc((A[a] || {}).label || 'All')}</span>${tap ? ic('chevD') : ''}</span>` +
+    const inner = `<span class="eyebrow" data-acct="${slot(a)}"><span class="adot"></span><span class="eyebrow-text">${esc((A[a] || {}).label || 'All inboxes')}</span>${tap ? ic('chevD') : ''}</span>` +
       `<span class="title-line"><span class="title app-title" role="heading" aria-level="1">${esc(S.view ? S.view.name : 'Inbox')}</span><span id="count" class="top-count">${esc(countText())}</span></span>`;
     $('head').innerHTML = tap ? `<button class="view-title" data-act="mbx-open" aria-haspopup="true" data-tooltip="Mailboxes and folders" data-tooltip-below>${inner}</button>` : `<div class="view-title">${inner}</div>`;
   }
 
   function renderFilters() {
     const n = counts();
-    /* Tabs, not toggles: exactly one account is always selected, the first one on every open. */
-    $('filters').innerHTML = M.ORDER.map(k =>
+    /* Tabs, not toggles: exactly one mailbox is always selected, All first when there is more than one account. */
+    const total = M.ORDER.reduce((s, k) => s + (n[k] || 0), 0);
+    $('filters').innerHTML = (hasAll() ? `<button class="pill-bar-btn" data-filter="all" aria-pressed="${isAll()}">All${total ? ` <span class="n">${total}</span>` : ''}</button>` : '') +
+      M.ORDER.map(k =>
       `<button class="pill-bar-btn" data-filter="${k}" data-acct="${slot(k)}" aria-pressed="${S.filter === k}"><span class="adot" aria-hidden="true"></span>${esc(A[k].label)}${n[k] ? ` <span class="n">${n[k]}</span>` : ''}</button>`).join('');
     /* The bar scrolls sideways on a phone: keep the picked account in view (a later account sits past the edge). */
     const bar = $('filters'), on = bar.querySelector('[aria-pressed="true"]');
@@ -444,7 +467,7 @@
     /* Triage freshness lives in the reader now, for the open email's account only. This strip only speaks up
      * when an account failed to load or a refresh is running. */
     const bits = [];
-    for (const a of M.ORDER) if (S.errors[a] && A[a].kind !== 'none') bits.push(`<span class="fresh-err" data-tooltip="${attr(S.errors[a])}">${esc(A[a].label)}: not loaded</span>`);
+    for (const a of failed()) bits.push(`<span class="fresh-err" data-tooltip="${attr(S.errors[a])}">${esc(A[a].label)}: not loaded</span>`);
     if (S.loading) bits.push('<span>refreshing…</span>');
     $('fresh').innerHTML = bits.join('');
     $('fresh').hidden = !bits.length;
@@ -461,7 +484,7 @@
       <div class="row-slide">
         ${t.unread ? '<span class="udot" aria-label="Unread"></span>' : ''}<span class="av" aria-hidden="true">${esc(initial(t.from))}</span>
         <div class="row-body">
-          <div class="row-top"><span class="row-from">${esc(t.from)}</span>${t.count > 1 ? `<span class="row-n">${t.count}</span>` : ''}<span class="row-date">${esc(when(t.date))}</span></div>
+          <div class="row-top"><span class="row-from">${esc(t.from)}</span>${t.count > 1 ? `<span class="row-n">${t.count}</span>` : ''}${isAll() && !S.view ? `<span class="row-acct"><span class="adot" aria-hidden="true"></span><span class="row-acct-name">${esc((A[t.account] || {}).label || t.account)}</span></span>` : ''}<span class="row-date">${esc(when(t.date))}</span></div>
           <div class="row-subject">${esc(t.subject)}</div>
           ${lines}
           ${t.repliedByUs ? '<div class="row-meta"><span class="label label-success pill">You replied</span></div>' : ''}
@@ -516,6 +539,8 @@
   function emptyHtml() {
     if (S.q) return '<div class="list-empty"><div class="title">Nothing matches.</div></div>';
     if (!S.configured) return `<div class="list-empty">${ic('inbox')}<div class="title">No mailboxes yet</div><div class="muted">Setup connects your mailboxes and schedules triage for each.</div><button class="action-btn" data-act="setup">Set up Inbox</button></div>`;
+    /* All inboxes blanks only when every account failed; one failure stays a quiet line in the strip above. */
+    if (isAll() && M.ORDER.every(a => S.errors[a])) return `<div class="list-empty">${ic('inbox')}<div class="title">Couldn't load any mailbox</div><p class="muted">Each account's reason is on its red dot.</p><button class="action-btn action-btn-secondary" data-act="refresh">Try again</button></div>`;
     if (S.filter && S.errors[S.filter]) return `<div class="list-empty">${ic('inbox')}<div class="title">Couldn't load ${esc(A[S.filter].label)}</div><p class="error-text">${esc(S.errors[S.filter])}</p>${A[S.filter].kind === 'none' ? '' : A[S.filter].problem ? '<button class="action-btn action-btn-secondary" data-act="setup">Run Inbox setup</button>' : '<button class="action-btn action-btn-secondary" data-act="refresh">Try again</button>'}</div>`;
     const cleared = S.ctx && S.ctx.clearedToday;
     return `<div class="list-empty">${ic('inbox')}<div class="title">Nothing on hold</div>${cleared ? `<div class="muted">Triage cleared ${cleared} email${cleared === 1 ? '' : 's'} today</div>` : ''}</div>`;
@@ -1115,7 +1140,7 @@
     const tri = e.target.closest('[data-triage]');
     if (tri) { openTriage(tri.dataset.triage); return; }
     const f = e.target.closest('[data-filter]');
-    if (f) { Object.assign(S, { filter: f.dataset.filter, view: null, triage: null }); closeMbx(); render(); toListTop(); return; }
+    if (f) { pick(f.dataset.filter); Object.assign(S, { view: null, triage: null }); closeMbx(); render(); toListTop(); return; }
     const fo = e.target.closest('[data-folder]');
     if (fo) { const v = fo.dataset.folder, i = v.indexOf('|'); openFolder(v.slice(0, i), v.slice(i + 1)); return; }
     const disc = e.target.closest('[data-folders]');
@@ -1305,6 +1330,7 @@
     try { await lucidos.storage.ready; } catch (e) { /* no storage: live only */ }
     try { S.drafts = JSON.parse(lucidos.storage.local.getItem(DRAFTS) || '{}') || {}; } catch (e) { S.drafts = {}; }
     try { S.collapsedSecs = JSON.parse(lucidos.storage.local.getItem(COLLAPSED) || '{}') || {}; } catch (e) { S.collapsedSecs = {}; }
+    try { S.filter = lucidos.storage.local.getItem(PICK) || null; } catch (e) { /* no storage */ }
     restoreOutbox();
     try {
       const c = JSON.parse(lucidos.storage.local.getItem(CACHE) || 'null');

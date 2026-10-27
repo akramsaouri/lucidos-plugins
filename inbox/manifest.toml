@@ -1,5 +1,5 @@
 id = "inbox"
-version = "0.3.1"
+version = "0.4.0"
 name = "Inbox"
 description = "A smart inbox for all your mailboxes, with triage built in: your rules first, then AI, sort each mailbox on a schedule, and what needs you sits apart from the rest with the reason it was kept. Install Inbox, that's all: setup connects your mailboxes and schedules triage."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
@@ -24,6 +24,9 @@ whose answer is already in the settings. Do the same when the settings file is m
 `data/config/apis.json` proxy already passes step 6's check for some accounts: record those and carry on from
 there. Never ask again for what `config.json` or the settings already answer.
 
+- **Updating to 0.4.0:** an **All inboxes** entry tops the account list (and the phone's account pills) once
+  there are two accounts: every account's mail in one list, newest first, each row tagged with its account. The
+  app now remembers the last mailbox picked. Nothing to set up.
 - **Updating to 0.3.0:** Inbox now ships the triage engine that used to be the Email Triage plugin, at its own
   paths: the triage intent (`triggers/inbox-triage/intents/triage.md`), its knowhow (`knowhow/inbox-triage.md`),
   the IMAP helpers (`scripts/inbox-triage/`) and the on-demand trigger behind Triage now, "Inbox — triage on

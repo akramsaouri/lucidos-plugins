@@ -1,6 +1,7 @@
 /* Demo mode, for screenshots: made-up accounts and mail, never the workspace's own.
  * Entered when the app opens at #demo, or a view of it:
  *   #demo           the inbox list (Needs you / Not triaged yet)
+ *   #demo/all       All inboxes: every account's mail in one list
  *   #demo/open      the list with one conversation open
  *   #demo/reply     that conversation with a reply drafted by Suggest
  *   #demo/triage    the Triage pane for the first account: health, rule chain, suggestions, run history
@@ -249,6 +250,7 @@
       click(await until(() => q(`[data-triage="${acc}"]`)));
       return;
     }
+    if (view === 'all') { click(await until(() => q('[data-filter="all"]'))); return; }
     if (view !== 'open' && view !== 'reply') return;
     click(await until(() => q('#list .row[data-key="personal:dinner"]')));
     await until(() => q('#reader .msg-text'));
