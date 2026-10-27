@@ -6,7 +6,7 @@ source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
 engine = ">=0.48.0"
 categories = ["productivity", "communication", "automation"]
 icon = "media/icon.svg"
-screenshots = ["media/list.png", "media/reply.png", "media/triage.png"]
+screenshots = ["media/list.png", "media/all-inboxes.png", "media/reply.png", "media/triage.png"]
 setup_revision = 1
 setup_reason = "Inbox now includes the triage engine; Email Triage is no longer needed."
 

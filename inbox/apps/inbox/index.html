@@ -85,6 +85,9 @@
   .mbx-acct + .mbx-acct { margin-top: var(--space-xs); }
   .chip-all { background: var(--bg-tertiary); color: var(--text-secondary); }
   .chip-all .ic { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+  /* No folders under All: pad where the disclosure would sit, so its count lines up with the accounts'. */
+  .mbx-all .mbx-main { padding-right: calc(2 * var(--space-xs) + 1.75rem); }
+  @media (pointer: coarse) { .mbx-all .mbx-main { padding-right: calc(var(--space-xs) + 2.75rem); } }
   .mbx-row { position: relative; display: flex; align-items: center; border-radius: var(--radius-control); }
   @media (hover: hover) { .mbx-row:hover { background: var(--bg-hover); } }
   .mbx-row.sel { background: var(--bg-selected); }
