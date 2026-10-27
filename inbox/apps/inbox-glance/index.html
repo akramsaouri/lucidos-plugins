@@ -127,7 +127,7 @@
   const $ = id => document.getElementById(id);
   const CACHE = 'glance-v2', ROWS = 4;
   const WAKE_STALE = 5 * 60e3, TICK_STALE = 15 * 60e3;
-  /* accounts are Email Triage's, in its config order, as the Inbox data layer describes them: { key, label, kind, problem }. */
+  /* accounts are triage's, in its config order, as the Inbox data layer describes them: { key, label, kind, problem }. */
   let state = { accounts: [], threads: [], at: 0, errors: {} }, fatal = '', pick = 'all';
   let busy = false, again = false, missed = false, soonTimer = null, clock = null, rowsKey = '', pillsKey = null;
 

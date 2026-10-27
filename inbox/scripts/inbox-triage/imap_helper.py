@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""IMAP helper for email-triage accounts with `"fetch": "imap"` (no Gmail API, no OAuth).
+"""IMAP helper for triage accounts with `"fetch": "imap"` (no Gmail API, no OAuth).
 
 Never marks mail read as a side effect: `list` and `peek` open the mailbox
 read-only (EXAMINE) and every fetch uses BODY.PEEK[]. Only `mark-read` sets

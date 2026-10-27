@@ -1,4 +1,4 @@
-/* Triage controls, ported from the Email Triage control panel: health and next run, pause/resume, Triage now, the
+/* Triage controls: health and next run, pause/resume, Triage now, the
  * rule chain editor with dead-rule detection, suggestions from runs, and run history. app.js owns the routing (which
  * scope is open, the sidebar around the entries); this module owns the triage state, the entries' HTML and the pane.
  *
@@ -6,7 +6,7 @@
  *   artifacts/email-triage/config.json             accounts + rule chains (written here, see saveConfig)
  *   artifacts/email-triage/{triage,state,notified}-<slug>.json   last triage, fetch state, push ledger
  *   EmailTriageCompleted events                    run history + run_notes suggestions
- *   the workspace triggers                         each account's `Email Triage — <Account>` cron trigger
+ *   the workspace triggers                         each account's `Inbox triage — <Account>` cron trigger
  *   the engine's own files                         to warn when triage can't run (see engineGaps)
  * See knowhow/triage.md for the invariants. */
 (function () {
@@ -28,11 +28,12 @@
   ];
   const RUN_WINDOW_DAYS = 14, RUNS_PER_PAGE = 15;
   const RUN_TIMEOUT_MS = 300000; // 5 min: an AI triage pass over a full inbox is slow
-  /* The triage engine this plugin ships. Removing the old Email Triage plugin deletes every file under its
-   * `email-triage` paths, so a cron trigger still naming one of those stops working while these stay. */
+  /* The triage engine this plugin ships. */
   const ENGINE_FILES = ['triggers/inbox-triage/intents/triage.md', 'knowhow/inbox-triage.md'];
-  const ON_DEMAND = { slugs: ['inbox-triage-on-demand', 'email-triage-on-demand'], names: ['Inbox — triage on demand', 'Email Triage — on demand'] };
-  const OLD_PATHS = /\b(?:knowhow\/email-triage\.md|triggers\/email-triage\/[\w./-]+\.md|scripts\/email-triage\/[\w.-]+\.py|apps\/email-triage\/[\w./-]+\.(?:md|py))/g;
+  const ON_DEMAND = { slug: 'inbox-triage-on-demand', name: 'Inbox — triage on demand' };
+  /* A workspace file a cron's intent names (an optional `data/` prefix dropped), checked so a schedule pointing at a
+   * file that is gone shows up rather than failing on every run. */
+  const NAMED_FILE = /(?<![\w/-])(?:data\/)?((?:knowhow|triggers|scripts|apps)\/[\w./-]+\.(?:md|py))/g;
 
   const esc = s => lucidos.utils.escapeHtml(String(s == null ? '' : s));
   const attr = s => lucidos.utils.escapeHtmlAttr(String(s == null ? '' : s));
@@ -253,17 +254,17 @@
     try { return JSON.parse(await lucidos.data.read(path)); } catch (e) { return null; }
   }
   /* What stops triage from running, worded for the banner: an engine file gone, no trigger to answer Triage now, or
-   * an account's cron still naming a file the old Email Triage plugin took with it. Inbox setup repairs all three. */
+   * an account's cron naming a file that is gone. Inbox setup repairs all three. */
   async function engineGaps(triggers) {
     const exists = path => lucidos.data.read(path).then(() => true, () => false);
     const gaps = [];
     const missing = (await Promise.all(ENGINE_FILES.map(async p => (await exists(p)) ? null : p))).filter(Boolean);
     if (missing.length) gaps.push(`Missing ${missing.join(', ')}`);
     if (!triggers) return gaps;
-    if (!triggers.some(t => ON_DEMAND.slugs.includes(t.slug) || ON_DEMAND.names.includes(t.name))) gaps.push('No trigger answers Triage now');
+    if (!triggers.some(t => t.slug === ON_DEMAND.slug || t.name === ON_DEMAND.name)) gaps.push('No trigger answers Triage now');
     for (const acc of M.ORDER) {
       const t = M.triggerFor(cfgName(acc), triggers, M.ORDER.map(cfgName));
-      const named = [...new Set(String((t && t.run && t.run.intent) || '').match(OLD_PATHS) || [])];
+      const named = [...new Set([...String((t && t.run && t.run.intent) || '').matchAll(NAMED_FILE)].map(m => m[1]))];
       const gone = (await Promise.all(named.map(async p => (await exists(p)) ? null : p))).filter(Boolean);
       if (gone.length) gaps.push(`${A[acc].label}'s schedule runs ${gone.join(', ')}, which is gone`);
     }
@@ -341,8 +342,7 @@
 
   /* ---------- Triage now ----------
    * An iframe can't read a mailbox, so it asks: EmailTriageRequested, one per account, and the "Inbox — triage on
-   * demand" trigger runs the same intent the cron triggers run. The payload (and its `source: "email-triage-app"`) is
-   * the one the old Email Triage app sent, so the on-demand trigger keeps matching it. */
+   * demand" trigger runs the same intent the cron triggers run. It matches on the event type alone. */
   async function requestRun(accs) {
     const fresh = accs.filter(a => block(a) && !isPaused(a) && !running.has(a));
     if (!fresh.length) return;
@@ -352,7 +352,7 @@
     for (const a of fresh) {
       const name = cfgName(a);
       try {
-        await lucidos.events.emit('EmailTriageRequested', { summary: `Manual triage run for ${shortName(name)}`, account: name, source: 'email-triage-app' });
+        await lucidos.events.emit('EmailTriageRequested', { summary: `Manual triage run for ${shortName(name)}`, account: name, source: 'inbox-app' });
       } catch (e) { finishRun(a); failed.push(A[a].label); }
     }
     if (failed.length) {

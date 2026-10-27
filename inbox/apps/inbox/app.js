@@ -10,7 +10,7 @@
   const listEl = $('list'), readerEl = $('reader');
   const KEYS = 'j/k move (next/previous email while reading) · ⏎ open · e archive · s summarize · # delete · r reply · R reply all · a ask Lucidos · z undo · / filter';
   const CACHE = 'inbox-cache-v2', DRAFTS = 'inbox-drafts-v1', OUTBOX = 'inbox-outbox-v1';
-  const SETUP_PROMPT = 'Set up the Inbox app for me. Run the setup of the inbox plugin: move me off the old Email Triage plugin if it is still installed, set up triage for each mailbox I want, record a Gmail proxy for each Gmail account, check the IMAP bridge for each IMAP account, and ask me for my display name and reply voice.';
+  const SETUP_PROMPT = 'Set up the Inbox app for me. Run the setup of the inbox plugin: set up triage for each mailbox I want, record a Gmail proxy for each Gmail account, check the IMAP bridge for each IMAP account, and ask me for my display name and reply voice.';
   const REMOTE = /<img[^>]+src\s*=\s*["']?\s*https?:|url\(\s*["']?\s*https?:/i;
   const QUOTE_HTML = /class=["'][^"']*\b(gmail_quote|yahoo_quoted)\b|<blockquote[^>]*type=["']?cite/i;
   /* The mail document is third-party content designed for white paper, so it gets its own fixed palette. */
@@ -124,7 +124,7 @@
   /* The open folder's copy first: a Gmail thread can sit in a label and the inbox under the same key. */
   const byKey = k => (S.view && folderThreads().find(t => t.key === k)) || S.threads.find(t => t.key === k) || anyFolderThreads().find(t => t.key === k);
   const isImap = t => (A[t.account] || {}).kind === 'imap';
-  /* The colour slot an account wears (index.html's --acct-0 … --acct-4), shared with Email Triage. */
+  /* The colour slot an account wears (index.html's --acct-0 … --acct-4), shared with the triage pane and the Home widget. */
   const slot = acc => (A[acc] || {}).slot || '';
   /* One mailbox is always picked: an account, or 'all' (every account merged, offered once there are two). The
    * pick survives a reopen; one that no longer exists falls back to the first account. */

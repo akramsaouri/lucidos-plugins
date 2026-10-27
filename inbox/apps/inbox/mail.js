@@ -1,5 +1,5 @@
 /* Inbox data layer.
- * Accounts are Email Triage's, read from artifacts/email-triage/config.json in its order, with per-account
+ * Accounts are triage's, read from artifacts/email-triage/config.json in its order, with per-account
  * overrides from artifacts/inbox/settings.json (knowhow/inbox.md has the schema).
  * A Gmail account ("fetch": "gmail-api") goes through the engine proxy its settings name, and every list first
  * checks /profile so a token mix-up can never act on the wrong inbox.
@@ -23,14 +23,14 @@
   }
 
   /* ---------- accounts ---------- */
-  /* Email Triage's sidecar slug: lowercased and hyphenated, with only a "Gmail - " prefix dropped. */
+  /* Triage's sidecar slug: lowercased and hyphenated, with only a "Gmail - " prefix dropped. */
   const slugFor = name => String(name).replace(/^Gmail\s*-\s*/i, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const shortName = name => String(name).replace(/^Gmail\s*-\s*/i, '');
 
   function kindOf(name, b) {
     if (b.fetch === 'gmail-api') return 'gmail';
     if (b.fetch === 'imap') return 'imap';
-    /* Configs from before Email Triage 0.4.0 carry no `fetch`; a Gmail one still reads over the API. */
+    /* Older configs carry no `fetch`; a Gmail one still reads over the API. */
     if (!b.fetch && (/^gmail\b/i.test(name) || /@(gmail|googlemail)\.com$/i.test(b.address || ''))) return 'gmail';
     return 'none';
   }
@@ -167,9 +167,10 @@
     return m;
   }
 
-  /* Which cron trigger is whose, as Email Triage's own pause logic matched it: punctuation-blind, cron triggers
-   * only (the on-demand one serves every account), and never a trigger naming a longer account name that contains
-   * this one. The triage pane pauses and resumes what this finds. */
+  /* Which cron trigger is whose: punctuation-blind, cron triggers only (the on-demand one serves every account), and
+   * never a trigger naming a longer account name that contains this one. Matching on "triage" finds both setup's
+   * `Inbox triage — <Account>` and the `Email Triage — <Account>` it named crons before 1.0.0. The triage pane
+   * pauses and resumes what this finds. */
   const words = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   function triggerFor(name, triggers, names) {
     const short = words(shortName(name));

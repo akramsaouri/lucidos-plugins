@@ -45,7 +45,7 @@ class WiringTest(unittest.TestCase):
         trig = tomllib.loads(read(os.path.join(PLUGIN, "triggers", "inbox-triage-on-demand", "trigger.toml")))
         self.assertEqual([o["event_type"] for o in trig["on"]], ["EmailTriageRequested"])
         self.assertIn("lucidos.events.emit('EmailTriageRequested'", self.triage)
-        self.assertIn("source: 'email-triage-app'", self.triage)
+        self.assertIn("source: 'inbox-app'", self.triage)
 
     def test_nothing_says_inbox_needs_email_triage(self):
         inbox = tomllib.loads(read(os.path.join(PLUGIN, "manifest.toml")))

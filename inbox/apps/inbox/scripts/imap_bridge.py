@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""IMAP bridge for the Inbox app (apps/inbox), for Email Triage accounts with `"fetch": "imap"`.
+"""IMAP bridge for the Inbox app (apps/inbox), for triage accounts with `"fetch": "imap"`.
 
 An app frame cannot speak IMAP or SMTP, so the app emits an event and the "Inbox — IMAP bridge" script
-trigger runs this file. Every request names its account (the key in Email Triage's config.json), and every
+trigger runs this file. Every request names its account (the key in triage's config.json), and every
 answer is an `InboxImapResult` event carrying the same request_id and account:
 
   InboxImapSyncRequested    {request_id, account?}     no account: every IMAP account
@@ -41,7 +41,7 @@ FOLDER_OPS = {"folders", "folder"}
 
 
 def slug_for(name):
-    """Email Triage's sidecar slug: lowercased and hyphenated, with only a "Gmail - " prefix dropped."""
+    """Triage's sidecar slug: lowercased and hyphenated, with only a "Gmail - " prefix dropped."""
     return re.sub(r"[^a-z0-9]+", "-", re.sub(r"^Gmail\s*-\s*", "", name, flags=re.I).strip().lower())
 
 

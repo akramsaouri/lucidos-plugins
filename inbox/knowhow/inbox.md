@@ -21,7 +21,7 @@ per-account Triage entry stay under each account. An account that fails to load 
 
 Folders and labels are browsed on demand outside the zones: see `apps/inbox/knowhow/folders.md`.
 
-Inbox is also triage's control panel (it replaced the old Email Triage app). A **Triage** entry heads each
+Inbox is also triage's control panel. A **Triage** entry heads each
 account's folders and an **All accounts** strip tops the sidebar; both open the Triage pane in the list's place:
 health and next run, pause/resume, Triage now, the rule chain editor, suggestions from runs and run history. It
 writes triage's `config.json` and emits `EmailTriageRequested`: see `apps/inbox/knowhow/triage.md`.

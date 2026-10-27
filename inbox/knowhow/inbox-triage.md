@@ -1,5 +1,5 @@
 ---
-name: Email Triage
+name: Inbox Triage
 description: Per-account email triage with configurable schedules, rules, and AI categorization
 ---
 
@@ -15,16 +15,10 @@ An account's `fetch` value picks how its mail is read, and never via `read_email
 
 ## Part of the Inbox plugin
 
-The triage engine ships with the **Inbox** plugin since Inbox 0.3.0: the intent, the on-demand
-trigger ("Inbox — triage on demand"), the IMAP helpers and this knowhow. Until then it was the
-separate Email Triage plugin, now deprecated. Inbox ships it at its own paths
-(`knowhow/inbox-triage.md`, `triggers/inbox-triage/intents/triage.md`, `scripts/inbox-triage/`), so
-removing Email Triage, which deletes every file it recorded under `email-triage`, never touches them.
-Runtime state still lives in `artifacts/email-triage/`. Inbox's setup points each account's cron
-trigger at these paths and then removes the old plugin.
-
-While Email Triage is still installed, its "Email Triage — on demand" trigger answers
-`EmailTriageRequested` too. Inbox's trigger then stands down, so a Triage now press runs once.
+The triage engine ships with the **Inbox** plugin: the intent
+(`triggers/inbox-triage/intents/triage.md`), the on-demand trigger ("Inbox — triage on demand"), the
+IMAP helpers (`scripts/inbox-triage/`) and this knowhow. Runtime state lives in
+`artifacts/email-triage/`.
 
 The controls live in the Inbox app (`apps/inbox`), which also shows the mail itself. Each account's
 sidebar group starts with a **Triage** entry (health and next run, pause/resume, Triage now, the rule
@@ -34,9 +28,8 @@ all, Triage all accounts). The invariants those controls keep on `config.json` a
 `apps/inbox/knowhow/triage.md`.
 
 To fire a run without the app, emit
-`lucidos events emit EmailTriageRequested --payload '{"summary": "Manual triage run for <name>", "account": "<config name>", "source": "email-triage-app"}'`.
-The on-demand trigger matches on the event type, and `source: "email-triage-app"` is what Inbox's
-"Triage now" sends, kept from the old Email Triage app so the two stay indistinguishable.
+`lucidos events emit EmailTriageRequested --payload '{"summary": "Manual triage run for <name>", "account": "<config name>", "source": "cli"}'`.
+The on-demand trigger matches on the event type alone; Inbox's "Triage now" sends `source: "inbox-app"`.
 
 ## Triage Flow
 

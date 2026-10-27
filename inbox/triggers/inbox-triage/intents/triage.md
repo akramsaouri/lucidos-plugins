@@ -1,5 +1,5 @@
 ---
-name: Email Triage
+name: Inbox Triage
 knowhow:
   - inbox-triage
 ---

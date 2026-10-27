@@ -1,7 +1,7 @@
 [
   {
     "id": "trg-personal",
-    "name": "Email Triage \u2014 Personal",
+    "name": "Inbox triage \u2014 Personal",
     "cron_expressions": [
       "0 0 7-21 * * *"
     ],
@@ -11,7 +11,7 @@
   },
   {
     "id": "trg-work",
-    "name": "Email Triage \u2014 Work",
+    "name": "Inbox triage \u2014 Work",
     "cron_expressions": [
       "0 0 7-21 * * *"
     ],
@@ -21,7 +21,7 @@
   },
   {
     "id": "trg-mailhost-work",
-    "name": "Email Triage \u2014 Mailhost Work",
+    "name": "Inbox triage \u2014 Mailhost Work",
     "cron_expressions": [
       "0 0 7-21 * * *"
     ],
