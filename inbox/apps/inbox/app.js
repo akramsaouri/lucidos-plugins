@@ -10,7 +10,7 @@
   const listEl = $('list'), readerEl = $('reader');
   const KEYS = 'j/k move (next/previous email while reading) · ⏎ open · e archive · s summarize · # delete · r reply · R reply all · a ask Lucidos · z undo · / filter';
   const CACHE = 'inbox-cache-v2', DRAFTS = 'inbox-drafts-v1', OUTBOX = 'inbox-outbox-v1';
-  const SETUP_PROMPT = 'Set up the Inbox app for me. Follow the setup steps in knowhow/inbox.md: check Email Triage has accounts, record a Gmail proxy for each Gmail account, check the IMAP bridge for each IMAP account, and ask me for my display name and reply voice.';
+  const SETUP_PROMPT = 'Set up the Inbox app for me. Run the setup of the inbox plugin: move me off the old Email Triage plugin if it is still installed, set up triage for each mailbox I want, record a Gmail proxy for each Gmail account, check the IMAP bridge for each IMAP account, and ask me for my display name and reply voice.';
   const REMOTE = /<img[^>]+src\s*=\s*["']?\s*https?:|url\(\s*["']?\s*https?:/i;
   const QUOTE_HTML = /class=["'][^"']*\b(gmail_quote|yahoo_quoted)\b|<blockquote[^>]*type=["']?cite/i;
   /* The mail document is third-party content designed for white paper, so it gets its own fixed palette. */
@@ -515,7 +515,7 @@
 
   function emptyHtml() {
     if (S.q) return '<div class="list-empty"><div class="title">Nothing matches.</div></div>';
-    if (!S.configured) return `<div class="list-empty">${ic('inbox')}<div class="title">No mailboxes yet</div><div class="muted">Inbox shows the accounts Email Triage watches, and none are set up.</div><button class="action-btn" data-act="setup">Set up Inbox</button></div>`;
+    if (!S.configured) return `<div class="list-empty">${ic('inbox')}<div class="title">No mailboxes yet</div><div class="muted">Setup connects your mailboxes and schedules triage for each.</div><button class="action-btn" data-act="setup">Set up Inbox</button></div>`;
     if (S.filter && S.errors[S.filter]) return `<div class="list-empty">${ic('inbox')}<div class="title">Couldn't load ${esc(A[S.filter].label)}</div><p class="error-text">${esc(S.errors[S.filter])}</p>${A[S.filter].kind === 'none' ? '' : A[S.filter].problem ? '<button class="action-btn action-btn-secondary" data-act="setup">Run Inbox setup</button>' : '<button class="action-btn action-btn-secondary" data-act="refresh">Try again</button>'}</div>`;
     const cleared = S.ctx && S.ctx.clearedToday;
     return `<div class="list-empty">${ic('inbox')}<div class="title">Nothing on hold</div>${cleared ? `<div class="muted">Triage cleared ${cleared} email${cleared === 1 ? '' : 's'} today</div>` : ''}</div>`;

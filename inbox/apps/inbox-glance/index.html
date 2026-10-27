@@ -212,7 +212,7 @@
     buildPills();
     if (state.accounts.length < 2 || !state.accounts.some(a => a.key === pick)) pick = 'all';
     const k = scope(), all = state.threads, loaded = !!state.at, errs = state.errors || {};
-    /* Email Triage watches no mailbox yet, so there is nothing to count. */
+    /* Triage watches no mailbox yet, so there is nothing to count. */
     const none = loaded && !state.accounts.length;
     const mine = k === 'all' ? all : all.filter(t => t.account === k);
     const kept = mine.filter(t => t.zone === 'kept'), fresh = mine.filter(t => t.zone === 'new');
@@ -222,7 +222,7 @@
     n.classList.toggle('idle', !loaded || none);
     const cap = !loaded ? (fatal ? 'Inbox unavailable' : 'Loading your inboxes…') : none ? 'No mailboxes yet'
       : k === 'all' ? 'need you' : 'need you in ' + labelOf(k);
-    const sub = !loaded ? '' : none ? 'Set up Email Triage first' : fresh.length ? fresh.length + ' not triaged yet' : 'all triaged';
+    const sub = !loaded ? '' : none ? 'Set up Inbox first' : fresh.length ? fresh.length + ' not triaged yet' : 'all triaged';
     $('cap').textContent = cap;
     $('sub').textContent = sub;
     $('hero').setAttribute('aria-label', (!loaded ? '' : none ? `${cap}. ${sub}. ` : `${kept.length} ${cap}, ${sub}. `) + 'Open the Inbox');

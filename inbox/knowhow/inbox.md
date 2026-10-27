@@ -1,13 +1,14 @@
 ---
 name: Inbox
-description: How the Inbox app (the inbox plugin) reads Email Triage's accounts and results, its settings file (Gmail proxy per account, display name, reply voice, AI provider), the IMAP bridge trigger and its event protocol, where Email Triage's controls live (the Triage pane), and what to check when an account shows a red dot or the bridge doesn't answer. Load when setting up Inbox, adding an account to it, or debugging it
+description: How the Inbox app (the inbox plugin) reads triage's accounts and results, its settings file (Gmail proxy per account, display name, reply voice, AI provider), the IMAP bridge trigger and its event protocol, where the triage controls live (the Triage pane), and what to check when an account shows a red dot or the bridge doesn't answer. Load when setting up Inbox, adding an account to it, or debugging it
 ---
 
 # Inbox
 
-Inbox is a mail client on top of Email Triage. It owns no accounts: everything it shows comes from Email
-Triage's config and the files its runs leave behind, and it never triages anything itself. Each account's
-inbox is split into two zones that never mix:
+Inbox is a mail client with triage built in. The plugin ships the triage engine (`knowhow/email-triage.md`, the
+intent at `triggers/email-triage/intents/triage.md`, the "Inbox — triage on demand" trigger) as well as the app.
+The app itself never triages: everything it shows comes from triage's config and the files its runs leave
+behind. Each account's inbox is split into two zones that never mix:
 
 - **Needs you**: mail that survived triage, with the reason it was kept under each row.
 - **Not triaged yet**: mail that arrived since the account's last run, or that triage never saw (read before an
@@ -15,17 +16,17 @@ inbox is split into two zones that never mix:
 
 Folders and labels are browsed on demand outside the zones: see `apps/inbox/knowhow/folders.md`.
 
-Inbox is also Email Triage's control panel (Email Triage 0.7.0 dropped its own app). A **Triage** entry heads each
+Inbox is also triage's control panel (it replaced the old Email Triage app). A **Triage** entry heads each
 account's folders and an **All accounts** strip tops the sidebar; both open the Triage pane in the list's place:
 health and next run, pause/resume, Triage now, the rule chain editor, suggestions from runs and run history. It
-writes Email Triage's `config.json` and emits `EmailTriageRequested`: see `apps/inbox/knowhow/triage.md`.
+writes triage's `config.json` and emits `EmailTriageRequested`: see `apps/inbox/knowhow/triage.md`.
 
 ## Accounts
 
-Inbox lists Email Triage's accounts (`artifacts/email-triage/config.json`) in config order.
+Inbox lists triage's accounts (`artifacts/email-triage/config.json`) in config order.
 
 - **Label**: `accounts["<name>"].label` from the settings below, else the config name with only a `Gmail - `
-  prefix dropped, the way Email Triage shows it.
+  prefix dropped, the way triage shows it.
 - **Colour**: one of five theme-mixed colours, by the account's position in config.json, so an account wears
   one colour in its inbox, its triage pane and the widget.
 - **How it is read** follows the block's `fetch`:
@@ -41,7 +42,7 @@ sidebar, with the reason as its tooltip and in its empty list. It never shows as
 
 ## Settings: `artifacts/inbox/settings.json`
 
-Everything is optional except a `proxy` for each Gmail account. Keys under `accounts` are Email Triage's
+Everything is optional except a `proxy` for each Gmail account. Keys under `accounts` are triage's
 account names, exactly as in its config.
 
 ```json
@@ -67,7 +68,7 @@ account names, exactly as in its config.
   404 (no credential for that provider). `openai`, `openrouter`, `xai` and `local` work too, and need `model`.
 - **`accounts["<name>"].proxy`**: the `data/config/apis.json` entry that carries that Gmail mailbox's OAuth
   token, base URL `https://www.googleapis.com`. Setup finds one in this order: an existing proxy whose
-  `/gmail/v1/users/me/profile` reads the account's `address`; a new proxy on the account's Email Triage
+  `/gmail/v1/users/me/profile` reads the account's `address`; a new proxy on the account's triage
   `oauth_provider` (or another connected Google provider whose token reads that address), which needs no new
   provider and no popup; and only then a new connection via `connect_oauth_account`. That one opens a popup
   for a Google OAuth client ID and secret, so explain it first: the user can paste the same client as their
@@ -78,9 +79,9 @@ Drafts, the outbox of replies inside their undo window, folded sections and a ca
 the device's own storage (`lucidos.storage.local`), not in this file. A reply still inside its undo window when
 the app closes comes back as a draft on the next open, never sent behind the user's back.
 
-## What Inbox reads from Email Triage
+## What Inbox reads from triage
 
-Per account, by Email Triage's slug (the name lowercased and hyphenated, only a `Gmail - ` prefix dropped):
+Per account, by triage's slug (the name lowercased and hyphenated, only a `Gmail - ` prefix dropped):
 
 - `config.json`: the account's `rules` (to say which rule would catch an untriaged mail), `paused` and
   `shared`. A shared account fetches a date window, so read state doesn't decide what triage sees.
@@ -88,7 +89,7 @@ Per account, by Email Triage's slug (the name lowercased and hyphenated, only a 
 - `notified-<slug>.json`: mail triage already pushed to the user.
 - `state-<slug>.json`: `last_run` and, for shared accounts, `processed`.
 - `kept-<slug>.json` (optional): `{"kept": [{"id", "thread_id", "reason", "action", "from"}]}`, why triage
-  left each mail in the inbox. Email Triage doesn't write this file. A workspace whose triage intent does gets a
+  left each mail in the inbox. The shipped triage intent doesn't write this file. A workspace whose triage intent does gets a
   reason under every kept row. Without it, rows fall back to the triage snapshot's summary, or a generic reason.
 - `EmailTriageCompleted` events: the last run per account, and today's cleared count for the empty state.
 - Each account's cron trigger, matched by name (`triggerFor` in `mail.js`): its next run and paused state show
@@ -112,12 +113,12 @@ answers with `InboxImapResult`, carrying the same `request_id` and `account`.
 | `InboxImapActionRequested` | `op: send`, `to`, `cc`, `subject`, `body`, `in_reply_to`, `references` | Send over SMTP, copy to Sent, flag the original `\Answered` |
 | `InboxImapActionRequested` | `op: folders` | List folders (read-only): `folders` in the answer |
 | `InboxImapActionRequested` | `op: folder`, `folder`, `limit` | Snapshot one folder (read-only): `file` in the answer |
-| `EmailTriageCompleted` | (from Email Triage) | Resync each IMAP account in `account_results`; silent for any other run |
+| `EmailTriageCompleted` | (from a triage run) | Resync each IMAP account in `account_results`; silent for any other run |
 
-- **Ids are Message-IDs**, as in Email Triage's IMAP accounts. A UID is resolved inside the session, right
+- **Ids are Message-IDs**, as in triage's IMAP accounts. A UID is resolved inside the session, right
   before a write, and never leaves it.
 - **Nothing is marked read by looking.** Folders open read-only and bodies are fetched with `BODY.PEEK[]`.
-- **Connection** comes from the account's `imap` block in Email Triage's config: `host`, `port`, `ssl`,
+- **Connection** comes from the account's `imap` block in triage's config: `host`, `port`, `ssl`,
   `username` (default: the address) and `credential_env` (the name of the env var holding the password).
   Archive, Trash and Sent are the folders the server flags with RFC 6154 special-use, else `archive_folder`,
   `trash_folder`, `sent_folder` from the block, else `Archive`, `Trash`, `Sent`.
@@ -138,7 +139,7 @@ answers with `InboxImapResult`, carrying the same `request_id` and `account`.
 ## When something is wrong
 
 - **Red dot, "No Gmail proxy is recorded"**: add `accounts["<name>"].proxy` to the settings (run the plugin's
-  setup again, or see its step 2). Setup then wires only the accounts that lack one.
+  setup again, or see its step 6). Setup then wires only the accounts that lack one.
 - **"the … proxy reads x@…, not y@…"**: that proxy carries another mailbox's token. Point the account at the
   right entry. Never loosen the check.
 - **"the IMAP bridge did not answer"**: the "Inbox — IMAP bridge" trigger is missing or paused

@@ -1,4 +1,5 @@
-"""Inbox setup wires each Gmail account from Email Triage's OAuth before it ever asks for a Google client ID."""
+"""Inbox setup: triage first, then each Gmail account wired from its OAuth before it ever asks for a Google client
+ID, and a safe move off the old Email Triage plugin."""
 import os
 import re
 import tomllib
@@ -24,7 +25,8 @@ class SetupTest(unittest.TestCase):
         self.assertTrue(self.setup.strip())
 
     def test_it_reuses_a_proxy_then_the_oauth_provider_before_connecting(self):
-        for text in (self.setup, self.knowhow):
+        gmail = self.setup[self.setup.index("**Each Gmail account**"):]
+        for text in (gmail, self.knowhow):
             proxy = text.index("/gmail/v1/users/me/profile")
             reuse = text.index("oauth_provider")
             connect = text.index("connect_oauth_account")
@@ -46,6 +48,36 @@ class SetupTest(unittest.TestCase):
         gate = self.setup[:self.setup.index("---")]
         self.assertIn("not a fresh install", gate)
         self.assertIn("settings file is missing", gate)
+
+    def test_triage_comes_before_the_inbox_wiring(self):
+        order = ["## Moving from Email Triage", "**Connect the mailbox** if", "**Build a starting rule chain.**", "**Ask what happens to mail",
+                 "create the cron trigger", "**Each Gmail account**", "**Each IMAP account**", "display name",
+                 "**AI Suggest"]
+        at = [self.setup.index(o) for o in order]
+        self.assertEqual(at, sorted(at))
+
+    def test_the_safety_rules_hold(self):
+        self.assertIn("Never read a message with `read_email`", self.setup)
+        self.assertIn("Never create an on-demand trigger", self.setup)
+        self.assertIn("reuse it rather than adding another", self.setup)
+
+    def test_email_triage_is_updated_before_it_is_uninstalled(self):
+        move = self.setup[self.setup.index("**Installed below 0.8.0:**"):self.setup.index("**Check the engine resolves.**")]
+        self.assertIn("do NOT uninstall it yet", move)
+        self.assertLess(move.index("Update Email Triage to 0.8.0"), move.index("Uninstall Email Triage"))
+
+    def test_the_move_checks_the_crons_still_resolve(self):
+        check = self.setup[self.setup.index("**Check the engine resolves.**"):]
+        for path in ("knowhow/email-triage.md", "triggers/email-triage/intents/triage.md",
+                     "scripts/email-triage/imap_helper.py", "scripts/email-triage/snapshot_imap.py"):
+            self.assertIn(path, check)
+            self.assertTrue(os.path.exists(os.path.join(PLUGIN, path)), path)
+        self.assertIn("Exactly one trigger answers `EmailTriageRequested`", check)
+
+    def test_a_raised_setup_revision_says_why(self):
+        self.assertGreaterEqual(self.manifest["setup_revision"], 1)
+        self.assertLessEqual(len(self.manifest["setup_reason"]), 200)
+        self.assertIn("Email Triage is no longer needed", self.manifest["setup_reason"])
 
     def test_the_newest_update_note_is_this_minor_release(self):
         # A patch release that leaves setup alone adds no note (rewording setup would ask for a re-run), but a

@@ -309,7 +309,7 @@
   }
 
   /* ---------- Triage now ----------
-   * An iframe can't read a mailbox, so it asks: EmailTriageRequested, one per account, and the "Email Triage — on
+   * An iframe can't read a mailbox, so it asks: EmailTriageRequested, one per account, and the "Inbox — triage on
    * demand" trigger runs the same intent the cron triggers run. The payload (and its `source: "email-triage-app"`) is
    * the one the old Email Triage app sent, so the on-demand trigger keeps matching it. */
   async function requestRun(accs) {

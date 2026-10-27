@@ -1,5 +1,7 @@
-name = "Email Triage — on demand"
-slug = "email-triage-on-demand"
+# The one on-demand triage trigger. Email Triage shipped it as `email-triage-on-demand` until 0.7.x; the slug is
+# new so the two plugins never record the same trigger.toml while a workspace moves from one to the other.
+name = "Inbox — triage on demand"
+slug = "inbox-triage-on-demand"
 app_id = "inbox"
 reasoning_effort = "low"
 

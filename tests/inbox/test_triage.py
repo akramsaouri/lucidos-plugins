@@ -1,4 +1,4 @@
-"""The Triage pane: Email Triage's controls, which live in the Inbox app since inbox 0.2.0 / email-triage 0.7.0."""
+"""The Triage pane: the triage controls, which live in the Inbox app since inbox 0.2.0."""
 import os
 import re
 import shutil
@@ -42,17 +42,15 @@ class WiringTest(unittest.TestCase):
         self.assertNotRegex(self.triage, r"\bA\[\w+\]\.trigger\b")
 
     def test_triage_now_sends_what_the_on_demand_trigger_answers(self):
-        trig = tomllib.loads(read(os.path.join(PLUGIN, "..", "email-triage", "triggers", "email-triage-on-demand", "trigger.toml")))
+        trig = tomllib.loads(read(os.path.join(PLUGIN, "triggers", "inbox-triage-on-demand", "trigger.toml")))
         self.assertEqual([o["event_type"] for o in trig["on"]], ["EmailTriageRequested"])
         self.assertIn("lucidos.events.emit('EmailTriageRequested'", self.triage)
         self.assertIn("source: 'email-triage-app'", self.triage)
 
-    def test_setup_asks_for_the_email_triage_that_dropped_its_app(self):
+    def test_nothing_says_inbox_needs_email_triage(self):
         inbox = tomllib.loads(read(os.path.join(PLUGIN, "manifest.toml")))
-        triage = tomllib.loads(read(os.path.join(PLUGIN, "..", "email-triage", "manifest.toml")))
-        self.assertGreaterEqual(tuple(int(p) for p in triage["version"].split(".")), (0, 7, 0))
-        self.assertIn("Email Triage", inbox["description"])
-        self.assertIn("installed at 0.7.0 or later", inbox["setup"])
+        self.assertNotIn("Email Triage", inbox["description"])
+        self.assertNotIn("installed at 0.7.0 or later", inbox["setup"])
 
 
 class PublicRepoTest(unittest.TestCase):
