@@ -1,18 +1,25 @@
 # Inbox
 
-**Start here**
+**Install Inbox, that's all.** Its setup connects your mailboxes, sets up triage for each, and opens the app.
 
-1. Install Inbox.
-2. Its setup walks you through Email Triage, the engine that sorts your mail, and offers to install it if needed.
-3. Open Inbox.
+Inbox is one calm inbox across all your mailboxes, with triage built in. Triage reads each mailbox on a
+schedule, applies your rules first, then AI, and sends one notification for what actually needs you. Inbox
+splits each account in two: *Needs you*, the mail that survived triage, with the reason it was kept, and *Not
+triaged yet*, the mail triage hasn't seen.
 
-Inbox is one calm inbox across all your mailboxes. Each account splits in two: *Needs you*, the mail that
-survived triage, with the reason it was kept, and *Not triaged yet*, the mail triage hasn't seen. Email Triage
-does the sorting (your rules first, then AI). Inbox is where you read and act on the result, and where you run
-triage itself.
+**Had the Email Triage plugin?** It's now part of Inbox. Update Inbox and its setup moves you over: it points
+your schedules at Inbox, then removes Email Triage. Accounts, rules, schedules and run history carry over
+untouched.
 
 ## What you get
 
+- **Your rules first**: a rule chain per account, checked top to bottom, first match wins. A rule matches the
+  sender, recipients, subject or body and does one thing: skip, mark read, move to Trash, add a reminder, notify
+  you, flag, or pass to AI triage.
+- **AI triage for the rest**: mail no rule catches is sorted into needs you, FYI or noise. Per account, you pick
+  what happens to FYI and noise: mark it read, move it to Trash, or leave it alone.
+- **One notification, never twice**: a single push per run, and a ledger so an unread message doesn't ping you
+  every hour. A run that finds nothing says nothing.
 - **Two zones per account, never mixed**, so a long list never hides what matters.
 - **Quick actions**: `e` archives, `#` deletes, `z` undoes, or swipe right and left on a touch screen. `?` lists
   every shortcut.
@@ -23,50 +30,56 @@ triage itself.
 - **Triage controls**: each account has a **Triage** entry with its health and next run, Pause / Resume,
   **Triage now**, the rule editor, suggestions from runs and run history. An **All accounts** strip pauses or
   runs every account at once.
-- **Careful reading**: remote images stay blocked until you allow them. Opening a message triage hasn't seen
-  keeps it unread, so the next run still sees it.
+- **Careful reading**: looking never marks mail read, in triage or in the app. Remote images stay blocked until
+  you allow them.
 - **An Inbox widget for Home** that counts what needs you, per account on bigger tiles.
 
 ## What it needs
 
 - Lucidos 0.48.0 or later.
-- The **Email Triage** plugin, 0.7.0 or later, set up with at least one account. Inbox reads its accounts, rules
-  and results, and never triages mail itself. Setup checks for it first and offers to set it up.
-- For each **Gmail** account, a Lucidos API proxy for that mailbox. Setup reuses Email Triage's Google sign-in
-  where it can, or connects the mailbox.
-- For each **password IMAP** account, the credential Email Triage already holds. Replies go out over SMTP with
-  the same username and password.
+- At least one mailbox: Gmail over its API, other mailboxes over IMAP with OAuth or a password. Setup connects
+  them. A password mailbox keeps its password as a workspace credential, never in a config file.
+- Push notifications switched on for your device.
 - An AI model provider for Suggest, Polish and Summarize: Anthropic or Vertex by default, or OpenAI, OpenRouter,
-  xAI or a local model. Everything else works without one.
+  xAI or a local model.
+- A Mac, only for the reminder rule action, which adds to Apple Reminders.
 
-**Not supported yet:** accounts Email Triage reads over OAuth IMAP, such as Outlook and Exchange. Their triage
-controls work, but their mail shows as a red dot with the reason, never as an empty inbox.
+Each scheduled triage run is a short AI run at low reasoning effort, even when there's no new mail.
+
+**Not supported yet:** reading OAuth IMAP accounts such as Outlook and Exchange in the app. They're triaged as
+usual and their controls work, but their mail shows as a red dot with the reason, never as an empty inbox.
 
 ## What setup asks for
 
-1. **Each Gmail account** gets a proxy, checked to read the right mailbox. Inbox repeats that check before every
-   list, so it can't archive or reply in the wrong mailbox.
-2. **Each IMAP account** gets a test sync through the bridge trigger. Setup asks about the SMTP host only when it
-   isn't the usual one.
-3. **Your name and reply voice**, a sentence or two on how replies should sound. A shared mailbox can have its
-   own From name, voice or signature.
-4. **An AI provider**, only if you have neither Anthropic nor Vertex.
+Setup is a conversation, one account at a time. You write no rules or cron expressions yourself.
+
+1. **The mailbox**, if it isn't connected yet.
+2. **What you want gone, silenced, or always shown.** Setup turns that into a first chain of 2 to 5 rules.
+3. **What happens to mail that needs nothing**: mark read (safe for work or shared mailboxes), Trash, or leave it.
+4. **A schedule.** Setup suggests hourly during waking hours plus an early-morning run, and you adjust it.
+5. **Your name and reply voice**, a sentence or two on how replies should sound, and an AI provider only if you
+   have neither Anthropic nor Vertex.
+
+Gmail accounts get a proxy checked to read the right mailbox, and Inbox repeats that check before every list, so
+it can't archive or reply in the wrong mailbox. Password IMAP accounts get a test sync.
 
 ## How it works
 
-An app can't speak IMAP or SMTP, so password IMAP accounts go through a script trigger the plugin ships,
-"Inbox — IMAP bridge". Only the Inbox app can make it change or send mail, so a crafted email can't trick a
-triage run into trashing or sending anything.
+Setup creates one cron trigger per account. The plugin ships the triage instructions, the IMAP helpers and two
+triggers: "Inbox — triage on demand", which **Triage now** fires, and "Inbox — IMAP bridge". An app can't speak
+IMAP or SMTP, so password IMAP accounts go through the bridge. Only the Inbox app can make it change or send
+mail, so a crafted email can't trick a triage run into trashing or sending anything.
 
-The triage controls edit Email Triage's `artifacts/email-triage/config.json` and keep every key they don't
-touch. Pause is a flag in that file, which every run checks first. **Triage now** asks Email Triage's on-demand
-trigger for a run.
+Accounts and rules live in `artifacts/email-triage/config.json`, settings in `artifacts/inbox/settings.json`,
+and IMAP snapshots in `artifacts/inbox/cache/`, which the workspace repo never commits. Pause is a flag in the
+config file, which every run checks first; mail that arrives while paused waits for the first run after you
+resume. Drafts stay on the device. A reply still in its undo window when you close the app comes back as a
+draft, never sent behind your back.
 
-Settings live in `artifacts/inbox/settings.json`, and IMAP snapshots in `artifacts/inbox/cache/`, which the
-workspace repo never commits. Drafts stay on the device. A reply still in its undo window when you close the app
-comes back as a draft, never sent behind your back.
+Uninstalling removes what the plugin shipped, but not the cron triggers setup created: delete those yourself.
 
 ## Try first
 
-Open an account's *Needs you* list and press `?`. Open a thread, press `r` and try **Suggest**. Then open the
-account's **Triage** entry and press **Triage now**, and pin the **Inbox** widget to Home.
+Open an account's **Triage** entry and press **Triage now**. The first run is quiet unless something needs you.
+Then open its *Needs you* list and press `?`, open a thread, press `r` and try **Suggest**, and pin the **Inbox**
+widget to Home.

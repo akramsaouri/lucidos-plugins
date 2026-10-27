@@ -1,109 +1,219 @@
 id = "inbox"
-version = "0.2.4"
+version = "0.3.0"
 name = "Inbox"
-description = "A smart inbox for all your mailboxes: what needs you sits apart from the rest, with the reason it was kept. It runs on the Email Triage plugin, and setup walks you through installing and setting that up."
+description = "A smart inbox for all your mailboxes, with triage built in: your rules first, then AI, sort each mailbox on a schedule, and what needs you sits apart from the rest with the reason it was kept. Install Inbox, that's all: setup connects your mailboxes and schedules triage."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
 engine = ">=0.48.0"
-categories = ["productivity", "communication"]
+categories = ["productivity", "communication", "automation"]
 icon = "media/icon.svg"
 screenshots = ["media/list.png", "media/reply.png", "media/triage.png"]
+setup_revision = 1
+setup_reason = "Inbox now includes the triage engine; Email Triage is no longer needed."
 
 setup = """
-**Already running Inbox?** If `artifacts/inbox/settings.json` exists and every Gmail account in
-Email Triage's config already has an `accounts["<name>"].proxy` in it, nothing below needs redoing:
-tell the user what changed in one line and stop. If only some Gmail accounts lack a proxy (an
-earlier setup stopped partway), this is not a fresh install: tell the user which accounts are
-already wired and that you're wiring only the rest, run step 2 for those accounts alone, and skip
-every other step whose answer is already in the settings. Do the same when the settings file is
-missing but a `data/config/apis.json` proxy already passes step 2's check for some accounts: record
-those and carry on from there.
+**Every run starts with "Moving from Email Triage" below**, even when nothing else needs doing: a workspace
+that used the Email Triage plugin has cron triggers to point at Inbox's engine before that plugin goes.
 
-- **Updating to 0.2.1:** setup reuses Email Triage's Gmail OAuth for each mailbox instead of asking
-  for a Google client ID.
-- **Updating to 0.2.0:** the Email Triage control panel moved into Inbox. An **All accounts** strip
-  at the top of the sidebar, and a **Triage** entry heading each account's folders, open a pane with
-  health and next run, Pause/Resume, Triage now, the rule chain editor, suggestions from runs and run
-  history. Email Triage 0.7.0 drops its own app to match, so check the newest `PluginInstalled` event
-  for `email-triage`: below 0.7.0, offer to update it too (nothing else changes; its accounts, rules,
-  schedules and run history carry over). Pause and Triage now work exactly as they did: pause is
-  `"paused": true` in the account's config block, plus a best-effort pause of the account's own cron
-  trigger, found by name; Triage now emits the same `EmailTriageRequested` the old app did. Nothing
-  else needs redoing. One cleanup worth offering on any update: if `lucidos triggers list` shows a bridge trigger the
-user created by hand (it runs `apps/inbox/scripts/imap_bridge.py` and isn't this plugin's
-"Inbox — IMAP bridge"), offer to delete it. The bridge never answers the same request twice, but a
-second trigger still runs on every request for nothing.
+**Already running Inbox?** After that step, if `artifacts/email-triage/config.json` has every account the user
+wants, each with its cron trigger (step 4), and `artifacts/inbox/settings.json` exists with an
+`accounts["<name>"].proxy` for every Gmail account, nothing else needs redoing: tell the user what changed in one
+line and stop. If only some of it is there (an earlier setup stopped partway), this is not a fresh install: tell
+the user what is already in place and that you're doing only the rest. Skip steps 1-5 for an account already in
+`config.json` with its cron, run step 6 only for Gmail accounts with no recorded proxy, and skip every other step
+whose answer is already in the settings. Do the same when the settings file is missing but a
+`data/config/apis.json` proxy already passes step 6's check for some accounts: record those and carry on from
+there. Never ask again for what `config.json` or the settings already answer.
+
+- **Updating to 0.3.0:** Inbox now ships the triage engine that used to be the Email Triage plugin, at its own
+  paths: the triage intent (`triggers/inbox-triage/intents/triage.md`), its knowhow (`knowhow/inbox-triage.md`),
+  the IMAP helpers (`scripts/inbox-triage/`) and the on-demand trigger behind Triage now, "Inbox — triage on
+  demand". Runtime state stays in `artifacts/email-triage/`, so there is no data to migrate. Email Triage itself
+  is deprecated: "Moving from Email Triage" below points the crons at Inbox's engine, then removes it.
+- **Updating to 0.2.1:** setup reuses the account's Gmail OAuth for each mailbox instead of asking for a Google
+  client ID.
+- **Updating to 0.2.0:** the triage control panel moved into Inbox. An **All accounts** strip at the top of the
+  sidebar, and a **Triage** entry heading each account's folders, open a pane with health and next run,
+  Pause/Resume, Triage now, the rule chain editor, suggestions from runs and run history. Pause is
+  `"paused": true` in the account's config block, plus a best-effort pause of the account's own cron trigger,
+  found by name; Triage now emits `EmailTriageRequested`. One cleanup worth offering on any update: if
+  `lucidos triggers list` shows a bridge trigger the user created by hand (it runs
+  `apps/inbox/scripts/imap_bridge.py` and isn't this plugin's "Inbox — IMAP bridge"), offer to delete it. The
+  bridge never answers the same request twice, but a second trigger still runs on every request for nothing.
 
 ---
 
-Inbox is a mail client on top of Email Triage, and where Email Triage's controls live. It owns no
-accounts of its own: it reads Email Triage's config and results, and needs one piece of wiring per account plus two answers from the
-user. **Read `knowhow/inbox.md` first.** It has the settings schema, how each account type is read,
-and the bridge protocol (`apps/inbox/knowhow/triage.md` covers the triage controls). Keep every key already in `artifacts/inbox/settings.json` when you write it.
+Inbox is a mail client with triage built in. Accounts, rules and schedules are workspace state, not plugin
+files: `artifacts/email-triage/config.json` holds the accounts and their rule chains, one cron trigger per
+account runs triage, and `artifacts/inbox/settings.json` holds Inbox's wiring and your name and voice. Walk the
+user through it conversationally. **Read `knowhow/inbox-triage.md` and `knowhow/inbox.md` first.** The first has
+the `config.json` schema, the rule-chain semantics, the notified-ledger dedup and the shared-account fetch state;
+the second has the settings schema, how each account type is read, and the bridge protocol
+(`apps/inbox/knowhow/triage.md` covers the triage controls). Keep every key already in either file when you write
+it.
 
-1. **Check Email Triage.** It must be installed at 0.7.0 or later (the newest `PluginInstalled`
-   event for `email-triage`, or the Plugins panel) with at least one account in
-   `artifacts/email-triage/config.json`. If it isn't, stop and offer to install or set it up
-   first: Inbox has nothing to show without it. If it is installed but older than 0.7.0, offer to
-   update it: from 0.7.0 its controls live here instead of in an app of its own.
+Two rules hold throughout:
 
-2. **Each Gmail account** (`"fetch": "gmail-api"`, or an older block with no `fetch` on a Gmail
-   address) is read and changed through an engine proxy in `data/config/apis.json` that carries
-   that mailbox's OAuth token: one proxy per mailbox.
-   Try these in order, and stop at the first that passes the check:
-   - **Reuse a proxy.** Email Triage's own Gmail access often has one already. Check it with
-     `lucidos proxy <name> /gmail/v1/users/me/profile`: its `emailAddress` must equal the account's
-     `address`. Never record a proxy that fails this check, since Inbox would then archive and reply
-     in the wrong mailbox. (The app repeats the check before every list.)
-   - **Reuse Email Triage's OAuth.** If the account's block has an `oauth_provider` that is a
-     connected OAuth account, add a proxy with base URL `https://www.googleapis.com` authenticating
-     with that provider (see `system-knowhow/building-an-auth-handshake`), then run the same check.
-     Failing that, try each other connected Google provider whose token reads this `address`. This
-     creates no provider and opens no popup.
-   - **Connect the mailbox**, only when nothing above matches. Name the provider `g<account slug>`
-     (e.g. `gprzone`). Before calling `connect_oauth_account`, tell the user in chat why (no existing
-     Google connection reads this address), and that: a popup will ask for a Google OAuth client ID
-     and secret; they can paste the same ones as their existing Google connection (Google Cloud
-     Console → APIs & Services → Credentials), since one OAuth client serves every mailbox; in the
-     browser they must sign in as this mailbox's address, not their default Google account; and if
-     the OAuth app is in Testing, that address must be a test user. Then add the proxy as above and
-     run the check.
+- **Never read a message with `read_email`, in setup or in triage: it marks the message read.** Triage reads over
+  the Gmail API or an IMAP peek, set by each account's `fetch` (step 1).
+- **Never create an on-demand trigger.** "Inbox — triage on demand" ships with this plugin and was registered at
+  install. It answers `EmailTriageRequested`, which Triage now emits, and runs the same intent the cron triggers
+  run.
+
+## Moving from Email Triage
+
+Until Inbox 0.3.0 the engine was the separate Email Triage plugin, at `knowhow/email-triage.md`,
+`triggers/email-triage/intents/triage.md` and `scripts/email-triage/`. Inbox ships its own copy at its own paths:
+`knowhow/inbox-triage.md`, `triggers/inbox-triage/intents/triage.md` and `scripts/inbox-triage/`. The two plugins
+share no file on purpose: uninstalling a plugin deletes every file it recorded, even one another plugin also
+records. So removing Email Triage, at any version, deletes only its own copy. What that can break is a per-account
+cron trigger that still names an `email-triage` path, so those move first. Accounts, rules, run history and the
+crons themselves are workspace state and survive every step.
+
+Check the newest `PluginInstalled` event for `email-triage`, and whether a `PluginUninstalled` follows it. Then, in
+this order:
+
+1. **If Email Triage is installed, at any version, tell the user before anything else**, in these words or close
+   to them: "Inbox now includes triage, so I'll remove the old Email Triage plugin. Your rules, accounts, history
+   and schedules stay." Skip this when it isn't installed.
+2. **Point each per-account cron at Inbox's engine.** In `lucidos triggers list`, find every cron trigger whose
+   intent names `triggers/email-triage/intents/triage.md`, `knowhow/email-triage.md`, a `scripts/email-triage/`
+   script, or `apps/email-triage/scripts/snapshot_imap.py` (the path before Email Triage 0.7.0). Update each with
+   `triggers(action="update")`, swapping only those paths for `triggers/inbox-triage/intents/triage.md`,
+   `knowhow/inbox-triage.md` and `scripts/inbox-triage/`, and keeping the rest of its text, its schedule, name and
+   settings as they are. Never recreate, pause or delete one. A cron that names the knowhow only by its title
+   ("the Email Triage knowhow") can stay: Inbox's knowhow keeps that title. Do this step even when Email Triage
+   is already gone, since its crons broke when it left and this repairs them.
+3. **Uninstall Email Triage**, if it is installed, at whatever version it is: no update first (the Plugins panel,
+   or `plugins(action="uninstall", id="email-triage")`). Its panel lists only `email-triage` paths, and its own
+   "Email Triage — on demand" trigger goes with it. If the panel still lists a cron under "Triggers that use
+   these files", step 2 missed it: cancel, fix that cron, and stage the uninstall again. If the user declines,
+   that's fine: triage already runs on Inbox's engine, and Inbox's on-demand trigger stands down while the old
+   one is live, so Triage now still runs once. Tell them they can remove it from Plugins any time.
+4. **Check the engine resolves**, below.
+
+**Check the engine resolves.**
+
+- These exist in `data/`: `knowhow/inbox-triage.md`, `triggers/inbox-triage/intents/triage.md`,
+  `scripts/inbox-triage/imap_helper.py`, `scripts/inbox-triage/snapshot_imap.py`.
+- In `lucidos triggers list`, no per-account cron names a file that is missing. Once Email Triage is gone, none
+  names an `email-triage` path at all.
+- Exactly one trigger answers `EmailTriageRequested`: "Inbox — triage on demand". A second one, "Email Triage —
+  on demand", means Email Triage is still installed, which is fine only if the user chose to keep it.
+- `artifacts/email-triage/config.json` is untouched. Don't rewrite it as part of the move.
+
+**If an Inbox engine file is missing** (deleted by hand, say), restore it from the workspace history:
+`git -C data log --format=%H --diff-filter=D -1 -- <path>` finds the commit that deleted it, and
+`git -C data checkout <that commit>^ -- <path>` brings it back. Then run the check again. The Inbox app shows a
+"Triage engine missing" banner until it passes.
+
+When the check passes, tell the user in one line that triage now runs from Inbox alone, and that their accounts,
+rules and schedules carried over. Then go on with "Already running Inbox?" at the top.
+
+## Triage, per account
+
+Per account the user wants triaged:
+
+1. **Connect the mailbox** if it isn't already. Most providers need OAuth now: look up the provider's IMAP/SMTP
+   hosts, then `configure_email`. Check the already-configured accounts first, and the accounts already in
+   `config.json`; don't redo one that's connected.
+
+   Set the account's fetch path: a Gmail account gets `"fetch": "gmail-api"` and its `"oauth_provider"`; an
+   Outlook/Exchange, Fastmail or self-hosted account gets `"fetch": "imap-peek"` with `"imap_host"` (and
+   `"oauth_provider"` when it uses OAuth), which snapshots the inbox with `BODY.PEEK[]`.
+
+   **A mailbox with no API and no OAuth** (only an IMAP host and a password) gets `"fetch": "imap"`. Connect it
+   in three steps:
+   1. `configure_email` with the provider's IMAP/SMTP hosts and the password. That stores the password as a
+      credential, injected as a `CRED_<NAME>` env var.
+   2. In the account's block in `artifacts/email-triage/config.json`, set `"fetch": "imap"` and add
+      `"imap": {"host", "port", "ssl", "username"}` (username defaults to the address).
+   3. Set `"credential_env"` in that block to the credential's env var *name*: list the names, never the values,
+      with `env | cut -d= -f1 | grep '^CRED_'`.
+
+   Check it with `python data/scripts/inbox-triage/imap_helper.py list --account "<name>"`, which is read-only.
+   The "IMAP Accounts" section of `knowhow/inbox-triage.md` has the full schema and commands.
+
+2. **Build a starting rule chain.** Don't ask them to write rules: ask what they want gone (`delete`), what they
+   want silenced but kept (`read`), and what should always escalate (`notify` / `flag`), then turn the answers
+   into rules. A first chain of 2-5 rules is plenty; the rule editor in Inbox's Triage pane is where they'll grow
+   it.
+
+3. **Ask what happens to mail the AI judges as needing nothing**: the account's `no_action_clear`, `read` (mark
+   read, keep), `delete` (Trash), or `keep`. Recommend `read` for a shared or work mailbox where deleting could
+   bury someone else's mail, `delete` for a personal one that gets a lot of noise.
+
+4. **Ask for a schedule and create the cron trigger.** Cron is workspace state, so it is deliberately not
+   shipped: you create it. First check `lucidos triggers list` for one that already runs triage for this
+   account, and reuse it rather than adding another. A good default is hourly during waking hours plus one
+   early-morning run; offer that, let them adjust. Each account gets its OWN trigger, named
+   `Email Triage — <Account>` (Inbox's pause finds it by that name), running the intent at
+   `triggers/inbox-triage/intents/triage.md` for that account.
+
+   **Pin the trigger's `reasoning_effort` to `low`.** The rule chain is first-match-wins and already written
+   down, so the only judgement left is a three-way classification against a rubric. The one exception is an
+   account whose `no_action_clear` is `delete`: use `medium` there, because a wrong call trashes mail rather than
+   merely marking it read.
+
+5. **Write the account into `artifacts/email-triage/config.json`**, keeping every other account and key. Inbox
+   reads that file, so the account shows up with its Triage entry as soon as it lands.
+
+## Inbox, per account
+
+6. **Each Gmail account** (`"fetch": "gmail-api"`, or an older block with no `fetch` on a Gmail address) is read
+   and changed through an engine proxy in `data/config/apis.json` that carries that mailbox's OAuth token: one
+   proxy per mailbox. Try these in order, and stop at the first that passes the check:
+   - **Reuse a proxy.** Triage's own Gmail access often has one already. Check it with
+     `lucidos proxy <name> /gmail/v1/users/me/profile`: its `emailAddress` must equal the account's `address`.
+     Never record a proxy that fails this check, since Inbox would then archive and reply in the wrong mailbox.
+     (The app repeats the check before every list.)
+   - **Reuse the account's OAuth.** If the account's block has an `oauth_provider` that is a connected OAuth
+     account, add a proxy with base URL `https://www.googleapis.com` authenticating with that provider (see
+     `system-knowhow/building-an-auth-handshake`), then run the same check. Failing that, try each other
+     connected Google provider whose token reads this `address`. This creates no provider and opens no popup.
+   - **Connect the mailbox**, only when nothing above matches. Name the provider `g<account slug>` (e.g.
+     `gprzone`). Before calling `connect_oauth_account`, tell the user in chat why (no existing Google
+     connection reads this address), and that: a popup will ask for a Google OAuth client ID and secret; they
+     can paste the same ones as their existing Google connection (Google Cloud Console → APIs & Services →
+     Credentials), since one OAuth client serves every mailbox; in the browser they must sign in as this
+     mailbox's address, not their default Google account; and if the OAuth app is in Testing, that address must
+     be a test user. Then add the proxy as above and run the check.
 
    Record the passing proxy's name as `accounts["<config account name>"].proxy` in
-   `artifacts/inbox/settings.json`. If the user dismisses the popup or a connection fails, still
-   write the settings for the accounts that worked (keeping existing keys), carry on with the other
-   steps, and tell the user which accounts are still unwired and that re-running Inbox's setup picks
-   up only those.
+   `artifacts/inbox/settings.json`. If the user dismisses the popup or a connection fails, still write the
+   settings for the accounts that worked (keeping existing keys), carry on with the other steps, and tell the
+   user which accounts are still unwired and that re-running Inbox's setup picks up only those.
 
-3. **Each IMAP account** (`"fetch": "imap"`) goes through the "Inbox — IMAP bridge" trigger this
-   plugin registered at install. Confirm it is live and unpaused in `lucidos triggers list`. Check
-   that the account's `imap` block names a `credential_env` that exists: list the names with
-   `env | cut -d= -f1 | grep '^CRED_'` and never print a value. Replies go out over SMTP with the
-   same username and password. The bridge assumes SMTP at `smtp.<domain>` when the IMAP host is
-   `imap.<domain>`, and the IMAP host itself otherwise, on port 465. If the provider differs, add
-   `smtp_host` (and `smtp_port`; 587 means STARTTLS) to that `imap` block. To prove it works, run
+7. **Each IMAP account** (`"fetch": "imap"`) goes through the "Inbox — IMAP bridge" trigger this plugin
+   registered at install. Confirm it is live and unpaused in `lucidos triggers list`. Check that the account's
+   `imap` block names a `credential_env` that exists: list the names with `env | cut -d= -f1 | grep '^CRED_'` and
+   never print a value. Replies go out over SMTP with the same username and password. The bridge assumes SMTP at
+   `smtp.<domain>` when the IMAP host is `imap.<domain>`, and the IMAP host itself otherwise, on port 465. If the
+   provider differs, add `smtp_host` (and `smtp_port`; 587 means STARTTLS) to that `imap` block. To prove it
+   works, run
    `lucidos events emit InboxImapSyncRequested --payload '{"summary": "Inbox setup check", "account": "<name>", "request_id": "setup-check-<name>"}'`
-   and look for an `InboxImapResult` with `ok: true` for that account. On `ok: false`, its
-   `error` says what to fix. (A sync is the only request an agent can make: writes and sends are
-   honoured only from the Inbox app, so don't test those from here.)
+   and look for an `InboxImapResult` with `ok: true` for that account. On `ok: false`, its `error` says what to
+   fix. (A sync is the only request an agent can make: writes and sends are honoured only from the Inbox app, so
+   don't test those from here.)
 
-4. **Accounts Inbox can't read yet** (`"fetch": "imap-peek"`, OAuth IMAP such as Outlook): tell
-   the user they show in the sidebar with the reason, and that nothing else is needed.
+8. **Accounts Inbox can't read yet** (`"fetch": "imap-peek"`, OAuth IMAP such as Outlook): tell the user they
+   are triaged as usual and show in the sidebar with the reason, and that nothing else is needed.
 
-5. **Ask for the user's display name and reply voice.** The name goes on outgoing mail and into
-   the AI prompts. The voice is a sentence or two on how replies should sound. Offer per-account
-   overrides (a different From name, voice or signature for a shared mailbox) but don't push them.
-   Write `display_name`, `voice` and any overrides to `artifacts/inbox/settings.json`.
+## Once for the workspace
 
-6. **AI Suggest, Polish and Summarize** go through one of the engine's built-in model proxies.
-   With no `ai` block, Inbox tries `anthropic`, then `vertex`, with a Claude model. If the
-   workspace has neither (`lucidos proxy anthropic /models` answers 404 for a provider with no
-   credential), set `ai.provider` (`openai`, `openrouter`, `xai` or `local`) and `ai.model` in the
-   settings file.
+9. **Ask for the user's display name and reply voice.** The name goes on outgoing mail and into the AI prompts.
+   The voice is a sentence or two on how replies should sound. Offer per-account overrides (a different From
+   name, voice or signature for a shared mailbox) but don't push them. Write `display_name`, `voice` and any
+   overrides to `artifacts/inbox/settings.json`.
 
-Finally, open the Inbox app. Tell the user that each account's mail is split into "Needs you" (it
-survived triage, with the reason it was kept) and "Not triaged yet", and that `?` lists the
-keyboard shortcuts. Point out the triage controls: the **Triage** strip at the top of the sidebar for
-every account, and a **Triage** entry at the head of each account's folders for its rules, pause and
-"Triage now". Then show the reusable "Inbox" widget (`inbox-glance`) in this thread, and offer
-to pin it to Home: it counts what needs them across every account.
+10. **AI Suggest, Polish and Summarize** go through one of the engine's built-in model proxies. With no `ai`
+    block, Inbox tries `anthropic`, then `vertex`, with a Claude model. If the workspace has neither
+    (`lucidos proxy anthropic /models` answers 404 for a provider with no credential), set `ai.provider`
+    (`openai`, `openrouter`, `xai` or `local`) and `ai.model` in the settings file.
+
+Finally, open the Inbox app. Tell the user that the first triage run is silent unless something actually needs
+them (that's the design, not a failure), and that each account's mail is split into "Needs you" (it survived
+triage, with the reason it was kept) and "Not triaged yet", and that `?` lists the keyboard shortcuts. Point out
+the triage controls: the **Triage** strip at the top of the sidebar for every account, and a **Triage** entry at
+the head of each account's folders for its rules, pause and "Triage now". Then show the reusable "Inbox" widget
+(`inbox-glance`) in this thread, and offer to pin it to Home: it counts what needs them across every account.
 """

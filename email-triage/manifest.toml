@@ -1,147 +1,27 @@
 id = "email-triage"
-version = "0.7.1"
+version = "0.8.0"
 name = "Email Triage"
-description = "The triage engine behind Inbox: install Inbox, not this on its own. It sorts each mailbox with your rules, then AI, so only mail that needs you gets through, on a schedule you ask Lucidos to set up after install."
+description = "Deprecated: now part of Inbox. Install Inbox instead; if you have this installed, update Inbox and its setup will migrate you."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/email-triage"
 engine = ">=0.47.1"
 categories = ["productivity", "communication", "automation"]
 icon = "media/icon.svg"
 
 setup = """
-**Already running Email Triage?** Nothing below needs redoing — your mailboxes,
-rules, and cron triggers all carry over untouched. Tell the user what changed in
-one line and stop. Do NOT re-run the steps below and do NOT create another
-on-demand trigger. Only continue if they ask you to add a new account.
+Email Triage is deprecated: since Inbox 0.3.0 the Inbox plugin ships the whole triage engine (the intent, the
+knowhow, the IMAP helpers and the on-demand trigger) at its own `inbox-triage` paths. This version of Email Triage
+still ships its own engine unchanged, so this update stopped nothing. Do NOT create triggers, edit
+`artifacts/email-triage/config.json` or connect mailboxes from here.
 
-- **Updating to 0.7.0:** the Email Triage app is gone; this update removes `apps/email-triage`.
-  Its controls moved into the **Inbox** plugin (0.2.0 or later): a Triage entry per account in
-  Inbox's sidebar, and an All accounts strip, with the same Pause/Resume, Triage now, rule editor,
-  suggestions and run history. Accounts, rules, cron triggers and run history carry over untouched,
-  and pausing still writes the same `"paused": true`. Check the newest `PluginInstalled` event for
-  `inbox`: if it isn't installed, or is older than 0.2.0, recommend installing or updating it, since
-  without it the rules and pauses are hand edits to `config.json`. The peek snapshot script moved
-  from `apps/email-triage/scripts/snapshot_imap.py` to `scripts/email-triage/snapshot_imap.py` (the
-  intent and knowhow already point there). If the user has their own trigger or note that runs the
-  old path, update it. The on-demand trigger now belongs to the Inbox app (`app_id = "inbox"`) and
-  still answers the same `EmailTriageRequested` event.
+Check the newest `PluginInstalled` event for `inbox` (and that no later `PluginUninstalled` follows it):
 
-- **Updating to 0.6.0:** a visual redesign of the Email Triage app: an account rail (a chip
-  row on phones) that scopes every view to all accounts or one mailbox, one colour per
-  account, status pills, the rule chain as an ordered list ending in its fall-through steps,
-  and account avatars in Activity. Plus one editor fix: saving an edited rule now keeps keys
-  the editor doesn't show (like `_comment`), and a rule whose action isn't in the list keeps
-  it instead of turning into `skip`. No config, knowhow or trigger changes, so there is
-  nothing to do: tell the user in one line and stop.
-- **Updating to 0.5.0:** accounts can now be plain IMAP mailboxes with no Gmail API and
-  no OAuth — just a host and a password — via `"fetch": "imap"` and the new helper at
-  `scripts/email-triage/imap_helper.py`. It reads with `BODY.PEEK[]` so nothing gets
-  marked read, keys everything on the Message-ID, and does the `read` / `delete` writes
-  itself. Nothing needs redoing for existing accounts: Gmail and `imap-peek` blocks work
-  exactly as before. Offer the IMAP path only when the user adds a mailbox that isn't
-  Gmail and has no OAuth; step 1 below says how to connect it. Also fixed: `imap-peek`
-  runs no longer crash on a config whose `accounts` is keyed by name, and pausing an
-  account no longer pauses another account's cron trigger when one name contains the other.
-- **Updating to 0.4.0:** triage no longer marks unread mail read just by looking at it.
-  Opening a message with `read_email` sets IMAP's `\\Seen` flag, so every run was
-  quietly clearing the unread state of whatever it inspected — on Gmail too, not only
-  Outlook. Gmail accounts now fetch bodies over the Gmail API (a pure read); plain-IMAP
-  accounts (Outlook/Exchange, Fastmail, self-hosted) use the new peek-based snapshot
-  script. On update, migrate each account block in `artifacts/email-triage/config.json`:
-  Gmail → `"fetch": "gmail-api"` plus `"oauth_provider"`; plain IMAP → `"fetch":
-  "imap-peek"`, `"imap_host"`, and `"oauth_provider"` (omit for password auth). Details in
-  the "Fetching Without Marking Read" section of `knowhow/email-triage.md`.
-- **Updating to 0.3.0:** each account can now be **paused** from the app — per account,
-  or all at once from the Accounts header. Pause writes `"paused": true` into that
-  account's block in `artifacts/email-triage/config.json`, and the triage intent now
-  checks that flag before fetching anything, so a paused account is skipped whether the
-  run came from its cron trigger or from "Triage now". The app also pauses that account's
-  own cron trigger as a second layer, best-effort — it matches the trigger by name, so if
-  yours are named something other than "Email Triage — <Account>" the config flag still
-  stops the run and the app will say the schedule could not be paused. Nothing about
-  existing accounts changes: no `paused` key means running, as before.
-- **Updating to 0.2.1:** the on-demand trigger now runs at `low` reasoning effort
-  (it fires while the user is watching the app, so latency is the feature), and
-  the triage knowhow gained two hazards worth knowing — a mixed-id-scheme bug
-  that breaks notification dedup when IMAP falls back to the provider API
-  mid-run, and a wrong-mailbox trap where an un-scoped API call silently reads
-  the default account's inbox. Both are in `knowhow/email-triage.md`. If the
-  user already has cron triggers per account, offer to pin those too: `low` for
-  most, `medium` for any account whose `no_action_clear` is `delete`, since a
-  wrong call there trashes mail.
-- **Updating from 0.1.0:** you also gain a per-account "Triage now" button in the
-  app and the on-demand trigger it fires, auto-registered by this update.
-
----
-
-Email Triage needs one connected mailbox, one rule chain, and one schedule per
-account. None of that ships with the plugin — it's all workspace state. Walk the
-user through it conversationally.
-
-**Read `knowhow/email-triage.md` first.** It has the `config.json` schema, the
-rule-chain semantics, the notified-ledger dedup, and the shared-account fetch
-state. Everything below assumes you've read it.
-
-Then, per account the user wants triaged:
-
-1. **Connect the mailbox** if it isn't already. Most providers need OAuth now —
-   look up the provider's IMAP/SMTP hosts, then `configure_email`. Check the
-   already-configured accounts first; don't re-do one that's connected.
-
-   **Never let triage read message bodies with `read_email` — it marks them read.**
-   Set the account's fetch path: a Gmail account gets `"fetch": "gmail-api"` and its
-   `"oauth_provider"`; an Outlook/Exchange, Fastmail or self-hosted account gets
-   `"fetch": "imap-peek"` with `"imap_host"` (and `"oauth_provider"` when it uses
-   OAuth), which snapshots the inbox with `BODY.PEEK[]`.
-
-   **A mailbox with no API and no OAuth** (only an IMAP host and a password) gets
-   `"fetch": "imap"`. Connect it in three steps:
-   1. `configure_email` with the provider's IMAP/SMTP hosts and the password. That stores
-      the password as a credential, injected as a `CRED_<NAME>` env var.
-   2. In the account's block in `artifacts/email-triage/config.json`, set `"fetch": "imap"`
-      and add `"imap": {"host", "port", "ssl", "username"}` (username defaults to the address).
-   3. Set `"credential_env"` in that block to the credential's env var *name*: list the
-      names, never the values, with `env | cut -d= -f1 | grep '^CRED_'`.
-
-   Check it with `python data/scripts/email-triage/imap_helper.py list --account "<name>"`,
-   which is read-only. The "IMAP Accounts" section of `knowhow/email-triage.md` has the
-   full schema and commands.
-
-2. **Build a starting rule chain.** Don't ask them to write rules — ask what
-   they want gone (`delete`), what they want silenced but kept (`read`), and
-   what should always escalate (`notify` / `flag`), then turn the answers into
-   rules. A first chain of 2–5 rules is plenty; the rule editor in Inbox's
-   Triage pane is where they'll grow it.
-
-3. **Ask what happens to mail the AI judges as needing nothing** — the account's
-   `no_action_clear`: `read` (mark read, keep), `delete` (Trash), or `keep`.
-   Recommend `read` for a shared or work mailbox where deleting could bury
-   someone else's mail, `delete` for a personal one that gets a lot of noise.
-
-4. **Ask for a schedule and create the cron trigger.** Cron is workspace state,
-   so it is deliberately not shipped — you create it. A good default is hourly
-   during waking hours plus one early-morning run; offer that, let them adjust.
-   Each account gets its OWN trigger running the intent at
-   `triggers/email-triage/intents/triage.md` for that account.
-
-   **Pin the trigger's `reasoning_effort` to `low`.** The rule chain is
-   first-match-wins and already written down, so the only judgement left is a
-   three-way classification against a rubric — deep reasoning mostly invents
-   exceptions to a decision the rules already made, and costs latency. The one
-   exception is an account whose `no_action_clear` is `delete`: use `medium`
-   there, because a wrong call trashes mail rather than merely marking it read.
-
-   The **on-demand** trigger is already live — it ships with the plugin and was
-   registered at install. It listens for `EmailTriageRequested` and is what the
-   per-account "Triage now" button in Inbox's Triage pane fires, running the same intent your
-   cron triggers run. Do NOT create a second one.
-
-Write the accounts into `artifacts/email-triage/config.json`. Inbox reads that
-file, so each account shows up there with its Triage entry as soon as it lands.
-
-Finally, tell them the first run is silent unless something actually needs them —
-that's the design, not a failure. The controls live in the **Inbox** plugin: if it
-isn't installed, recommend installing it (its own setup wires up reading the mail),
-then point them at each account's **Triage** entry in Inbox's sidebar to watch runs,
-edit rules and pause. Without Inbox, triage still runs on schedule; rule and pause
-changes are then edits to `config.json`.
+- **Inbox is 0.3.0 or later.** Tell the user: "Inbox now includes triage, so Email Triage can go. Your rules,
+  accounts, history and schedules stay." Then hand over to Inbox's setup, which points each per-account cron at
+  Inbox's engine before it uninstalls Email Triage: offer to open it (Plugins, then Inbox, then Setup). Don't
+  uninstall from here while any cron in `lucidos triggers list` still names an `email-triage` path such as
+  `triggers/email-triage/intents/triage.md`, because the uninstall deletes those files. If none does, you may
+  offer the uninstall here instead.
+- **Inbox is older than 0.3.0, or not installed.** Nothing changed: triage keeps running on this plugin. Offer to
+  update (or install) Inbox; its setup moves the user over, and their accounts, rules, run history and schedules
+  all carry over.
 """

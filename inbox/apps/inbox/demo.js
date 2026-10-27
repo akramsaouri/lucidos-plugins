@@ -135,7 +135,9 @@
 
   /* ---------- what Email Triage left behind ---------- */
   function files() {
-    const out = new Map([['artifacts/email-triage/config.json', JSON.stringify(CONFIG, null, 2)], ['artifacts/inbox/settings.json', JSON.stringify(SETTINGS)]]);
+    const out = new Map([['artifacts/email-triage/config.json', JSON.stringify(CONFIG, null, 2)], ['artifacts/inbox/settings.json', JSON.stringify(SETTINGS)],
+      /* The engine files the triage pane checks for, so the demo never shows the missing-engine banner. */
+      ['triggers/inbox-triage/intents/triage.md', ''], ['knowhow/inbox-triage.md', '']]);
     for (const a of ACCOUNTS) {
       const s = slug(a.name), kept = (THREADS[a.proxy] || []).filter(t => t.reason);
       out.set(`artifacts/email-triage/state-${s}.json`, JSON.stringify({ last_run: iso(a.lastRun) }));
@@ -163,7 +165,7 @@
   const triggers = () => ACCOUNTS.map(a => ({
     id: 'demo-trg-' + slug(a.name), name: 'Email Triage — ' + a.name, cron_expressions: ['0 0 7-21 * * *'], paused: !!a.paused,
     next_run: a.paused ? null : iso(Math.ceil(NOW / HOUR) * HOUR), last_run_status: 'ok',
-  })).concat([{ id: 'demo-trg-on-demand', name: 'Email Triage — on demand', cron_expressions: [], paused: false }]);
+  })).concat([{ id: 'demo-trg-on-demand', name: 'Inbox — triage on demand', slug: 'inbox-triage-on-demand', cron_expressions: [], paused: false }]);
 
   /* ---------- AI: a canned answer per prompt ---------- */
   function aiText(system, user) {

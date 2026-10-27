@@ -31,9 +31,10 @@
   },
   {
     "id": "trg-on-demand",
-    "name": "Email Triage \u2014 on demand",
+    "name": "Inbox \u2014 triage on demand",
     "cron_expressions": [],
-    "paused": false
+    "paused": false,
+    "slug": "inbox-triage-on-demand"
   },
   {
     "id": "trg-bridge",

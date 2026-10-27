@@ -8,7 +8,7 @@ the same session, just before a write.
 
 Connection settings come from the account's block in Email Triage's
 data/artifacts/email-triage/config.json, the same `"fetch": "imap"` schema its
-own scripts/email-triage/imap_helper.py reads:
+own scripts/inbox-triage/imap_helper.py reads:
 
   "imap": {"host", "port", "ssl", "username", "credential_env", "mailbox",
            "trash_folder", "archive_folder", "sent_folder", "smtp_host", "smtp_port"}
