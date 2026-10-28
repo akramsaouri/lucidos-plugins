@@ -1,5 +1,5 @@
 id = "pulls"
-version = "0.2.1"
+version = "0.2.2"
 name = "Pulls"
 description = "Every pull request that's on you, in one place: what's blocking your own PRs (conflicts, comments, red CI, re-requests) and what's waiting for your review, with a read-only multi-agent review already prepped for each PR you're asked to review. Buttons resolve conflicts, ask a coding agent about a PR, quiz you on it and open it in your browser, and merged PRs you reviewed become recall cards. Setup asks for your GitHub login and the repos to watch, and offers the cron schedules for the PR watch and the status, queue and recall sweeps on your own cadence. Includes the Pulls Home widget."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/pulls"
