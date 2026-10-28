@@ -4854,13 +4854,15 @@ function ageHtml(ms, verb) {
  * never instead of it: this board is one author on nearly every row, so the
  * face is a constant and the text is what actually distinguishes the rows. */
 function rowSubHtml(row) {
-  /* `owner/repo` is provenance for the ALL view, where three orgs interleave and
-   * the row has no other way to say where it came from. On a single-workspace
-   * tab the header has already named the org, so printing the identical
-   * `acme-corp/storefront` on all six rows adds a column of noise to the one line
-   * that also carries the diff and who is holding it. */
+  /* The repo is always named: a row with no repo name was a gap, not noise.
+   * The ALL view prints `owner/repo`, since orgs interleave there; a
+   * single-workspace tab prints the bare repo name, because the header already
+   * names the org. App-tagged rows skip it: the tag already says it. */
   const bits = [];
-  if (view.ws === 'all' && !isAppTagged(workspaceOf(row))) bits.push(`<span class="sub-repo">${esc(row.repo)}</span>`);
+  if (!isAppTagged(workspaceOf(row))) {
+    const label = view.ws === 'all' ? row.repo : shortRepo(row.repo);
+    if (label) bits.push(`<span class="sub-repo">${esc(label)}</span>`);
+  }
   if (row.diff) {
     bits.push(`<span class="sub-diff"><span class="add">+${esc(row.diff.add)}</span>
       <span class="del">−${esc(row.diff.del)}</span></span>`);
