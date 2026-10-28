@@ -1,5 +1,5 @@
 # The lanes-driven pass on my own PRs. own_prep.py emits OwnPrPrepRequested at the end of each status sweep.
-name = "Pulls — own PR prep"
+name = "Own PR prep"
 slug = "own-pr-prep"
 app_id = "review-cockpit"
 go_to_review = true

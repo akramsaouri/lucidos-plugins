@@ -340,19 +340,21 @@ def gh_env_for(entry):
 
 
 def shell_identity(entry):
-    """Shell lines that pin a coding agent's `gh` to the entry's login, for a prompt.
+    """Prompt lines that pin a coding agent's `gh` to the entry's login.
 
-    The agent runs in its own session, so it gets the recipe, never the token.
+    No `$(...)`: an unattended, trigger-rooted session has every command with a
+    command substitution refused, so `GH_TOKEN=$(gh auth token ...)` can never
+    run there. And `export` may not persist between the agent's shell calls, so
+    each `gh` call carries the config dir as a prefix. The check makes a flipped
+    active-account pointer a stop, never a silent wrong identity.
     """
-    d = entry.get("gh_config_dir") or DEFAULT_GH_CONFIG_DIR
+    d = os.path.expanduser(entry.get("gh_config_dir") or DEFAULT_GH_CONFIG_DIR)
     login = entry["login"]
-    lines = [f"export GH_CONFIG_DIR={d}"]
-    if entry.get("credential"):
-        var = credential_env(entry["credential"])
-        lines.append(f'export GH_TOKEN="${{{var}:-$(gh auth token --hostname github.com --user {login})}}"')
-    else:
-        lines.append(f"export GH_TOKEN=$(gh auth token --hostname github.com --user {login})")
-    return "\n".join(lines)
+    return (f"Prefix EVERY gh call with GH_CONFIG_DIR={d} (an export may not persist between "
+            f"your shell calls), and check it once first:\n"
+            f"GH_CONFIG_DIR={d} gh api user --jq .login    # must print {login}\n"
+            f"If it prints anything else, stop and report \"identity unpinned\". "
+            f"Never run gh auth switch to fix it.")
 
 
 def registered_path(name):

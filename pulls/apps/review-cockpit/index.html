@@ -8191,9 +8191,9 @@ function prContextBlock(pr) {
         ? ` · ${pr.files_changed} files, +${pr.additions}/−${pr.deletions}` : ''),
     pr.author ? `Author: @${pr.author}` : '',
     `Registered repo: ${folder}`,
-    gh ? `GitHub identity: ${ghLogin(pr) || 'the configured login'} — export GH_CONFIG_DIR=${gh} `
-      + `GH_TOKEN=$(gh auth token --hostname github.com --user ${ghLogin(pr)}) `
-      + `(the ambient default may not see this owner)` : '',
+    gh ? `GitHub identity: ${ghLogin(pr) || 'the configured login'}. Prefix every gh call with `
+      + `GH_CONFIG_DIR=${gh} and check \`gh api user --jq .login\` prints that login first `
+      + `(the ambient default may not see this owner; never gh auth switch)` : '',
   ].filter(Boolean).join('\n');
 }
 

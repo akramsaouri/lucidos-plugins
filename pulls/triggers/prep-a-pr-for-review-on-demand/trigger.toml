@@ -1,5 +1,5 @@
 # The Prep / Re-prep button in Pulls: validates the click and emits the real ReviewPrepRequested.
-name = "Pulls — prep a PR on demand"
+name = "Prep a PR for review on demand"
 slug = "prep-a-pr-for-review-on-demand"
 app_id = "review-cockpit"
 

@@ -1,6 +1,6 @@
 # Recall cards for a PR I reviewed, once it merges. PrRecallRequested comes from
 # pr-recall-merge-watch/scripts/detect.py, on the cron setup offers.
-name = "Pulls — PR recall cards on merge"
+name = "PR recall - cards on merge"
 slug = "pr-recall-cards-on-merge"
 app_id = "review-cockpit"
 go_to_review = true

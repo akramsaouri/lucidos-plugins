@@ -1,6 +1,6 @@
 # After a resolver force-pushes, any other checkout of that branch points at commits that no longer exist.
 # This checks for one and tells Pulls whether a reset is lossless.
-name = "Pulls — check stranded worktree after rebase"
+name = "Check stranded worktree after rebase"
 slug = "check-stranded-worktree-after-rebase"
 app_id = "review-cockpit"
 

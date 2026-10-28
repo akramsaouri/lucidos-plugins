@@ -344,8 +344,9 @@ Your session worktree is a clone of `{repo_full}`. Detach at the PR head rather 
 checking the branch out — the branch may be checked out elsewhere, and detaching works
 either way:
 
-```
 {pulls_config.shell_identity(cfg)}
+
+```
 git fetch origin refs/pull/{pr}/head {base}
 git checkout --detach {sha7}
 git rev-parse HEAD          # confirm you are at {sha7}

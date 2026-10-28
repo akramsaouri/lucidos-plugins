@@ -1,5 +1,5 @@
 # Grades the quiz answers or teach-back I submit from a PR's Check panel in Pulls.
-name = "Pulls — PR check, grade answers"
+name = "PR check - grade answers"
 slug = "pr-check-grade-answers"
 app_id = "review-cockpit"
 go_to_review = true

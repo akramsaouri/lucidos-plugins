@@ -1,6 +1,6 @@
 # Resolve conflicts in Pulls, and auto_conflicts.py for repos that opt in: a coding agent rebases (or merges)
 # the base into the PR and pushes. run.py --prepare validates and dedups; this intent thread spawns the agent.
-name = "Pulls — resolve PR conflicts"
+name = "Resolve PR conflicts on demand"
 slug = "resolve-pr-conflicts-on-demand"
 app_id = "review-cockpit"
 side_effect_grant = ["cloud_cli"]

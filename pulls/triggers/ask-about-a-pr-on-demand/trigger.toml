@@ -1,7 +1,7 @@
 # The Ask / Discuss buttons in Pulls. The app composes the prompt; run.py --prepare validates it and resolves
 # the repo from the Pulls config, and this intent thread spawns the coding agent (a script trigger has no
 # thread of its own, so it can't).
-name = "Pulls — ask about a PR"
+name = "Ask about a PR on demand"
 slug = "ask-about-a-pr-on-demand"
 app_id = "review-cockpit"
 

@@ -1,5 +1,5 @@
 # Opens a drill session from a PR's Check panel in Pulls: one question at a time, answered in chat.
-name = "Pulls — PR check, drill"
+name = "PR check - drill"
 slug = "pr-check-socratic-drill"
 app_id = "review-cockpit"
 go_to_review = true

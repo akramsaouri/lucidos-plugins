@@ -1,7 +1,7 @@
 # The deep review prep: a multi-agent, read-only review of a PR I've been asked to review, at one head.
 # ReviewPrepRequested comes from detect.py (on the cron setup offers) and from the Prep button, through
 # prep-a-pr-for-review-on-demand.
-name = "Pulls — review prep"
+name = "Review prep - PRs"
 slug = "review-prep-work-prs"
 app_id = "review-cockpit"
 go_to_review = true
