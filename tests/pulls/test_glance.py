@@ -1,4 +1,4 @@
-"""The Pulls widget: a Home widget for the Pulls app (review-cockpit), which this plugin doesn't ship."""
+"""The Pulls widget: a Home widget for the Pulls app (review-cockpit), which ships beside it."""
 import json
 import os
 import re
@@ -28,8 +28,8 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(self.plugin["source"], "https://github.com/akramsaouri/lucidos-plugins/tree/main/pulls")
         self.assertTrue(os.path.exists(os.path.join(PLUGIN, self.plugin["icon"])))
         self.assertTrue(os.path.exists(os.path.join(PLUGIN, "media", "README.md")))
-        # It says plainly that it needs the Pulls app.
-        self.assertIn("review-cockpit", self.plugin["description"])
+        # The Pulls app ships beside the widget now.
+        self.assertTrue(os.path.exists(os.path.join(PLUGIN, "apps", "review-cockpit", "index.html")))
         # 0.48.0 is the first release that installs a widget a plugin ships.
         floor = tuple(int(p) for p in re.fullmatch(r">=(\d+)\.(\d+)\.(\d+)", self.plugin["engine"]).groups())
         self.assertGreaterEqual(floor, (0, 48, 0))

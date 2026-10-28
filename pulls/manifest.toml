@@ -1,8 +1,138 @@
 id = "pulls"
-version = "0.1.1"
+version = "0.2.0"
 name = "Pulls"
-description = "A Home widget for the Pulls app: how many pull requests are on you right now, split into your own PRs blocked on you (comments, conflicts, failing CI, re-requests), others' PRs waiting on your review and your PRs ready to merge. Needs the Pulls app (review-cockpit) installed in the workspace, and its sweeps writing artifacts/review-cockpit/my-prs.json and review-queue.json. This plugin ships only the widget, not the Pulls app, so without Pulls and its data the widget shows nothing to count: it says the Pulls app isn't installed, or that Pulls has no data yet."
+description = "Every pull request that's on you, in one place: what's blocking your own PRs (conflicts, comments, red CI, re-requests) and what's waiting for your review, with a read-only multi-agent review already prepped for each PR you're asked to review. Buttons resolve conflicts, ask a coding agent about a PR, quiz you on it and open it in your browser, and merged PRs you reviewed become recall cards. Setup asks for your GitHub login and the repos to watch, and offers the cron schedules for the PR watch and the status, queue and recall sweeps on your own cadence. Includes the Pulls Home widget."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/pulls"
-engine = ">=0.48.0"
+engine = ">=0.52.1"
 categories = ["developer-tools", "productivity"]
 icon = "media/icon.svg"
+
+setup = """
+**Every run starts with "Check the engine resolves" below.**
+
+**Already running Pulls?** After that check, if `artifacts/review-cockpit/config.json` exists and
+`python3 data/scripts/pulls/pulls_config.py` passes, and the four schedules in step 3 exist (or the user
+declined them in an earlier run, per the `PluginSetupCompleted` record), nothing needs redoing: tell the user
+what changed in one line, run step 4's skill check and step 6's proof, and stop. If only some of it is there,
+say what is in place and do only the rest. Never ask again for what the config already answers, and keep every
+key already in it when you write it.
+
+- **Updating from 0.1.x:** the plugin used to ship only the Home widget. It now ships the Pulls app
+  (`review-cockpit`), its rails and their knowhow. If this workspace already had a hand-made Pulls app or
+  triggers of the same names, stop and tell the user before going on: the plugin's files replaced the app,
+  and two triggers answering one event would run every rail twice.
+
+---
+
+Pulls is the Pulls app plus the rails that feed it. Everything per-person lives in one file,
+`artifacts/review-cockpit/config.json`, which every script and the app read. **Read `knowhow/pulls-config.md`
+first**: it has the schema and the identity rule. `knowhow/review-prep-rail.md` and `knowhow/pr-button-rails.md`
+explain the rails if the user asks how something works. All Pulls state lives under
+`artifacts/review-cockpit/`.
+
+## Check the engine resolves
+
+- These exist in `data/`: `scripts/pulls/pulls_config.py`, `scripts/pulls/harness/review-prep.js`,
+  `triggers/review-prep-work-prs/scripts/detect.py`, `.../queue.py`, `.../mine.py`,
+  `triggers/pr-recall-merge-watch/scripts/detect.py`, `triggers/resolve-pr-conflicts/scripts/run.py`.
+- In `lucidos triggers list`, the eleven Pulls triggers that ship with this plugin are live, and exactly one
+  trigger answers each of `ReviewPrepRequested`, `OwnPrPrepRequested`, `ReviewPrepManualRequested`,
+  `PrStatusRefreshRequested`, `PrOpenRequested`, `PrConflictResolutionRequested`, `ReviewQuestionAsked`,
+  `PrConflictResolutionFinished`, `PrRecallRequested`, `PrCheckAnswersSubmitted`, `PrDrillRequested`.
+- No cron trigger names a Pulls script path that is missing. If one does, update its script path with
+  `triggers(action="update")`, keeping its schedule, name and settings. Never recreate or delete one.
+
+## 1. GitHub identity
+
+Ask for the user's GitHub login. If they use more than one account (a work org only a second login can see,
+say), ask for each and which owners each one sees: those become separate groups with their own `login` and,
+when the accounts live in different `gh` config dirs, `gh_config_dir`.
+
+The scripts read GitHub with the `gh` CLI, pinned to each login's token. Check, never printing a token:
+
+- `gh --version` works. If `gh` is missing, tell the user to install it (`brew install gh`) and stop here until
+  it is.
+- For each login, `GH_CONFIG_DIR=<dir> gh auth status` lists it. If it doesn't, ask the user to run
+  `gh auth login` in a terminal (with `GH_CONFIG_DIR=<dir>` for a second account), then check again. Never run
+  `gh auth switch`: it re-points every script that shares the dir.
+
+Then make sure a Lucidos GitHub credential reaches the API: `lucidos credentials list` for one covering
+`https://api.github.com`. If there is none, use `request_credential` for a token, named **`github`** (the
+scripts can only receive a credential under that name), with base URLs `https://api.github.com` and
+`https://github.com` (the second covers clones). When every group uses the credential's account, set
+`github.credential` to `github` in the config; otherwise leave it unset and the scripts use `gh` alone. If the
+user wants Merge inside Pulls, also make sure `data/config/apis.json` has a proxy for `https://api.github.com`
+authenticating with that credential (reuse one that exists), check it with `lucidos proxy <name> /user` (its
+`login` must be the user's), and record its name as `github.proxy`.
+
+## 2. Repos to watch
+
+Ask which repos to watch, as `owner/repo`. For each:
+
+- **Register the local clone** if it isn't already: `lucidos repositories list` shows what is registered. Ask
+  for the clone's path and register it with `manage_repositories`. Record the registered name as the repo's
+  `registered_repo` (when it differs from the GitHub name) and pick a short `slug`.
+- **Conflict style:** read the clone's tracked `.claude/settings.json`. If it denies `Bash(git push --force*)`
+  or `Bash(git push -f*)`, set `"conflict_style": "merge"`; otherwise leave the default, `rebase`.
+
+Group the repos by owner and login, one group per tab. Use the defaults (`discovery: "search"`, `prep: true`) and
+offer, briefly and only once, the opt-ins the schema describes: `any_repo` (show review requests from the owner's
+other repos, read-only), `auto_resolve_conflicts` per repo, `in_app_merge` (needs `github.proxy`; the merge is a
+squash), `shipped_lane`, `app_tagged`, teammates' logins for `team.reviewers`, and a browser app and profile
+for Open PR (default: the system browser). Then write `artifacts/review-cockpit/config.json` with
+`lucidos data write`, and run `python3 data/scripts/pulls/pulls_config.py`. It must exit 0 and print
+`token ok` for every login; fix what it names before going on.
+
+## 3. Offer the schedules
+
+A plugin can't ship a cron, so these are workspace triggers you create, each a script run, pointing at the
+shipped scripts. Offer them together with the cadence the rails were built around, and let the user change it
+(they're six-field crons, seconds first, in the user's timezone). For each, first look in
+`lucidos triggers list` for a cron already running that script and reuse it.
+
+| Name | Script | Suggested schedule |
+|---|---|---|
+| Review prep - PR watch | `triggers/review-prep-work-prs/scripts/detect.py` | hourly 05-21 on weekdays, 09-21 at weekends: `0 0 5-21 * * 1-5`, `0 0 9-21 * * 6,0` |
+| Review queue sweep | `triggers/review-prep-work-prs/scripts/queue.py` | `0 45 4 * * 1-5`, `0 0 6-21 * * 1-5`, `0 0 9-21 * * 6,0` |
+| My PR status sweep | `triggers/review-prep-work-prs/scripts/mine.py` | same as the queue sweep |
+| PR recall - merge watch | `triggers/pr-recall-merge-watch/scripts/detect.py` | `0 17 8-22 * * *` |
+
+Set `app_id: "review-cockpit"` on each. The PR watch is what queues review prep, each a ~40-minute multi-agent
+review, so say that a lighter cadence costs less. Without the status and queue sweeps Pulls only updates on its
+Refresh button. **Never create a trigger that answers one of the events the shipped triggers answer.**
+
+## 4. Claude Code skills and the review harness
+
+The rails run Claude Code skills from the pr-understanding set in the skillz marketplace: check that
+`~/.claude/skills/` has `pr-lanes`, `pr-intent`, `pr-story`, `pr-behaviour`, `pr-check` and `pr-recall` (with
+its `store.py`). Report any that are missing by name, and say which rails stay empty without them: no lanes
+panels or quizzes without pr-lanes and pr-check, no recall cards without pr-recall. Don't install them yourself.
+
+The deep review runs the `review-prep` workflow. Copy `data/scripts/pulls/harness/review-prep.js` to
+`~/.claude/workflows/review-prep.js`. If that file already exists, compare it with the shipped copy: when they
+match, say so and skip; when they differ, show the difference and ask before overwriting. Then check that
+`.lucidos/cc-allowed-tools` in this workspace has a `Workflow` line. Without it the review waits on a prompt
+nobody sees and degrades to a single-context pass. If it's missing, ask the user to allow it (Always allow on
+the first Workflow prompt, or you add the line once they agree).
+
+## 5. Command safety
+
+If Settings → Permissions → Command safety is on (ask the user if you can't tell), unattended rails can only
+run `gh` with the **Use cloud CLIs** grant. Ask the user to tick it in the Triggers panel on Review prep - PRs,
+Own PR prep, Resolve PR conflicts on demand, PR check - grade answers and PR check - drill, and **Call external
+APIs** too on PR check - grade answers. You can't set grants yourself. If command safety is off, say nothing
+about grants.
+
+## 6. Prove it
+
+Run `lucidos events emit PrStatusRefreshRequested --payload '{"summary": "Pulls setup check", "source": "setup"}'`,
+wait for `MyPrStatusSnapshotted` and `ReviewQueueSnapshotted` (a minute or two), then read
+`artifacts/review-cockpit/my-prs.json` and `review-queue.json`: both must exist with an empty
+`identities_failed` / `rails_failed`. A name in either is an identity or network problem: fix it with the user
+before finishing.
+
+Finally, open the Pulls app (`navigate_ui` to `review-cockpit`) and tell the user: their own PRs sit in Mine and
+others' in Reviews, one tab per group; findings appear on a review card once the PR watch has queued it and
+the ~40-minute review has run (Prep on a card queues one now); the setup notice in the app means the config is
+missing or unreadable. Offer to pin the Pulls widget (`pulls-glance`) to Home.
+"""
