@@ -1,0 +1,15 @@
+# The deep review prep: a multi-agent, read-only review of a PR I've been asked to review, at one head.
+# ReviewPrepRequested comes from detect.py (on the cron setup offers) and from the Prep button, through
+# prep-a-pr-for-review-on-demand.
+name = "Pulls — review prep"
+slug = "review-prep-work-prs"
+app_id = "review-cockpit"
+go_to_review = true
+side_effect_grant = ["cloud_cli"]
+
+[[on]]
+event_type = "ReviewPrepRequested"
+
+[run]
+type = "intent"
+intent = "When there's a pull request I'm on the hook for — someone asked me to review it or mentioned me, in a repo the Pulls config watches — have the findings ready before I open it. The triggering event names the repo, PR, commit and GitHub identity to use. Get me the lanes' quick read first, so those panels are there while the deep review is still running. Keep the refuted findings too, so I can see what was ruled out and why. Anything you'd hand to the author as their problem, check against the base branch first and mark it if it was already broken there, so nobody gets told they broke something that was already broken. Stay strictly read-only: never comment on the PR, never push, never touch anyone's code. When you're done, leave no change behind, so this never shows up asking me to review something you didn't make. Don't tell me when a prep finishes — I read the findings in the Pulls app. The only exception is something I'd have to act on right away: a build-breaker, or something that would embarrass us in production. Notify me for that and nothing else. See the Review Prep Rail knowhow for how."

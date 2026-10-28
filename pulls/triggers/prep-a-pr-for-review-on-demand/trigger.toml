@@ -1,0 +1,11 @@
+# The Prep / Re-prep button in Pulls: validates the click and emits the real ReviewPrepRequested.
+name = "Pulls — prep a PR on demand"
+slug = "prep-a-pr-for-review-on-demand"
+app_id = "review-cockpit"
+
+[[on]]
+event_type = "ReviewPrepManualRequested"
+
+[run]
+type = "script"
+path = "triggers/prep-a-pr-for-review-on-demand/scripts/run.py"
