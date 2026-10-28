@@ -1,0 +1,11 @@
+# The Refresh button in Pulls: runs the status sweep (mine.py) and the review queue sweep (queue.py) now.
+name = "Refresh PR status on demand"
+slug = "refresh-pr-status-on-demand"
+app_id = "review-cockpit"
+
+[[on]]
+event_type = "PrStatusRefreshRequested"
+
+[run]
+type = "script"
+path = "triggers/refresh-pr-status-on-demand/scripts/run.py"

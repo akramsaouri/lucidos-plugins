@@ -1,0 +1,13 @@
+# Recall cards for a PR I reviewed, once it merges. PrRecallRequested comes from
+# pr-recall-merge-watch/scripts/detect.py, on the cron setup offers.
+name = "PR recall - cards on merge"
+slug = "pr-recall-cards-on-merge"
+app_id = "review-cockpit"
+go_to_review = true
+
+[[on]]
+event_type = "PrRecallRequested"
+
+[run]
+type = "intent"
+intent = "When a PR I reviewed has merged, make the recall cards for it so I remember what it changed the next time someone touches that code. Zero cards is fine if nothing in it will matter later. Read-only: never comment on, review, label or push anything. Don't tell me when it's done. See the PR Recall Rail knowhow for how."

@@ -1,0 +1,13 @@
+# Resolve conflicts in Pulls, and auto_conflicts.py for repos that opt in: a coding agent rebases (or merges)
+# the base into the PR and pushes. run.py --prepare validates and dedups; this intent thread spawns the agent.
+name = "Resolve PR conflicts on demand"
+slug = "resolve-pr-conflicts-on-demand"
+app_id = "review-cockpit"
+side_effect_grant = ["cloud_cli"]
+
+[[on]]
+event_type = "PrConflictResolutionRequested"
+
+[run]
+type = "intent"
+intent = "When I press Resolve conflicts on a pull request in the Pulls app, get a coding agent integrating that branch with its base and pushing the result, in the style the Pulls config sets for the repo. If a resolver is already running on it, just say so and don't start a second one. Run triggers/resolve-pr-conflicts/scripts/run.py --prepare with this event, then spawn exactly what it says, as the PR Button Rails knowhow describes."

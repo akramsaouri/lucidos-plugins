@@ -1,0 +1,13 @@
+# Opens a drill session from a PR's Check panel in Pulls: one question at a time, answered in chat.
+name = "PR check - drill"
+slug = "pr-check-socratic-drill"
+app_id = "review-cockpit"
+go_to_review = true
+side_effect_grant = ["cloud_cli"]
+
+[[on]]
+event_type = "PrDrillRequested"
+
+[run]
+type = "intent"
+intent = "When I ask for a drill on a PR from the Pulls app, open a session where I get questioned on that PR at that commit, one question at a time, so I can answer in the chat. Read-only: never comment on, review, label or push anything. See the PR Check Rails knowhow for how."

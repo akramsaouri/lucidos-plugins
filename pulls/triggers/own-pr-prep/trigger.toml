@@ -1,0 +1,13 @@
+# The lanes-driven pass on my own PRs. own_prep.py emits OwnPrPrepRequested at the end of each status sweep.
+name = "Own PR prep"
+slug = "own-pr-prep"
+app_id = "review-cockpit"
+go_to_review = true
+side_effect_grant = ["cloud_cli"]
+
+[[on]]
+event_type = "OwnPrPrepRequested"
+
+[run]
+type = "intent"
+intent = "When one of my own pull requests has a new head, get me the quick read of it: which lanes it falls in, and then run exactly the skills those lanes recommend — nothing more — so their panels are waiting in the Pulls app. The triggering event tells you which repo, PR, commit and GitHub identity to use. It's my PR, so no deep review, never comment, never push, never touch the code. Don't notify me. See the Review Prep Rail knowhow, section Own PRs, for how."

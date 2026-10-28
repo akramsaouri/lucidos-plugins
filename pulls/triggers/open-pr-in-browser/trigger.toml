@@ -1,0 +1,12 @@
+# Open PR in Pulls: an iframe can't reach the OS, so the click emits and this opens the URL natively, in the
+# browser the Pulls config names (the default browser when it names none).
+name = "Open PR in browser"
+slug = "open-pr-in-browser"
+app_id = "review-cockpit"
+
+[[on]]
+event_type = "PrOpenRequested"
+
+[run]
+type = "script"
+path = "triggers/open-pr-in-browser/scripts/run.py"

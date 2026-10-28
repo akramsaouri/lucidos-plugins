@@ -1,0 +1,13 @@
+# The Ask / Discuss buttons in Pulls. The app composes the prompt; run.py --prepare validates it and resolves
+# the repo from the Pulls config, and this intent thread spawns the coding agent (a script trigger has no
+# thread of its own, so it can't).
+name = "Ask about a PR on demand"
+slug = "ask-about-a-pr-on-demand"
+app_id = "review-cockpit"
+
+[[on]]
+event_type = "ReviewQuestionAsked"
+
+[run]
+type = "intent"
+intent = "When I ask a question about a pull request from the Pulls app, get a coding agent into that repo to answer it, and make sure the tab I asked from can open the thread it starts. Run triggers/ask-about-a-pr-on-demand/scripts/run.py --prepare with this event, then spawn exactly what it says, as the PR Button Rails knowhow describes."

@@ -1,0 +1,13 @@
+# Grades the quiz answers or teach-back I submit from a PR's Check panel in Pulls.
+name = "PR check - grade answers"
+slug = "pr-check-grade-answers"
+app_id = "review-cockpit"
+go_to_review = true
+side_effect_grant = ["cloud_cli", "external_api"]
+
+[[on]]
+event_type = "PrCheckAnswersSubmitted"
+
+[run]
+type = "intent"
+intent = "When I submit my quiz answers or my teach-back for a PR from the Pulls app, grade them against the code at the commit I was quizzed on, and tell me if the PR has moved on since. Save the grade where the Pulls app can show it. Read-only: never comment on, review, label or push anything. Don't notify me — the app shows the result. See the PR Check Rails knowhow for how."

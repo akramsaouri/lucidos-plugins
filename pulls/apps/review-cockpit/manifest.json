@@ -1,0 +1,5 @@
+{
+  "description": "Every pull request that's on you, in one place. See what's blocking yours and what's waiting for your review.",
+  "name": "Pulls",
+  "icon": "assets/icon.svg"
+}
