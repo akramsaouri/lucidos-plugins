@@ -20,6 +20,8 @@ Each run reads the session with reader.py (one `gatekeepr --json`, a few millise
    the file is missing. A quiet scheduled run makes no second CLI call.
 4. Emits GatekeeprStatusChecked when the state changed (state, session, expiry or error), and always when
    answering a GatekeeprRefreshRequested, so a waiting Refresh hears back.
+5. Emits GatekeeprAlertSent for each alert whose notification was delivered, with its title and message, so a
+   workspace trigger can forward it to another channel. It rides the same dedup: once per alert per session.
 
 A check that can't read the session (no binary, unreadable logs, an unknown schemaVersion) sends the
 "problem" alert once per kind of problem, then stays quiet until the kind changes or a read succeeds. The
@@ -43,6 +45,7 @@ import reader as R  # noqa: E402
 APP_ID = "gatekeepr"
 EVENT = "GatekeeprStatusChecked"
 REQUEST_EVENT = "GatekeeprRefreshRequested"
+ALERT_EVENT = "GatekeeprAlertSent"
 EXPIRED_RECENT_SECONDS = 45 * 60
 MAX_THRESHOLD_MINUTES = 24 * 60
 LEDGER_SESSIONS = 5
@@ -127,8 +130,19 @@ def lucidos(*args):
     return proc.returncode == 0
 
 
-def notify(title, message):
-    return lucidos("notify", "--title", title, "--message", message, "--app-id", APP_ID)
+def notify(alert_id, title, message, status):
+    """Send one alert. Once the inbox notification is delivered, also emit GatekeeprAlertSent carrying the same
+    title and message, so a workspace trigger can forward the alert elsewhere (Telegram, Slack, a phone) with
+    its own credentials. The event is best effort: a failed emit never re-queues the alert."""
+    if not lucidos("notify", "--title", title, "--message", message, "--app-id", APP_ID):
+        return False
+    payload = {"summary": f"{title}. {message}", "alert_id": alert_id, "title": title, "message": message,
+               "state": status.get("state")}
+    for key, field in (("session_start", "sessionStart"), ("expires_at", "expiresAt"), ("time_left", "timeLeft")):
+        if field in status:
+            payload[key] = status[field]
+    lucidos("events", "emit", ALERT_EVENT, "--payload", json.dumps(payload))
+    return True
 
 
 def write_json(path, data):
@@ -207,7 +221,7 @@ def check(root):
         alert, settled = due(status, alerts, done)
         delivered = True
         if alert:
-            delivered = notify(*message_for(alert, status))
+            delivered = notify(alert["id"], *message_for(alert, status), status)
             if delivered:
                 sent.append(alert["id"])
         if delivered:  # an undelivered alert stays pending, so the next check tries again
@@ -224,7 +238,7 @@ def check(root):
         problem = None
     elif wrapper.get("error_kind") != problem:
         enabled = next((a["enabled"] for a in alerts if a["kind"] == "problem"), False)
-        if not enabled or notify(*problem_message(wrapper)):
+        if not enabled or notify("problem", *problem_message(wrapper), status):
             if enabled:
                 sent.append("problem")
             problem = wrapper.get("error_kind")
