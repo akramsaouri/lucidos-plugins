@@ -29,8 +29,8 @@ read-only multi-agent review has usually already run, so the findings are waitin
 
 - The `gh` CLI, logged in as each GitHub account you use.
 - Local clones of the repos you watch. Setup registers them as Lucidos repositories.
-- Claude Code with the pr-understanding skills from the skillz marketplace (pr-lanes, pr-intent, pr-story,
-  pr-behaviour, pr-check, pr-recall). Setup checks for them and says what's missing.
+- Claude Code with the pr-understanding skills from the skillz marketplace (pr-lanes, pr-summary,
+  pr-intent, pr-story, pr-behaviour, pr-check, pr-recall). Setup checks for them and says what's missing.
 - Lucidos 0.52.1 or later.
 
 Setup asks for your GitHub login and the repos to watch, writes them to one config file, and offers the

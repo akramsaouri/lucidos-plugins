@@ -1,5 +1,5 @@
 id = "pulls"
-version = "0.2.2"
+version = "0.3.0"
 name = "Pulls"
 description = "Every pull request that's on you, in one place: what's blocking your own PRs (conflicts, comments, red CI, re-requests) and what's waiting for your review, with a read-only multi-agent review already prepped for each PR you're asked to review. Buttons resolve conflicts, ask a coding agent about a PR, quiz you on it and open it in your browser, and merged PRs you reviewed become recall cards. Setup asks for your GitHub login and the repos to watch, and offers the cron schedules for the PR watch and the status, queue and recall sweeps on your own cadence. Includes the Pulls Home widget."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/pulls"
@@ -103,10 +103,11 @@ Refresh button. **Never create a trigger that answers one of the events the ship
 
 ## 4. Claude Code skills and the review harness
 
-The rails run Claude Code skills from the pr-understanding set in the skillz marketplace: check that
-`~/.claude/skills/` has `pr-lanes`, `pr-intent`, `pr-story`, `pr-behaviour`, `pr-check` and `pr-recall` (with
-its `store.py`). Report any that are missing by name, and say which rails stay empty without them: no lanes
-panels or quizzes without pr-lanes and pr-check, no recall cards without pr-recall. Don't install them yourself.
+The rails run Claude Code skills from the pr-understanding set in the skillz marketplace: check that Claude
+Code has `pr-lanes`, `pr-summary`, `pr-intent`, `pr-story`, `pr-behaviour`, `pr-check` and `pr-recall` (with its
+`store.py`), either in `~/.claude/skills/` or from an installed skillz plugin. Report any that are missing by
+name, and say which rails stay empty without them: no lanes panels or quizzes without pr-lanes and pr-check, no
+Summary on a PR's page without pr-summary, no recall cards without pr-recall. Don't install them yourself.
 
 The deep review runs the `review-prep` workflow. Copy `data/scripts/pulls/harness/review-prep.js` to
 `~/.claude/workflows/review-prep.js`. If that file already exists, compare it with the shipped copy: when they
