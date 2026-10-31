@@ -47,7 +47,7 @@
       justify-content: center; aspect-ratio: 1; padding: 0;
       border: 1px solid transparent;
     }
-    .head-actions .icon-btn:hover { border-color: var(--border-color); }
+    @media (hover: hover) { .head-actions .icon-btn:hover { border-color: var(--border-color); } }
     .head-actions .icon-btn svg { width: var(--icon-size-md); height: var(--icon-size-md); }
 
     /* ---- Filter bar: search + group filter sheet ---- */
@@ -86,7 +86,7 @@
       cursor: pointer; user-select: none; white-space: nowrap;
       transition: border-color var(--duration-fast), background var(--duration-fast);
     }
-    .filter-btn:hover { background: var(--bg-hover); }
+    @media (hover: hover) { .filter-btn:hover { background: var(--bg-hover); } }
     .filter-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--text-primary); }
     .filter-btn svg { width: 0.95rem; height: 0.95rem; flex-shrink: 0; }
     .filter-btn .fb-label { overflow: hidden; text-overflow: ellipsis; }
@@ -123,7 +123,7 @@
       background: none; color: var(--text-primary); font: inherit;
       font-size: var(--font-size-sm); text-align: left; cursor: pointer;
     }
-    .fs-row:hover { background: var(--bg-hover); }
+    @media (hover: hover) { .fs-row:hover { background: var(--bg-hover); } }
     .fs-row .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--dot, var(--text-muted)); flex-shrink: 0; }
     .fs-row .fs-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .fs-row .n { color: var(--text-muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
@@ -193,7 +193,7 @@
       cursor: pointer; user-select: none; width: 100%;
       background: none; border: none; text-align: left; font-family: inherit;
     }
-    .sec-head:hover { color: var(--text-secondary); }
+    @media (hover: hover) { .sec-head:hover { color: var(--text-secondary); } }
     .sec-head .caret {
       width: 0.7rem; height: 0.7rem; flex-shrink: 0;
       transition: transform var(--duration-fast); color: var(--text-muted);
@@ -225,7 +225,7 @@
       background: var(--bg-secondary); margin-bottom: var(--space-sm);
       cursor: pointer;
     }
-    .rhythm:hover { background: var(--bg-hover); }
+    @media (hover: hover) { .rhythm:hover { background: var(--bg-hover); } }
     .rhythm .r-name {
       font-size: var(--font-size-md); display: flex; align-items: center;
       gap: var(--space-sm); min-width: 0;
@@ -450,7 +450,7 @@
         <button class="segmented-btn" data-h="168">7d</button>
       </div>
       <div class="head-actions">
-        <button class="icon-btn" id="foldall" title="Collapse all sections" aria-label="Collapse all sections">
+        <button class="icon-btn" id="foldall" data-tooltip="Collapse all sections" aria-label="Collapse all sections">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 9l8-6 8 6M4 15l8 6 8-6"/>
           </svg>
@@ -1058,7 +1058,7 @@
       for (let h = 0; h < 24; h++) {
         const pct = buckets[h] ? Math.max(22, Math.round(buckets[h] / peak * 100)) : 8;
         const cls = 's-bar' + (buckets[h] ? ' on' : '') + (h === nowHour ? ' now' : '');
-        spark += '<span class="' + cls + '" style="height:' + pct + '%" title="' +
+        spark += '<span class="' + cls + '" style="height:' + pct + '%" data-tooltip="' +
           pad(h) + ':00 — ' + buckets[h] + ' fire' + (buckets[h] === 1 ? '' : 's') + '"></span>';
       }
 
@@ -1066,10 +1066,10 @@
       el.innerHTML =
         '<div class="r-name"><span class="lead"></span>' +
           '<span class="r-label">' + esc(r.trigger.name) + '</span>' +
-          (failed ? '<span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
+          (failed ? '<span class="warn" data-tooltip="Last run failed">' + warnSvg() + '</span>' : '') +
         '</div>' +
         '<div class="r-next">' + (next ? esc(fmtRel(next.ts - now)) : '—') + '</div>' +
-        '<div class="r-count" title="fires in this window">' + r.occ.length + '×</div>' +
+        '<div class="r-count" data-tooltip="fires in this window">' + r.occ.length + '×</div>' +
         '<div class="spark">' + spark + '</div>' +
         '<div class="spark-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>' +
         '<div class="r-cadence">' + esc(describeCrons(r.trigger._crons || [])) + '</div>' +
@@ -1115,10 +1115,10 @@
       if (hidden) {
         if (!badge) { badge = document.createElement('span'); badge.className = 'fb-count'; btn.appendChild(badge); }
         badge.textContent = hidden;
-        btn.title = hidden + (hidden === 1 ? ' group hidden' : ' groups hidden');
+        btn.dataset.tooltip = hidden + (hidden === 1 ? ' group hidden' : ' groups hidden');
       } else {
         if (badge) badge.remove();
-        btn.title = 'Filter by group';
+        btn.dataset.tooltip = 'Filter by group';
       }
 
       sheet.innerHTML = '';
@@ -1245,13 +1245,13 @@
         '<div class="rail"><div class="node"></div></div>' +
         '<div class="t-body">' +
           '<div class="t-name">' + esc(o.trigger.name) +
-            (failed ? ' <span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
+            (failed ? ' <span class="warn" data-tooltip="Last run failed">' + warnSvg() + '</span>' : '') +
           '</div>' +
           '<div class="t-meta">' +
             groupChipHtml(o.groupId) +
             '<span class="t-rel" data-ts="' + o.ts + '">' + fmtRel(o.ts - Date.now()) + '</span>' +
             ((o.trigger._crons && o.trigger._crons.length)
-              ? '<span title="' + esc(o.trigger._crons.map(c => c.raw).join(', ')) + '">' +
+              ? '<span data-tooltip="' + esc(o.trigger._crons.map(c => c.raw).join(', ')) + '">' +
                 esc(describeCrons(o.trigger._crons)) + '</span>'
               : '') +
           '</div>' +
@@ -1277,7 +1277,7 @@
         '<div class="t-body">' +
           '<div class="t-name"><span class="dots">' + dots + '</span>' +
             b.items.length + ' triggers' +
-            (anyFailed ? ' <span class="warn" title="A last run failed">' + warnSvg() + '</span>' : '') +
+            (anyFailed ? ' <span class="warn" data-tooltip="A last run failed">' + warnSvg() + '</span>' : '') +
           '</div>' +
           '<div class="t-meta">' +
             '<span class="t-rel" data-ts="' + b.ts + '">' + fmtRel(b.ts - Date.now()) + '</span>' +
@@ -1325,7 +1325,7 @@
         }
         row.innerHTML =
           '<div class="s-name"><span class="s-title">' + esc(tr.name) + '</span>' +
-            (failed ? ' <span class="warn" title="Last run failed">' + warnSvg() + '</span>' : '') +
+            (failed ? ' <span class="warn" data-tooltip="Last run failed">' + warnSvg() + '</span>' : '') +
             groupChipHtml(tr.group_id || null) +
             (subs ? '<div class="s-detail mono">on ' + esc(subs) + '</div>' : '') +
           '</div>' +
@@ -1419,7 +1419,7 @@
       for (const k in dayState) delete dayState[k];
       openStacks.clear(); openRhythms.clear();
       const btn = document.getElementById('foldall');
-      btn.title = anyOpen ? 'Expand all sections' : 'Collapse all sections';
+      btn.dataset.tooltip = anyOpen ? 'Expand all sections' : 'Collapse all sections';
       render();
     });
     let searchDeb = null;
