@@ -116,6 +116,10 @@ class NothingPersonalTest(unittest.TestCase):
                 self.assertEqual(self.banned_in(line), [], where)
                 self.assertNotRegex(line, self.MACHINE, where)
 
+    def test_no_patch_or_editor_leftovers_ship(self):
+        for path in plugin_files():
+            self.assertNotRegex(path, r"\.(orig|rej|bak)$|~$", os.path.relpath(path, PLUGIN))
+
     def test_no_avatar_or_findings_ship(self):
         for path in plugin_files():
             rel = os.path.relpath(path, PLUGIN)
@@ -219,6 +223,21 @@ class OpenPrTest(unittest.TestCase):
                          ["open", "-na", "Google Chrome", "--args", "--profile-directory=Profile 1", url])
 
 
+class KnowhowTest(unittest.TestCase):
+    def test_descriptions_fit_under_the_routing_clip(self):
+        root = os.path.join(PLUGIN, "knowhow")
+        for name in os.listdir(root):
+            m = re.search(r"(?m)^description: (.*)$", read(os.path.join(root, name)))
+            self.assertIsNotNone(m, name)
+            text = json.loads(m.group(1)) if m.group(1).startswith('"') else m.group(1)
+            self.assertLessEqual(len(text), 400, name)
+
+    def test_the_pr_summary_skill_is_part_of_the_pass(self):
+        rail = read(os.path.join(PLUGIN, "knowhow", "review-prep-rail.md"))
+        self.assertIn("| pr-summary |", rail)
+        self.assertIn("`pr-summary`", read(os.path.join(PLUGIN, "manifest.toml")))
+
+
 class AppTest(unittest.TestCase):
     def setUp(self):
         self.page = read(os.path.join(PLUGIN, "apps", "review-cockpit", "index.html"))
@@ -232,6 +251,17 @@ class AppTest(unittest.TestCase):
         self.assertRegex(self.page, r"LISTENED\.has\('PrCommentResolutionRequested'\)")
         for ev in ("PrConflictResolutionRequested", "ReviewPrepManualRequested"):
             self.assertIn(f"listens('{ev}')", self.page)
+
+    def test_the_summary_reads_pr_summary_at_the_live_head(self):
+        self.assertIn("summary: 'pr-skills/summary/v1',", self.page)
+        self.assertIn("summary: `${SKILL_DIR}/summary/${h.base}.json`,", self.page)
+        self.assertRegex(self.page, r"'pr-summary':\s*\{ kind: 'summary'")
+        # Review first, then the Summary, on both the findings page and the PR page.
+        self.assertIn("summaryHtml(sh) + orientHtml(sh)", self.page)
+        self.assertIn("summaryHtml(h) + orientHtml(h)", self.page)
+
+    def test_tooltips_use_data_tooltip_not_title(self):
+        self.assertNotRegex(self.page, r"\stitle=\"")
 
     def test_the_script_parses(self):
         js = "\n;\n".join(re.findall(r"<script(?![^>]*src)[^>]*>(.*?)</script>", self.page, re.S))

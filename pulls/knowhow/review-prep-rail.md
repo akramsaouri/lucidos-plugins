@@ -1,6 +1,6 @@
 ---
 name: Review Prep Rail (PRs I'm asked to review → findings waiting)
-description: How the Pulls plugin turns pull requests you're asked to review into findings that are already waiting in the Pulls app (review-cockpit) — the detector and its request gate, the per-fire checklist for the "Review prep - PRs" trigger, the lanes-driven pr-* pass (also run on your own PRs by "Own PR prep"), the branch-reset checkout and parking, the review-prep workflow harness and how to harvest it, the findings schema review-cockpit/findings/v2 (severity, pre_existing, refuted evidence), the status and review-queue sweeps, and the read-only invariants. Load when a ReviewPrepRequested or OwnPrPrepRequested trigger fires, when writing a findings artifact, when a prep produced nothing or the wrong diff, or when debugging the Pulls sweeps.
+description: "How Pulls turns PRs you're asked to review into findings waiting in the Pulls app (review-cockpit/findings/v2): the detector and request gate, the per-fire checklist, the lanes-driven pr-* pass (also run on your own PRs), the review-prep workflow harness and the sweeps. Load when ReviewPrepRequested or OwnPrPrepRequested fires, writing findings, or a prep produced nothing."
 ---
 
 # Review Prep Rail
@@ -100,13 +100,14 @@ does not re-derive it.**
 `lanes[].next` names, nothing more. The same pass serves both rails: before the deep review
 on `ReviewPrepRequested`, and as the whole job on `OwnPrPrepRequested`.
 
-The skills (pr-lanes, pr-intent, pr-story, pr-behaviour, pr-check, pr-recall) are Claude
+The skills (pr-lanes, pr-summary, pr-intent, pr-story, pr-behaviour, pr-check, pr-recall) are Claude
 Code skills from the pr-understanding set in the skillz marketplace; setup checks they are
 installed. Each one's fenced JSON block is saved beside the findings:
 
 | Skill | Runs when | Invocation | Schema | Artifact |
 |---|---|---|---|---|
 | pr-lanes | always, first | `/pr-lanes <owner>/<repo>#<n>` (includes pr-recall **match** hits in `recall[]`) | `pr-skills/lanes/v2` | `artifacts/review-cockpit/lanes/<slug>-<pr>-<sha7>.json` |
+| pr-summary | a lane has `next: "pr-summary"` (pr-lanes emits a `summary` lane first on every PR, trust-only included) | `/pr-summary <owner>/<repo>#<n>` | `pr-skills/summary/v1` | `.../summary/<slug>-<pr>-<sha7>.json` |
 | pr-intent | a lane has `next: "pr-intent"` | `/pr-intent <owner>/<repo>#<n>` | `pr-skills/intent/v1` | `.../intent/<slug>-<pr>-<sha7>.json` |
 | pr-story | a lane has `next: "pr-story"` | `/pr-story <owner>/<repo>#<n>` | `pr-skills/story/v3` (v2 still read) | `.../story/<slug>-<pr>-<sha7>.json` |
 | pr-behaviour | a lane has `next: "pr-behaviour"` | `/pr-behaviour <owner>/<repo>#<n>` | `pr-skills/behaviour/v1` | `.../behaviour/<slug>-<pr>-<sha7>.json` |
@@ -148,7 +149,7 @@ carries:
 - return every JSON block verbatim, lanes first, then one per skill in lane order.
 
 The trigger thread (not the child) writes each block with
-`lucidos data write artifacts/review-cockpit/<lanes|intent|story|behaviour|check>/<slug>-<pr>-<sha7>.json --from <tmp>`
+`lucidos data write artifacts/review-cockpit/<lanes|summary|intent|story|behaviour|check>/<slug>-<pr>-<sha7>.json --from <tmp>`
 after checking `schema` and `pr.head_sha[:7] == sha7`, then emits one event:
 
 ```bash

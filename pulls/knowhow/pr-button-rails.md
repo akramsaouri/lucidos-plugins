@@ -1,6 +1,6 @@
 ---
 name: PR button rails — the prepare/spawn split
-description: How the Pulls app (review-cockpit) buttons that start a coding agent (Resolve conflicts, Ask / Discuss about a PR) spawn one — run.py --prepare in an intent trigger, then run_coding_agent — and why they are intent triggers rather than script triggers; how the conflict resolver integrates (rebase vs merge per repo), dedups and checks for stranded worktrees; the Open PR, Refresh and Prep buttons; and in-app Merge, which calls GitHub through a proxy after a live pre-flight. Load when a Pulls button does nothing, when a rail reports "spawn failed ... no thread of its own", when editing resolve-pr-conflicts or ask-about-a-pr-on-demand scripts, when adding a button that starts an agent, or before turning on in_app_merge for a group.
+description: "How the Pulls buttons that start a coding agent (Resolve conflicts, Ask / Discuss) spawn one via run.py --prepare and run_coding_agent, why they are intent triggers, plus Open PR, Refresh, Prep and in-app Merge. Load when a Pulls button does nothing, a rail says \"spawn failed\", editing those scripts, adding an agent button, or before turning on in_app_merge."
 ---
 
 # PR button rails — the prepare/spawn split

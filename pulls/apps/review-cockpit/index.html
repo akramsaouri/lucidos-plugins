@@ -120,13 +120,13 @@
                  color: var(--text-secondary); cursor: pointer; text-align: left;
                  text-decoration: underline; text-decoration-color: var(--border-color);
                  text-underline-offset: 0.2em; border-radius: var(--radius-sm); }
-      .linkish:hover { color: var(--text-primary); text-decoration: underline;
-                       text-decoration-color: currentColor; }
+      @media (hover: hover) { .linkish:hover { color: var(--text-primary); text-decoration: underline;
+                       text-decoration-color: currentColor; } }
       /* The shared `button:hover` paints a --border-color fill at (0,1,1),
          which outranks the one-class resets on the app's text-shaped buttons.
          They are words, so hovering one changes its colour, never its floor. */
-      :is(.linkish, .row-title, .band-toggle, .sect-toggle, .crumb, .thr-head, .dupes-head,
-          .foot-head, .ws-tab):hover { background: none; }
+      @media (hover: hover) { :is(.linkish, .row-title, .band-toggle, .sect-toggle, .crumb, .thr-head, .dupes-head,
+          .foot-head, .ws-tab):hover { background: none; } }
       .linkish:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
 
       /* A small secondary button: the shared .action-btn-secondary look at
@@ -283,7 +283,8 @@
                      text-align: left; cursor: pointer; border-radius: var(--radius-sm); }
       .band-toggle:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       .band-title { color: var(--text-secondary); overflow-wrap: anywhere; }
-      .band-toggle:hover .band-title, .band-turn .band-title { color: var(--text-primary); }
+      .band-turn .band-title { color: var(--text-primary); }
+      @media (hover: hover) { .band-toggle:hover .band-title { color: var(--text-primary); } }
       .band-n { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-muted);
                 font-variant-numeric: tabular-nums; }
       .band-turn .band-n { color: var(--accent); }
@@ -315,7 +316,7 @@
                     min-height: 2rem; padding: 0.375rem var(--space-lg); margin: 0;
                     background: none; border: 0; font: inherit; color: inherit;
                     text-align: left; cursor: pointer; }
-      .sub-toggle:hover { background: none; }
+      @media (hover: hover) { .sub-toggle:hover { background: none; } }
       @media (hover: hover) { .sub-toggle:hover { color: var(--text-primary); } }
       .sub-toggle:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       @media (max-width: 40rem) { .sub-toggle { padding-left: var(--space-md); padding-right: var(--space-md); min-height: 2.75rem; } }
@@ -371,9 +372,9 @@
                    font-size: var(--font-size-md); font-weight: 500; line-height: 1.4;
                    color: var(--text-primary); text-align: left; text-decoration: none;
                    overflow-wrap: anywhere; cursor: pointer; }
-      .row-title:hover { text-decoration: none; }
-      .row-title:hover .row-name { text-decoration: underline; text-underline-offset: 0.2em;
-                                   text-decoration-color: var(--text-muted); }
+      @media (hover: hover) { .row-title:hover { text-decoration: none; } }
+      @media (hover: hover) { .row-title:hover .row-name { text-decoration: underline; text-underline-offset: 0.2em;
+                                   text-decoration-color: var(--text-muted); } }
       .row-title:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       .row-name { color: var(--text-primary); }
       .row-num { color: var(--text-muted); font-weight: 400; font-variant-numeric: tabular-nums;
@@ -526,7 +527,8 @@
                    color: var(--text-primary); cursor: pointer; text-align: left;
                    font: inherit; font-feature-settings: inherit;
                    font-size: var(--font-size-sm); line-height: 1.4; }
-      .menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); }
+      .menu-item:focus-visible { background: var(--bg-hover); }
+      @media (hover: hover) { .menu-item:hover { background: var(--bg-hover); } }
       .menu-item:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       /* Busy, not gone: it stays focusable so the arrow keys never skip a row. */
       .menu-item[aria-disabled="true"] { color: var(--text-muted); cursor: default; }
@@ -564,7 +566,7 @@
                   font: inherit; font-feature-settings: inherit; font-size: var(--font-size-xs);
                   color: var(--text-secondary); cursor: pointer; text-align: left;
                   border-radius: var(--radius-sm); }
-      .thr-head:hover { color: var(--text-primary); }
+      @media (hover: hover) { .thr-head:hover { color: var(--text-primary); } }
       .thr-head:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       .thr-n { font-weight: 600; color: var(--accent-yellow); font-variant-numeric: tabular-nums; }
       .thr-body { margin-top: var(--space-xs); }
@@ -598,8 +600,8 @@
                           min-height: 2.75rem; box-sizing: border-box;
                           background: color-mix(in srgb, var(--band-tone) 7%, var(--bg-secondary)); }
       :is(.board, .prpage) :is(.band-body, .band-clear) { border-top: 1px solid var(--border-color); }
-      :is(.board, .prpage) .band-title,
-      :is(.board, .prpage) .band-toggle:hover .band-title { color: var(--text-primary); }
+      :is(.board, .prpage) .band-title { color: var(--text-primary); }
+      @media (hover: hover) { :is(.board, .prpage) .band-toggle:hover .band-title { color: var(--text-primary); } }
       :is(.board, .prpage) .band-why { margin-left: var(--space-xs); font-size: var(--font-size-xs); }
       /* The whole bar folds the band, not just the words: the toggle's
          ::after covers the header, so the why-line is a target too. The
@@ -732,10 +734,12 @@
               display: inline-flex; align-items: center; justify-content: center;
               border: 1px solid var(--text-muted); border-radius: var(--radius-sm);
               background-color: transparent; color: transparent; cursor: pointer; }
-      .pick:hover { border-color: var(--text-secondary); background-color: transparent; }
+      @media (hover: hover) { .pick:hover { border-color: var(--text-secondary); background-color: transparent; } }
       .pick:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
-      .pick.on, .pick.on:hover { background-color: var(--accent); border-color: var(--accent);
+      .pick.on { background-color: var(--accent); border-color: var(--accent);
                                  color: var(--text-on-accent); }
+      @media (hover: hover) { .pick.on:hover { background-color: var(--accent); border-color: var(--accent);
+                                 color: var(--text-on-accent); } }
       .pick .btn-ico { width: 0.75rem; height: 0.75rem; }
 
       .row-drawer h4 { margin: var(--space-md) 0 var(--space-xs);
@@ -756,7 +760,7 @@
                     font: inherit; font-feature-settings: inherit; font-size: var(--font-size-xs);
                     color: var(--text-secondary); cursor: pointer; text-align: left;
                     border-radius: var(--radius-sm); }
-      .dupes-head:hover { color: var(--text-primary); }
+      @media (hover: hover) { .dupes-head:hover { color: var(--text-primary); } }
       .dupes-head:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       .dupes-body.hidden { display: none; }
       .dupe { display: flex; align-items: flex-start; gap: var(--space-md);
@@ -794,7 +798,7 @@
                    font: inherit; font-feature-settings: inherit; font-size: var(--font-size-sm);
                    font-weight: 600; color: var(--text-secondary); cursor: pointer; text-align: left;
                    border-radius: var(--radius-sm); }
-      .foot-head:hover { color: var(--text-primary); }
+      @media (hover: hover) { .foot-head:hover { color: var(--text-primary); } }
       .foot-head:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       .foot-body { padding-bottom: var(--space-md); }
       .foot-body.hidden { display: none; }
@@ -909,6 +913,20 @@
       /* "+2 more", and the plain sentence a lane says when it has nothing. */
       .lrow-more, .lrow-quiet { font-size: var(--font-size-xs); color: var(--text-muted); }
       .lrow-quiet { font-size: var(--font-size-sm); }
+
+      /* THE SUMMARY: the first thing on a PR's page. Prose at reading size,
+         the steps as a short numbered list, the files as ref pills with
+         their role muted beside them. Never folds, so no toggle. */
+      .summary-body { display: grid; gap: var(--space-md); padding: var(--space-md) var(--space-lg);
+                      border-top: 1px solid var(--border-color); overflow-wrap: anywhere; }
+      .summary-body > .chk-notice { margin: 0; }
+      .summary-what { margin: 0; font-size: var(--font-size-md); line-height: 1.55; color: var(--text-primary); }
+      .summary-how { margin: 0; padding-left: 1.25rem; display: grid; gap: var(--space-xs);
+                     font-size: var(--font-size-sm); line-height: 1.5; color: var(--text-primary); }
+      .summary-where { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-xs);
+                       font-size: var(--font-size-xs); line-height: 1.5; }
+      .summary-where a { text-decoration: none; }
+      @media (hover: hover) { .summary-where a:hover code.ref { text-decoration: underline; } }
 
       /* BEFORE → AFTER, the way a diff draws it: the old line on a faint
          wash of red behind a −, in secondary text (muted failed contrast on the wash); the new line on a
@@ -1129,7 +1147,7 @@
         background: color-mix(in srgb, var(--band-tone) 16%, transparent);
         color: color-mix(in srgb, var(--band-tone) 82%, var(--text-primary)); font-weight: 600; }
       .prpage .band-tone-muted .band-title { color: var(--text-secondary); }
-      .prpage .band-tone-muted .band-toggle:hover .band-title { color: var(--text-primary); }
+      @media (hover: hover) { .prpage .band-tone-muted .band-toggle:hover .band-title { color: var(--text-primary); } }
       .prpage .band-h .lbl { font-weight: 500; }
 
       /* The findings page's foot sections (Refuted, Run notes): quiet boxes
@@ -1173,7 +1191,7 @@
       @media (hover: hover) {
         .crumbs > button.crumb:first-child:hover { background: var(--bg-hover); border-color: var(--text-muted); }
       }
-      .crumb:hover { color: var(--text-primary); }
+      @media (hover: hover) { .crumb:hover { color: var(--text-primary); } }
       .crumb:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
       .crumb-here { color: var(--text-secondary); cursor: default; overflow-wrap: anywhere; }
       .crumb-sep { font-size: var(--font-size-sm); color: var(--text-muted); }
@@ -2234,7 +2252,7 @@ function strandHtml(s) {
       <strong>${name}</strong> is behind by ${s.behind} — every local commit is
       upstream, so a reset loses nothing.${note}
       <button type="button" class="btn-inline" data-strand-copy="${esc(s.command)}"
-        title="Copy the reset command">Copy reset command</button>
+        data-tooltip="Copy the reset command">Copy reset command</button>
     </span>`;
   }
   if (s.verdict === 'unique') {
@@ -4264,7 +4282,7 @@ function todayHtml() {
           ${freshnessHtml()}
           <button class="action-btn action-btn-secondary btn-ic refresh" id="refresh"
             ${refreshing ? 'disabled' : ''}
-            title="Re-read PR status from GitHub — conflicts, comments, CI, approvals. Does not re-run code review.">
+            data-tooltip="Re-read PR status from GitHub — conflicts, comments, CI, approvals. Does not re-run code review.">
             ${refreshing ? '<span class="spin"></span>Checking…' : `${oi('sync')}Refresh`}
           </button>
         </div>
@@ -4514,7 +4532,7 @@ function shippedBandHtml(rows) {
 function bandCountHtml(n, trusted) {
   if (!trusted) {
     return `<span class="band-n ctr band-n-unknown"
-      title="A source failed on the last sweep, so this count would be short. See the notice above.">—</span>`;
+      data-tooltip="A source failed on the last sweep, so this count would be short. See the notice above.">—</span>`;
   }
   /* Zero renders nothing rather than `0`. Only `Your turn` can reach this at
    * zero (the other bands don't render at all), and it already states its own
@@ -4658,7 +4676,7 @@ function threadsSignalHtml(p) {
  * it is the longest thing on the meta line and the least read, so it ends the
  * line and ellipsises; the full name is its tooltip. */
 function branchHtml(ref) {
-  return `<span class="sub-branch" title="${esc(ref)}">${oi('branch')}<code>${esc(ref)}</code></span>`;
+  return `<span class="sub-branch" data-tooltip="${esc(ref)}">${oi('branch')}<code>${esc(ref)}</code></span>`;
 }
 
 /* Brief flags as GitHub labels after the title, each in its own tone. */
@@ -4713,7 +4731,7 @@ function actionHtml(row) {
     if (row.kind === 'mine' && canResolve(p) && !p.cross_repo) {
       const merge = conflictStyle(p) === 'merge';
       return `<button type="button" class="${cls}" data-resolve="${esc(resolveKey(p))}"
-        title="${merge
+        data-tooltip="${merge
           ? `Spawn a coding agent that merges ${esc(p.base_ref)} into ${esc(p.head_ref)}, resolves the conflicts, verifies, and pushes.`
           : `Spawn a coding agent that rebases ${esc(p.head_ref)} onto ${esc(p.base_ref)}, resolves the conflicts, verifies, and force-pushes with lease.`}">${labelBody(row.action, a.label)}</button>`;
     }
@@ -4725,14 +4743,14 @@ function actionHtml(row) {
      * down in the drawer, where its cost is spelled out. */
     return `<button type="button" class="${cls}"
       data-comments="${esc(`${p.repo}#${p.number}`)}"
-      title="Read every open thread in full, then answer — or hand them to an agent from the row.">${labelBody(row.action, a.label)}</button>`;
+      data-tooltip="Read every open thread in full, then answer — or hand them to an agent from the row.">${labelBody(row.action, a.label)}</button>`;
   }
 
   if (row.action === 'review' || row.action === 'rereview') {
     if (row.entry) {
       return `<button type="button" class="${cls}" data-open="findings"
         data-key="${esc(row.entry.key)}"
-        title="Open the prepped findings for this head">${labelBody(row.action, a.label)}</button>`;
+        data-tooltip="Open the prepped findings for this head">${labelBody(row.action, a.label)}</button>`;
     }
     return ghBadge(row, cls, a.label, 'files', 'Read the diff on GitHub — the rail has not prepped this head');
   }
@@ -4746,7 +4764,7 @@ function actionHtml(row) {
      * the link to the PR on GitHub. */
     if (wsMeta(workspaceOf(p)).inAppMerge) {
       return `<button type="button" class="${cls}" data-merge="${esc(resolveKey(p))}"
-        title="Squash-merge into ${esc(p.base_ref || 'main')} from here. Checks GitHub first.">${labelBody(row.action, a.label)}</button>`;
+        data-tooltip="Squash-merge into ${esc(p.base_ref || 'main')} from here. Checks GitHub first.">${labelBody(row.action, a.label)}</button>`;
     }
     return ghBadge(row, cls, a.label, '', 'Green and mergeable — merge it on GitHub');
   }
@@ -4760,7 +4778,7 @@ function actionHtml(row) {
      * than the solid green: nobody signed off, and the button should look it. */
     if (wsMeta(workspaceOf(p)).inAppMerge) {
       return `<button type="button" class="${cls}" data-merge="${esc(resolveKey(p))}"
-        title="Nobody was asked to review. Squash-merge into ${esc(p.base_ref || 'main')} without review — checks GitHub first.">${labelBody(row.action, a.label)}</button>`;
+        data-tooltip="Nobody was asked to review. Squash-merge into ${esc(p.base_ref || 'main')} without review — checks GitHub first.">${labelBody(row.action, a.label)}</button>`;
     }
     return ghBadge(row, cls, a.label, '', 'Nobody was asked to review — merge it on GitHub without review');
   }
@@ -4782,7 +4800,7 @@ function ghBadge(row, cls, label, suffix, tip) {
   if (!row.url) return `<span class="${cls}">${labelBody(row.action, label)}</span>`;
   const href = suffix ? `${row.url}/${suffix}` : row.url;
   return `<a class="${cls}" href="${esc(href)}" target="${LINK_TARGET}" rel="noopener"
-    ${openAttrs(row.pr)} title="${esc(tip)}">${labelBody(row.action, label)}</a>`;
+    ${openAttrs(row.pr)} data-tooltip="${esc(tip)}">${labelBody(row.action, label)}</a>`;
 }
 
 /* No action to take is sometimes still worth a word, and only these earn one:
@@ -4823,14 +4841,14 @@ function prepChipHtml(p) {
   const body = p.key === 'ready'
     ? `${oi('checklist')}Issues<span class="ctr">${esc(p.n)}</span>` : esc(p.label);
   return `<span class="prep prep-${esc(p.key)}${p.live ? ' prep-live-dot' : ''}"${
-    p.say ? ` title="${esc(p.say)}"` : ''}>${body}</span>`;
+    p.say ? ` data-tooltip="${esc(p.say)}"` : ''}>${body}</span>`;
 }
 
 /* How long ago, on the meta line after a verb: "updated 3h ago". Past a week
  * it crosses over to an absolute date, because "43d" is a number you have to
  * do arithmetic on. Tabular figures, or it jitters as it ticks. */
 function ageHtml(ms, verb) {
-  if (!ms) return `<span class="sub-age" title="No timestamp on this row">${esc(verb)} —</span>`;
+  if (!ms) return `<span class="sub-age" data-tooltip="No timestamp on this row">${esc(verb)} —</span>`;
   const min = Math.max(0, Math.round((Date.now() - ms) / 60000));
   const h = Math.round(min / 60);
   const d = Math.round(h / 24);
@@ -4839,7 +4857,7 @@ function ageHtml(ms, verb) {
       : d <= 7 ? `${d}d ago`
         : new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
   return `<span class="sub-age">${esc(verb)} <time datetime="${esc(new Date(ms).toISOString())}"
-    title="${esc(new Date(ms).toLocaleString())}">${esc(token)}</time></span>`;
+    data-tooltip="${esc(new Date(ms).toLocaleString())}">${esc(token)}</time></span>`;
 }
 
 /* Line two carries provenance without a chip: `owner/repo` is what lets the
@@ -4913,7 +4931,7 @@ function drawerHtml(row) {
       ${row.said || ''}
       <span><code>${esc(row.q.sha7)}</code></span>
       ${run
-    ? `<span${record ? ` title="${esc(record)}"` : ''}>${esc(tallyText(tallyFor(row.entry.current)))}</span>`
+    ? `<span${record ? ` data-tooltip="${esc(record)}"` : ''}>${esc(tallyText(tallyFor(row.entry.current)))}</span>`
     : `<span class="muted">No findings — the rail hasn't reviewed this head</span>`}
       ${pr?.picked ? `<span>${esc(pr.picked)} of ${esc(pr.total)} picked</span>` : ''}
     </div>
@@ -5143,16 +5161,16 @@ function freshnessHtml() {
     : '';
   if (MINE?.identities_failed?.length || QUEUE?.rails_failed?.length) {
     return `<span class="fresh fresh-bad"
-      title="Some sources failed on the last sweep — see the notice above.">
+      data-tooltip="Some sources failed on the last sweep — see the notice above.">
       Last sweep was incomplete${clock ? ` · ${esc(clock)}` : ''}</span>`;
   }
   if (age > 180) {
     return `<span class="fresh fresh-warn"
-      title="Oldest of the two sweeps this button runs — your PR status and the review queue.">
+      data-tooltip="Oldest of the two sweeps this button runs — your PR status and the review queue.">
       Stale${clock ? ` · last updated ${esc(clock)}` : ''}</span>`;
   }
   return `<span class="fresh"
-    title="Oldest of the two sweeps this button runs — your PR status and the review queue.">
+    data-tooltip="Oldest of the two sweeps this button runs — your PR status and the review queue.">
     Updated ${esc(fmtAge(age))} ago</span>`;
 }
 
@@ -5296,7 +5314,7 @@ function threadsHtml(p) {
       </div>`).join('')}
       <div class="thr-row">
         <button type="button" class="btn-inline" data-comments="${esc(k)}"
-          title="Open the ${ts.length} thread${ts.length === 1 ? '' : 's'} in full — every reply, nothing clipped, without leaving the app.">
+          data-tooltip="Open the ${ts.length} thread${ts.length === 1 ? '' : 's'} in full — every reply, nothing clipped, without leaving the app.">
           Read ${ts.length === 1 ? 'it' : 'them'} in full →
         </button>
       </div>
@@ -5438,7 +5456,7 @@ function openPrHtml(p) {
   if (!p.url) return '';
   return `<a class="btn-inline btn-open" href="${esc(p.url)}" target="${LINK_TARGET}"
     rel="noopener"${openAttrs(p)}
-    title="Open ${esc(shortRepo(p.repo))}#${esc(p.number)} on GitHub">Open on GitHub ↗</a>`;
+    data-tooltip="Open ${esc(shortRepo(p.repo))}#${esc(p.number)} on GitHub">Open on GitHub ↗</a>`;
 }
 
 /* The action strip under a card. It ALWAYS renders now, because it carries the
@@ -5524,13 +5542,13 @@ function addressBitsHtml(p, { menu = false } = {}) {
    * rides after the label, the way the findings count does. */
   const read = view.page === 'comments' ? '' :
     `<button type="button" class="btn-inline btn-go" data-comments="${esc(`${p.repo}#${p.number}`)}"
-      title="Open the ${n} thread${n === 1 ? '' : 's'} in full — every reply, nothing clipped, before you hand ${n === 1 ? 'it' : 'them'} to an agent.">
+      data-tooltip="Open the ${n} thread${n === 1 ? '' : 's'} in full — every reply, nothing clipped, before you hand ${n === 1 ? 'it' : 'them'} to an agent.">
       ${ICON_ASK}<span>Comments</span><span class="btn-n">${n}</span>${CHEV}</button>`;
   /* On a card with a ⋯ menu the spend lives there (addressMenuItem); the strip
    * keeps only the read route. */
   if (menu && read) return read;
   return `<button type="button" class="btn-inline" data-address="${esc(key)}"
-      title="Spawn a coding agent that reads the ${n} open thread${n === 1 ? '' : 's'}, makes the mechanical fixes, verifies, and pushes. It never replies on the PR — questions come back as drafts.">
+      data-tooltip="Spawn a coding agent that reads the ${n} open thread${n === 1 ? '' : 's'}, makes the mechanical fixes, verifies, and pushes. It never replies on the PR — questions come back as drafts.">
       Address ${n} comment${n === 1 ? '' : 's'}
     </button>
     ${read}
@@ -5673,7 +5691,7 @@ function resolveBitsHtml(p) {
     ? `Spawn a coding agent that merges ${esc(p.base_ref)} into ${esc(p.head_ref)}, resolves the conflicts, verifies, and pushes. This repo forbids force-pushing, so nothing is rewritten.`
     : `Spawn a coding agent that rebases ${esc(p.head_ref)} onto ${esc(p.base_ref)}, resolves the conflicts, verifies, and force-pushes with lease.`;
   return `<button type="button" class="btn-inline" data-resolve="${esc(resolveKey(p))}"
-      title="${tip}">
+      data-tooltip="${tip}">
       ${label}
     </button>
     <span class="muted card-hint">${how}</span>`;
@@ -5952,7 +5970,7 @@ function prepBitsHtml(row) {
   const c = prepControl(row);
   if (!c || c.redo) return '';
   return `<button type="button" class="btn-inline" data-prep="${esc(c.key)}"
-    title="${c.title}">
+    data-tooltip="${c.title}">
     ${c.label}
   </button>`;
 }
@@ -5999,12 +6017,12 @@ function moreMenuHtml(key, items, { name = 'More actions', dot = false } = {}) {
   const id = `more-${key}`;
   return `<span class="more" data-more="${esc(key)}">
     <button type="button" class="btn-inline btn-more" data-more-btn aria-haspopup="menu"
-      aria-expanded="false" aria-controls="${esc(id)}" aria-label="${esc(name)}" title="${esc(name)}">
+      aria-expanded="false" aria-controls="${esc(id)}" aria-label="${esc(name)}" data-tooltip="${esc(name)}">
       ${ICON_MORE}${dot ? '<span class="more-dot" aria-hidden="true"></span>' : ''}
     </button>
     <div class="menu" role="menu" id="${esc(id)}" aria-label="More actions" hidden>
       ${items.map(i => `<button type="button" class="menu-item" role="menuitem" tabindex="-1"
-        ${i.attrs} title="${i.title}">${i.label}</button>`).join('')}
+        ${i.attrs} data-tooltip="${i.title}">${i.label}</button>`).join('')}
     </div>
   </span>`;
 }
@@ -6052,7 +6070,7 @@ function viewBtnsHtml(row) {
   const t = tallyFor(entry.current);
   const n = t.issues;
   return `<button class="btn-inline btn-go" data-open="findings" data-key="${esc(entry.key)}"
-      title="Open the PR page — ${esc(tallyText(t))}, and the understanding checks${p?.picked ? ` (${esc(p.picked)} of ${esc(p.total)} findings picked for a comment)` : ''}">
+      data-tooltip="Open the PR page — ${esc(tallyText(t))}, and the understanding checks${p?.picked ? ` (${esc(p.picked)} of ${esc(p.total)} findings picked for a comment)` : ''}">
       ${ICON_FINDINGS}<span>Findings &amp; checks</span>${n ? `<span class="btn-n">${esc(n)}</span>` : ''}${CHEV}</button>`;
 }
 
@@ -6204,13 +6222,13 @@ function detailHtml() {
           : `<span class="note">Tick the findings you'd comment on. They go out as one comment, not ${all.length}.</span>`}
       </div>
       ${sweep.length ? `<button class="btn-inline" id="pickall"${folded.nits.length
-        ? ' title="Every issue and plausible finding shown, one per defect. Nits are picked one at a time."' : ''}>${
+        ? ' data-tooltip="Every issue and plausible finding shown, one per defect. Nits are picked one at a time."' : ''}>${
         allShown ? 'Unpick these'
           : `Pick all ${sweep.length} ${folded.nits.length ? 'but nits' : 'shown'}`}</button>` : ''}
       ${nPick ? '<button class="btn-inline" id="clearpicks">Clear</button>' : ''}
       ${discussBtnHtml(`find:${e.key}`, { cls: 'action-btn action-btn-secondary btn-ic', label: 'Discuss this PR' })}
       <button class="action-btn" id="compose"${nPick ? '' : ' disabled'}
-        title="${nPick
+        data-tooltip="${nPick
           ? `Build one submitted review out of the ${nPick} picked finding${nPick > 1 ? 's' : ''} — clears the review request, unlike a plain comment`
           : 'Pick at least one finding first'}">
         Compose review${nPick ? ` (${nPick})` : ''}
@@ -6219,7 +6237,7 @@ function detailHtml() {
 
     ${testN ? `<div class="filters">
       <button class="action-btn action-btn-secondary" id="toggletests"
-        title="${view.showTests
+        data-tooltip="${view.showTests
           ? 'Show only findings about the product code, hiding the ones about this PR&rsquo;s own tests.'
           : 'Bring back findings that are about this PR&rsquo;s own test files.'}">
         ${view.showTests
@@ -6229,7 +6247,7 @@ function detailHtml() {
     </div>` : ''}
     ${bodyHtml}
     ${foot}`, tally.issues, tallyText(tally))}
-    ${sh ? orientHtml(sh) + proveHtml(sh) + rememberHtml(sh) : ''}</div>`;
+    ${sh ? summaryHtml(sh) + orientHtml(sh) + proveHtml(sh) + rememberHtml(sh) : ''}</div>`;
 }
 
 /* `dupes` are the same defect restated at the same line (see clusterByLoc). They
@@ -6270,7 +6288,7 @@ function findingHtml(key, f, dupes = [], bandVerdict = null, underCategory = fal
    * which already says it. */
   const prep = [f.severity, underCategory ? '' : f.category].filter(Boolean);
   const acc = (dupes.length ? `<span class="badge badge-quiet"
-      title="The reviewer reported this same defect ${dupes.length + 1} times at this line — ${dupes.length} restatement${dupes.length > 1 ? 's are' : ' is'} folded in below">+${dupes.length} restated</span>` : '')
+      data-tooltip="The reviewer reported this same defect ${dupes.length + 1} times at this line — ${dupes.length} restatement${dupes.length > 1 ? 's are' : ' is'} folded in below">+${dupes.length} restated</span>` : '')
     + (prep.length ? `<span class="row-prep">${esc(prep.join(' · '))}</span>` : '');
   /* The pick box sits OUTSIDE the toggle target and leads the row, so the page
    * has a column you can run down while skimming — picking a finding must not
@@ -6280,7 +6298,7 @@ function findingHtml(key, f, dupes = [], bandVerdict = null, underCategory = fal
     <div class="row-line">
       <button class="pick${picked ? ' on' : ''}" data-pick="${esc(ik)}"
         role="checkbox" aria-checked="${picked ? 'true' : 'false'}"
-        title="${picked ? 'Picked — it goes in the comment' : 'Pick this for the comment'}">
+        data-tooltip="${picked ? 'Picked — it goes in the comment' : 'Pick this for the comment'}">
         ${ICON_CHECK}</button>
       <button type="button" class="row-title row-ftitle" data-toggle="${esc(ik)}"
         aria-expanded="${open}" aria-controls="${did}">
@@ -6299,10 +6317,10 @@ function findingHtml(key, f, dupes = [], bandVerdict = null, underCategory = fal
     ${open ? `<div class="row-drawer" id="${did}">
       <div class="f-actions">
         <button class="btn-inline" data-note="${esc(ik)}"
-          title="A line in your own words, appended under this finding in the comment">
+          data-tooltip="A line in your own words, appended under this finding in the comment">
           ${d?.note ? 'Edit note' : 'Add note'}</button>
         <button class="btn-inline btn-ask" data-ask="finding" data-ref="${esc(ik)}"
-          title="Ask a coding agent about this finding — it reads (and can run) the code at this head, with the finding, the PR and the SHA attached">
+          data-tooltip="Ask a coding agent about this finding — it reads (and can run) the code at this head, with the finding, the PR and the SHA attached">
           ${ICON_ASK}<span>Ask</span></button>
       </div>
       ${f.failure_scenario ? `<h4>Failure scenario</h4><p>${esc(f.failure_scenario)}</p>` : ''}
@@ -6398,7 +6416,7 @@ function dupesHtml(key, ik, dupes) {
         return `<div class="dupe${gd?.picked ? ' picked' : ''}">
           <button class="pick${gd?.picked ? ' on' : ''}" data-pick="${esc(gk)}"
             role="checkbox" aria-checked="${gd?.picked ? 'true' : 'false'}"
-            title="${gd?.picked ? 'Picked — it goes in the comment' : 'Pick this wording instead'}">
+            data-tooltip="${gd?.picked ? 'Picked — it goes in the comment' : 'Pick this wording instead'}">
             ${ICON_CHECK}</button>
           <div class="dupe-main">
             <div>${esc(g.summary)}</div>
@@ -6427,13 +6445,15 @@ function currentSha(key) {
 
 /* ---------- the pr-* skill panels ----------
  *
- * What replaced the map rail. The pr-* skills (skillz: pr-lanes, pr-intent,
- * pr-story, pr-behaviour, pr-check, pr-recall) run on a PR's head through the
- * rails' triggers and leave JSON beside the findings, one file per skill per
- * head. pr-lanes always runs first; the other four run only when a lane's
- * `next` names them — see each lane box's Why-this-ran callout (laneWhyHtml):
+ * What replaced the map rail. The pr-* skills (skillz: pr-lanes, pr-summary,
+ * pr-intent, pr-story, pr-behaviour, pr-check, pr-recall) run on a PR's head
+ * through the rails' triggers and leave JSON beside the findings, one file per
+ * skill per head. pr-lanes always runs first and always names pr-summary (its
+ * `summary` lane); the others run only when a lane's `next` names them — see
+ * each lane box's Why-this-ran callout (laneWhyHtml):
  *
  *   artifacts/review-cockpit/lanes/<slug>-<pr>-<sha7>.json      pr-skills/lanes/v2      recall hits + lanes
+ *   artifacts/review-cockpit/summary/<slug>-<pr>-<sha7>.json    pr-skills/summary/v1    what the PR does, how, where
  *   artifacts/review-cockpit/intent/<slug>-<pr>-<sha7>.json     pr-skills/intent/v1     the stated why, checked
  *   artifacts/review-cockpit/story/<slug>-<pr>-<sha7>.json      pr-skills/story/v4      up to 3 Mermaid flows
  *   artifacts/review-cockpit/behaviour/<slug>-<pr>-<sha7>.json  pr-skills/behaviour/v2  what a user would notice, shot
@@ -6468,6 +6488,7 @@ const SKILL_SCHEMA = {
   lanes: 'pr-skills/lanes/v2', story: 'pr-skills/story/v4', check: 'pr-skills/check/v1',
   quiz: 'pr-skills/check/v1', teachback: 'pr-skills/check/v1',
   intent: 'pr-skills/intent/v1', behaviour: 'pr-skills/behaviour/v2',
+  summary: 'pr-skills/summary/v1',
 };
 /* Older ids that still render. lanes/v2 changed only `signals` (its `sensitive`
  * categories and `familiarity` shape), which no panel reads, so a v1 file draws the same.
@@ -6640,6 +6661,7 @@ async function loadSkillIndex() {
 function skillPaths(h) {
   return {
     lanes: `${SKILL_DIR}/lanes/${h.base}.json`,
+    summary: `${SKILL_DIR}/summary/${h.base}.json`,
     intent: `${SKILL_DIR}/intent/${h.base}.json`,
     story: `${SKILL_DIR}/story/${h.base}.json`,
     behaviour: `${SKILL_DIR}/behaviour/${h.base}.json`,
@@ -6688,7 +6710,7 @@ function recallFiles(hit) {
   return Array.isArray(c?.files) ? c.files : [];
 }
 
-/* Reads all five files for a head. Resolves true when anything on screen
+/* Reads every file for a head. Resolves true when anything on screen
  * would change, so the caller re-renders only then. */
 async function loadSkillDocs(h) {
   if (!h || SKILL_LOADING.has(h.base)) return false;
@@ -6850,17 +6872,20 @@ function drillState(h) {
 
 /* ---- rendering ----
  *
- * A PR's page reads in four sections, in this order, each drawn only when it
- * has something in it:
+ * A PR's page opens on Review, then the
+ * Summary — what the PR does, how, and where, from pr-summary — then the rest
+ * of the sections, in this order, each drawn only when it has something in it:
  *
  *   Review    Findings              the prep rail's verdicts (the findings page's own)
  *   Orient    Lanes, Story          what the PR is and how to read it
  *   Prove     Check                 Quiz, Teach-back, Drill
  *   Remember  Recall hits           every stored card this PR touches
  *
- * A Recall hit this PR breaks (or may break) is also an alert at the very top
- * of the page — it is the most expensive thing on it to miss — while Remember
- * holds the full list, the ones that still hold included. */
+ * The Summary is not a section: it is short and it is the first thing read,
+ * so it is one box, always open, with no Counter. A Recall hit this PR breaks
+ * (or may break) is an alert above even that — it is the most expensive thing
+ * on the page to miss — while Remember holds the full list, the ones that
+ * still hold included. */
 
 /* A heading over a group of boxes: the board's group header (Mine / Reviews)
  * at a heading's size — octicon, name, Counter. `inner` empty means no section
@@ -6895,7 +6920,7 @@ function sectHtml(id, title, inner, count = null, say = '') {
 /* A Counter with its noun: the number on screen, the phrase as its tooltip and,
  * for a screen reader, after the number. */
 function ctrHtml(n, say, cls = 'ctr') {
-  return `<span class="${cls}" title="${esc(say)}">${esc(n)}<span class="sr-only"> ${
+  return `<span class="${cls}" data-tooltip="${esc(say)}">${esc(n)}<span class="sr-only"> ${
     esc(String(say).replace(/^\S+\s*/, ''))}</span></span>`;
 }
 
@@ -6935,7 +6960,52 @@ function rememberHtml(h) {
     hits.length, plural(hits.length, 'recall hit'));
 }
 
-const SKILL_METHOD = { lanes: 'Lanes', intent: 'Intent', story: 'Story', behaviour: 'Behaviour', check: 'Check' };
+const SKILL_METHOD = { lanes: 'Lanes', summary: 'Summary', intent: 'Intent', story: 'Story', behaviour: 'Behaviour', check: 'Check' };
+
+/* ---- summary ----
+ *
+ * pr-summary's what / how / where: a paragraph, an ordered list of steps, and
+ * the files that carry it, each a path linked to its blob at the summary's
+ * head with its role muted beside it. Like Recall hits, the header bar does
+ * not fold. `status: "error"` is the header bar alone, the reason its
+ * why-line. With no file at the live head, the lane's queued or not-produced
+ * bar, or nothing. */
+function summaryHtml(h) {
+  const read = skillRead(h, 'summary');
+  if (read?.error) return skillNoteHtml('summary', read, h);
+  const d = read?.doc;
+  if (!d) return [...laneQueuedBoxes(h, ['summary']), ...notProducedBoxes(h, ['summary'])].join('');
+  if (d.status === 'error') {
+    return laneBoxHtml({ band: 'psummary', title: 'Summary', tone: 'muted', state: 'Not written',
+      why: d.reason ? `pr-summary at ${h.sha7}: ${d.reason}` : `pr-summary couldn't summarise ${h.sha7}.` });
+  }
+  const how = (d.how || []).filter(s => typeof s === 'string' && s.trim());
+  const where = (d.where || []).filter(w => w && w.path);
+  const sha = String(d.pr?.head_sha || '').startsWith(h.sha7) ? d.pr.head_sha : h.sha;
+  const blob = path => /^[^/\s]+\/[^/\s]+$/.test(h.repo || '')
+    ? `https://github.com/${h.repo}/blob/${encodeURIComponent(sha)}/${String(path).split('/').map(encodeURIComponent).join('/')}`
+    : null;
+  const whereRow = w => {
+    const url = blob(w.path);
+    const ref = refHtml(w.path);
+    return `<li>${url ? `<a href="${esc(url)}" target="${LINK_TARGET}" rel="noopener">${ref}</a>` : ref}${
+      w.role ? ` <span class="muted">${esc(w.role)}</span>` : ''}</li>`;
+  };
+  return `<section class="band band-lane band-summary band-tone-muted" aria-labelledby="band-psummary-h">
+    <div class="band-head">
+      <h4 class="band-h" id="band-psummary-h">
+        <span class="chev chev-none" aria-hidden="true"></span>
+        <span class="band-title">Summary</span>
+      </h4>
+      <span class="band-why">${esc(`What this PR does — from pr-summary at ${h.sha7}`)}</span>
+    </div>
+    <div class="summary-body">
+      ${d.what ? `<p class="summary-what">${esc(d.what)}</p>` : ''}
+      ${how.length ? `<ol class="summary-how">${how.map(s => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
+      ${where.length ? `<ul class="summary-where">${where.map(whereRow).join('')}</ul>` : ''}
+    </div>
+  </section>`;
+}
 
 /* ---- one lane, one box ----
  *
@@ -6978,7 +7048,7 @@ function laneGroupHtml(icon, label, n) {
 /* A file:line, as the board's neutral ref pill. On a phone a long path wraps
  * at its slashes (the <wbr>s), never between a file and its line number. */
 function refHtml(evidence) {
-  return evidence ? `<code class="ref" title="${esc(evidence)}">${
+  return evidence ? `<code class="ref" data-tooltip="${esc(evidence)}">${
     esc(evidence).replace(/\//g, '/<wbr>')}</code>` : '';
 }
 
@@ -7112,7 +7182,7 @@ function skillsPageHtml() {
         tone: 'muted', state: 'Not reviewed', whyHtml: `No findings for
         <code>${esc(h.sha7)}</code> yet — the prep rail hasn't reviewed this head. They open from
         the row's Review button when they land.` })))
-    + orientHtml(h) + proveHtml(h) + rememberHtml(h) : '';
+    + summaryHtml(h) + orientHtml(h) + proveHtml(h) + rememberHtml(h) : '';
   /* My login in this PR's workspace; an unknown workspace knows no login. */
   const me = wsMeta(workspaceOf(pr)).who;
   const head = mine
@@ -7197,7 +7267,7 @@ function skillsBtnHtml(row) {
   const s = skillsControl(row);
   if (!s) return '';
   return `<button type="button" class="btn-inline" data-skills="${esc(row.id)}"
-    title="${s.title}">${s.label}</button>`;
+    data-tooltip="${s.title}">${s.label}</button>`;
 }
 
 /* What the way into the panels is called, or null when there are none. The
@@ -7237,11 +7307,14 @@ function mineMenuHtml(row) {
   });
 }
 
-/* Which band a lane's `next` lands on, once the pass runs it — the same four
- * kinds skillPaths names, keyed by the skill name pr-lanes writes. pr-recall
+/* Which band a lane's `next` lands on, once the pass runs it — the kinds
+ * skillPaths names, keyed by the skill name pr-lanes writes. The `summary`
+ * lane (pr-summary) fires on every PR and lands in the box above Review, not
+ * in a section. A `next` with no entry here is skipped everywhere. pr-recall
  * (the `remember` lane) is never run from lanes — its hits are already in
  * Remember — so it has no entry and gets no chip. */
 const LANE_NEXT_SKILL = {
+  'pr-summary':   { kind: 'summary',   label: 'Summary' },
   'pr-intent':    { kind: 'intent',    label: 'Intent' },
   'pr-story':     { kind: 'story',     label: 'Story' },
   'pr-behaviour': { kind: 'behaviour', label: 'Behaviour' },
@@ -8367,7 +8440,7 @@ function discussBtnHtml(src, { cls = 'btn-inline', label = 'Discuss' } = {}) {
   if (!canDiscuss(src)) return '';
   const busy = discussBusy(src);
   return `<button type="button" class="${cls} btn-discuss" data-discuss="${esc(src)}"${
-    busy ? ' disabled aria-busy="true"' : ''} title="${esc(DISCUSS_TITLE)}">
+    busy ? ' disabled aria-busy="true"' : ''} data-tooltip="${esc(DISCUSS_TITLE)}">
     ${ICON_ASK}<span>${busy ? 'Starting…' : esc(label)}</span></button>`;
 }
 

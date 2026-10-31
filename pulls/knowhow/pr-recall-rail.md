@@ -1,6 +1,6 @@
 ---
 name: PR Recall Rail (cards on merge)
-description: How PRs you reviewed turn into pr-recall cards once they merge — the merge-watch detector (triggers/pr-recall-merge-watch/scripts/detect.py, on a cron setup offers; reviewed-by gate, event-log dedup via PrRecallCardsCreated), the "PR recall - cards on merge" intent trigger that runs `/pr-recall create` in a coding agent against the registered repo, the card store (artifacts/pr-recall/cards.json, written only by the skill's store.py), and the event payloads. Load when the PrRecallRequested trigger fires, when a merged PR has no recall cards, when cards.json looks wrong, or when asked about "recall cards", "pr-recall", "remember this PR".
+description: "How PRs you reviewed become pr-recall cards once merged: the merge-watch detector, the \"cards on merge\" trigger running /pr-recall create, the card store artifacts/pr-recall/cards.json, and event payloads. Load when PrRecallRequested fires, a merged PR has no cards, cards.json looks wrong, or for \"recall cards\" or \"remember this PR\"."
 ---
 
 # PR Recall Rail

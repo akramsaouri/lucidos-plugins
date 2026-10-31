@@ -1,6 +1,6 @@
 ---
 name: Pulls config (artifacts/review-cockpit/config.json)
-description: The one config file every Pulls rail and the Pulls app (review-cockpit) read — your GitHub login(s), the repos and owners to watch with their registered repo names, the GitHub credential, gh config dir and proxy, teammates, and the browser for Open PR. Covers the schema, defaults, how a token is picked per group, and how to check it. Load when writing or changing the Pulls config, when a Pulls sweep reports a missing token or an unwatched repo, or when adding a repo to Pulls.
+description: "The one config file every Pulls rail and the Pulls app read: your GitHub login(s), the repos and owners to watch, the credential, gh config dir and proxy, teammates and the Open PR browser. Covers the schema, defaults, how a token is picked per group, and checking it. Load when writing or changing the Pulls config, a sweep reports a missing token or unwatched repo, or adding a repo."
 ---
 
 # Pulls config

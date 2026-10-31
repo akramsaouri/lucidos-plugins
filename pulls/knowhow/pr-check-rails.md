@@ -1,6 +1,6 @@
 ---
 name: PR Check Rails (quiz grading + drill)
-description: How the Pulls app's understanding checks on a PR are served — grading a submitted quiz or teach-back with pr-check at the quiz's SHA (PrCheckAnswersSubmitted → .graded.json → PrCheckGraded, with stale detection when the head moved), and opening a drill session (PrDrillRequested → interactive Claude Code session with /pr-check --depth drill → PrDrillStarted). Load when either trigger fires, when a grade never arrived, when a graded file is missing or stale, or when the user asks to be quizzed, graded, drilled or to "teach back" a PR.
+description: "How the Pulls app's PR understanding checks are served: grading a quiz or teach-back at the quiz's SHA with stale detection (PrCheckAnswersSubmitted to PrCheckGraded), and opening a drill session (PrDrillRequested). Load when either trigger fires, a grade never arrived or looks stale, or the user asks to be quizzed, graded, drilled or to teach back a PR."
 ---
 
 # PR Check Rails
