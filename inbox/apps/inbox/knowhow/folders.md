@@ -5,7 +5,7 @@ description: How the Inbox app lists and opens each account's folders and labels
 
 # Inbox folders
 
-Folders are a browse-only side door, never part of triage. Each account in the sidebar has a chevron that expands its folders or labels. Opening one shows its newest 30 threads in the same list UI, without the Needs you / Not triaged zones. The default view on every open is still the account's inbox.
+Folders are a browse-only side door, never part of triage. Each account in the sidebar has a chevron that expands its folders or labels. Opening one shows its newest 30 threads in the same list UI, without the Needs you / Not triaged zones. The app opens on the last picked inbox (an account's, or All inboxes: see `apps/inbox/knowhow/all-inboxes.md`), never on a folder.
 
 ## Gmail accounts
 
