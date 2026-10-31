@@ -1,0 +1,44 @@
+id = "browser-learning"
+version = "0.4.0"
+name = "Browser Learning"
+description = "Self-healing site knowhow for browser automation. Ships two knowhow files: observation (loaded by agents during browser tasks: reads what's known about a site before acting, records BrowserLearningObserved events after) and reflection (loaded by a periodic pass that folds those observations into per-domain site knowhow under knowhow/sites/, and keeps knowhow/sites/index.md listing every site file so agents can find them). Your site files and the index are workspace data: the plugin never ships, overwrites or removes them. Needs one cron trigger for the reflection, which setup creates or reuses."
+source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/browser-learning"
+engine = ">=0.9.5"
+categories = ["automation", "developer-tools"]
+
+setup = """
+This plugin is knowhow-only. To make the self-healing loop actually run, the workspace needs one periodic
+reflection trigger. A plugin can't ship a cron, so it's set up here. **Load `browser-learning/reflection`
+first.**
+
+1. **Look for an existing reflection trigger before creating anything.** Run `lucidos triggers list`. A
+   trigger already counts if any of these hold: its slug is `browser-knowhow-reflection`, its name is
+   "Browser Knowhow Reflection", or its intent asks for the browser-knowhow reflection pass or the
+   Browser Learning reflection knowhow. Earlier versions of this plugin had setup create exactly that, so
+   a workspace that installed it before usually has one.
+   - **Found one:** keep it. Don't create a second. Tell the user its schedule in plain words ("daily at
+     04:00") and ask only whether to keep that cadence; change the schedule in place if they want a
+     different one.
+   - **Found more than one:** keep the one that ran most recently, and offer to delete the others,
+     naming each. Two passes over the same window write the same files twice.
+   - **Found none:** go to step 2.
+
+2. **Create the trigger** (only when step 1 found none). Confirm the cadence with the user first; schedules
+   are workspace state and shouldn't be hardcoded. Default: daily at 04:00 in the user's timezone, cron
+   `0 0 4 * * *`. Heavy browser users may want every 6h; light users weekly. Create an **intent** trigger
+   named "Browser Knowhow Reflection", slug `browser-knowhow-reflection`, low reasoning effort, with the
+   intent: "Run the browser-knowhow reflection pass: review my recent browser-learning observations and
+   fold them into my per-site knowhow files. See the Browser Learning — Reflection knowhow for how."
+
+3. **Check the site index.** If `knowhow/sites/` has domain folders but no `index.md`, say so: the next
+   reflection pass creates the index from those folders. If `index.md` exists, leave it alone; it's the
+   user's. Never create or edit a file under `knowhow/sites/` during setup.
+
+The observation knowhow is loaded automatically when agents do browser work; no wiring needed there.
+
+Uninstalling the plugin leaves the reflection trigger and everything under `knowhow/sites/` behind, so
+delete the trigger too if the user wants the loop gone.
+
+Finish by recording `PluginSetupCompleted` as `system-knowhow/plugin-setup` describes: whether the trigger
+was reused or created, its schedule, and anything the user skipped.
+"""
