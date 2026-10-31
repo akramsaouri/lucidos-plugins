@@ -68,9 +68,14 @@ The on-demand trigger matches on the event type alone; Inbox's "Triage now" send
    - `skip` — do nothing, move on
    - `read` — mark email as read (remove the `UNREAD` label) but keep it in the inbox. Non-destructive way to clear noise. Gmail API: `POST /gmail/v1/users/me/messages/{id}/modify` with body `{"removeLabelIds": ["UNREAD"]}` for OAuth accounts; set the IMAP `\Seen` flag for non-OAuth accounts (`"imap"` accounts: `imap_helper.py mark-read`).
    - `delete` — move email to Trash (Gmail API: `POST /gmail/v1/users/me/messages/{id}/trash`; `"imap"` accounts: `imap_helper.py trash`)
+   - `archive` — take the email out of the inbox and mark it read, never trashing it. Gmail API: `POST /gmail/v1/users/me/messages/{id}/modify` with body `{"removeLabelIds": ["INBOX", "UNREAD"]}` (`batchModify` for many); the mail stays in All Mail. `"imap"` accounts: `imap_helper.py archive`, which sets `\Seen` and moves it to the Archive folder.
+   - `label` — file the email under the Gmail label named in the rule's `label` key (e.g. `"label": "Receipts"`), **then AI-triage it** as if no rule had matched: actionable stays in the inbox and is summarised, no-action is cleared per `no_action_clear`. Resolve the label id with `GET /gmail/v1/users/me/labels` (create a missing one with `POST /labels`), then `POST /messages/{id}/modify` with `{"addLabelIds": ["<id>"]}`. Gmail accounts only: on any other account, treat a `label` rule as `triage` and say so in the run summary.
    - `todo` — create reminder in Apple Reminders "Tasks" list via osascript
    - `notify` — send push notification with sender + subject
    - `flag` — add to high-priority list in summary
+   - Any other action (`calendar`, `notion`, or one a workspace added for its own integrations) is not part of
+     this engine. Treat the email as `flag`, so it reaches the user, and name the unknown action in the run
+     summary. Never guess at what it should do.
    - `triage` — AI reads the email and categorizes as actionable / FYI / noise. **Anything that needs no action (both FYI and noise) is "cleared" according to the account's `no_action_clear` setting** (see below): `read` (mark read, keep), `delete` (trash it), or `keep` (leave untouched, count only). Only `actionable` items survive to the summary. The legacy `no_auto_delete` flag is subsumed by `no_action_clear: "read"`. Note: explicit `delete` **rules** still fire regardless.
 5. **Summary notification** — collect all actionable + flagged items, then **filter out any already in the notified-ledger** (see "Notification Dedup" below). Send one consolidated push notification **only if new (not-yet-notified) actionable/flagged items remain**, then append their ids to the ledger. If every actionable item was already notified on a prior run, **stay silent** — do not re-notify. If nothing is actionable, stay silent (exception-based alerting).
 
@@ -131,6 +136,7 @@ In short: with this flag on, the system deletes exactly what your rules tell it 
 Set `"no_action_clear"` per account to control what happens to emails that triage decides need **no action** — i.e. anything categorized FYI or noise. Previously FYI mail was left unread (piling up) and noise was deleted (or kept on `no_auto_delete` accounts). Now both outcomes are *cleared* uniformly so the inbox doesn't accumulate read-but-untouched clutter:
 
 - `"read"` — mark read (remove `UNREAD`), keep in inbox. Non-destructive; clears the unread badge without losing anything. Right for work / shared mailboxes where deleting could hide a cofounder's mail.
+- `"archive"` — take it out of the inbox and mark it read, exactly like the `archive` rule action. Nothing is trashed: the mail stays in All Mail (Gmail) or the Archive folder (IMAP). Right when the inbox should hold only what needs you but nothing may be deleted.
 - `"delete"` — move to Trash. Right for a personal mailbox where no-action mail is just clutter.
 - `"keep"` — leave untouched, count only (the old default behavior). Use when you want zero automated changes.
 
@@ -345,7 +351,8 @@ about it; filtering to unread is the consumer's job, not the snapshot's.
   through the script instead of `read_emails`.
 - **`oauth_provider`** — omit for password auth, where the script falls back to
   `CRED_<NAME>_PASSWORD` / `CRED_<NAME>`. With it set, the script uses XOAUTH2
-  with `OAUTH_<PROVIDER>_ACCESS_TOKEN`, which the engine injects and refreshes.
+  with `OAUTH_<PROVIDER>_ACCESS_TOKEN`, which the engine injects and refreshes once
+  `scripts/inbox-triage/imap_credentials.py` names it (see "IMAP Accounts" below).
 - **`imap_host`** is required; `imap_port` defaults to 993.
 
 ### Snapshot file
@@ -419,9 +426,17 @@ goes through the helper instead.
 
 - **`host`** and **`credential_env`** are required. Everything else is optional.
 - **`credential_env`** is the *name* of the env var that holds the mailbox password, never
-  the password itself. `configure_email` stores the password as a credential, and the
-  engine injects it into every subprocess as `CRED_<NAME>`. Copy the exact name from the
-  list of names (never values): `env | cut -d= -f1 | grep '^CRED_'`.
+  the password itself. `configure_email` stores the password as a credential named
+  `CRED_<NAME>`. Copy the exact name from `lucidos credentials list`, which prints names,
+  never values.
+- **The name must also be listed in `imap_credentials.py`.** The engine hands a script a
+  credential only when the script, or a `.py` file beside it, names it, and the helpers read
+  `credential_env` at run time. So setup writes `data/scripts/inbox-triage/imap_credentials.py`
+  and `data/apps/inbox/scripts/imap_credentials.py`, each holding one line,
+  `# lucidos-credentials: CRED_A CRED_B`, naming every IMAP account's `credential_env` (and,
+  for `imap-peek` accounts, the `OAUTH_<PROVIDER>_ACCESS_TOKEN` or `CRED_<NAME>` the snapshot
+  script reads). Both are workspace files the plugin doesn't ship, so an update leaves them
+  alone. A helper that stops with "env var … is not set" usually means a name is missing there.
 - **`port`** defaults to 993. **`ssl: false`** means STARTTLS on port 143 by default; the
   helper never logs in over plaintext.
 - **`username`** defaults to the account's `address`.
@@ -431,7 +446,9 @@ goes through the helper instead.
   flags none.
 
 Any of these can also be passed to the helper as a flag (`--host`, `--port`, `--no-ssl`,
-`--username`, `--credential-env`, `--mailbox`, `--trash-folder`), which wins over the config.
+`--username`, `--credential-env`, `--mailbox`, `--trash-folder`, `--archive-folder`), which wins over the config.
+- **`archive_folder`** works like `trash_folder`, for the `\Archive` folder: a fallback when the server flags
+  none, default `Archive`.
 
 ### Helper commands
 
@@ -442,9 +459,11 @@ python data/scripts/inbox-triage/imap_helper.py list --account "<name>" --unseen
 python data/scripts/inbox-triage/imap_helper.py list --account "<name>" --since YYYY-MM-DD      # shared account
 python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --id '<msgid>'
 python data/scripts/inbox-triage/imap_helper.py mark-read --account "<name>" --id '<msgid>' [--id ...]
+python data/scripts/inbox-triage/imap_helper.py archive --account "<name>" --id '<msgid>' [--id ...]
 python data/scripts/inbox-triage/imap_helper.py trash --account "<name>" --id '<msgid>' [--id ...]
 python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --from-trash --id '<msgid>'   # triage retro
-python data/scripts/inbox-triage/imap_helper.py restore --account "<name>" --id '<msgid>' [--id ...]  # triage retro
+python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --from-archive --id '<msgid>' # triage retro
+python data/scripts/inbox-triage/imap_helper.py restore --account "<name>" [--from-archive] --id '<msgid>' [--id ...]  # triage retro
 ```
 
 - **`list`** prints JSON `[{id, from, to, cc, subject, date, seen, snippet}]`, oldest first,
@@ -455,6 +474,9 @@ python data/scripts/inbox-triage/imap_helper.py restore --account "<name>" --id 
   `body` or the snippet is too thin to judge.
 - **`mark-read`** sets `\Seen`. It is how the `read` action and `no_action_clear: "read"`
   land.
+- **`archive`** sets `\Seen`, then moves the message to the folder the server flags `\Archive` (else
+  `archive_folder`, default `Archive`), the same way `trash` moves. It is how the `archive` action and
+  `no_action_clear: "archive"` land. If the move fails the message stays in the inbox, read.
 - **`trash`** moves the message to Trash. It is how the `delete` action and
   `no_action_clear: "delete"` land. With `MOVE` the server moves it atomically. Without
   `MOVE` the helper COPYs it to Trash, flags the original `\Deleted` and expunges. That uses
@@ -463,8 +485,8 @@ python data/scripts/inbox-triage/imap_helper.py restore --account "<name>" --id 
   `\Deleted`. If the COPY fails, the original is left untouched.
 - **`restore`** is the triage retro's undo of `trash`: it moves the message from Trash back to the
   inbox and clears `\Seen`, so it comes back unread. `peek --from-trash` reads it in Trash first, still
-  read-only.
-- **`mark-read`, `trash` and `restore`** print `{"id", "ok"}` per message and exit 1 if any failed.
+  read-only. With `--from-archive` both work on the Archive folder instead, undoing `archive`.
+- **`mark-read`, `archive`, `trash` and `restore`** print `{"id", "ok"}` per message and exit 1 if any failed.
   A failed write is a failed action: report it in the run summary, never count it as done.
 
 ### Seen state

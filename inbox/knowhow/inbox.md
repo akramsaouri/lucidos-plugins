@@ -17,7 +17,8 @@ behind. Each account's inbox is split into two zones that never mix:
 With two or more accounts, **All inboxes** leads the account list: every account's mail in the same two zones,
 newest first, each row tagged with its account. Actions on a row go to that row's own account; folders and the
 per-account Triage entry stay under each account. An account that fails to load keeps its red dot and a quiet
-"not loaded" line while the others still show. The last mailbox picked (All or one account) is remembered.
+"not loaded" line while the others still show. The last mailbox picked (All or one account) is remembered. Details:
+`apps/inbox/knowhow/all-inboxes.md`.
 
 Folders and labels are browsed on demand outside the zones: see `apps/inbox/knowhow/folders.md`.
 
@@ -130,6 +131,9 @@ answers with `InboxImapResult`, carrying the same `request_id` and `account`.
 - **Nothing is marked read by looking.** Folders open read-only and bodies are fetched with `BODY.PEEK[]`.
 - **Connection** comes from the account's `imap` block in triage's config: `host`, `port`, `ssl`,
   `username` (default: the address) and `credential_env` (the name of the env var holding the password).
+  The engine injects a credential into the bridge only when a file beside it names it, so setup lists every
+  IMAP account's `credential_env` in `apps/inbox/scripts/imap_credentials.py` as
+  `# lucidos-credentials: CRED_A CRED_B`. That file is the workspace's, not the plugin's: updates leave it alone.
   Archive, Trash and Sent are the folders the server flags with RFC 6154 special-use, else `archive_folder`,
   `trash_folder`, `sent_folder` from the block, else `Archive`, `Trash`, `Sent`.
 - **SMTP** uses the same username and password, at `smtp_host` / `smtp_port` from the block. Without them it
@@ -154,6 +158,8 @@ answers with `InboxImapResult`, carrying the same `request_id` and `account`.
   right entry. Never loosen the check.
 - **"the IMAP bridge did not answer"**: the "Inbox — IMAP bridge" trigger is missing or paused
   (`lucidos triggers list`), or its run failed. `InboxImapResult` events carry the bridge's `error`.
-- **"credential … is not available to this process"**: the block's `credential_env` names an env var that
-  doesn't exist. List the names with `env | cut -d= -f1 | grep '^CRED_'`, or re-run `configure_email`.
+- **"credential … is not available to this process"**: the name is missing from
+  `apps/inbox/scripts/imap_credentials.py` (re-run the plugin's setup, which rewrites it), or the block's
+  `credential_env` names a credential that doesn't exist. List the names with `lucidos credentials list`, or
+  re-run `configure_email`.
 - **AI buttons fail with "no model provider answered"**: set `ai.provider` and `ai.model`.

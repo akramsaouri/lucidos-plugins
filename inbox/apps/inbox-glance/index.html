@@ -129,7 +129,9 @@
   const WAKE_STALE = 5 * 60e3, TICK_STALE = 15 * 60e3;
   /* accounts are triage's, in its config order, as the Inbox data layer describes them: { key, label, kind, problem }. */
   let state = { accounts: [], threads: [], at: 0, errors: {} }, fatal = '', pick = 'all';
-  let busy = false, again = false, missed = false, soonTimer = null, clock = null, rowsKey = '', pillsKey = null;
+  let busy = false, again = false, missed = false, soonTimer = null, clock = null, rowsKey = '', pillsKey = null, revealed = false;
+  /* The host keeps its cover up until the first real render: cached rows, fresh rows, or the error. */
+  const reveal = () => { if (!revealed) { revealed = true; lucidos.ui.ready(); } };
 
   const openInbox = () => lucidos.ui.navigate('app', { app_id: 'inbox' });
   const shown = () => lucidos.widget.visible() && !document.hidden;
@@ -299,7 +301,7 @@
 
   async function refresh() {
     if (busy) { again = true; return; }
-    if (!shown()) { missed = true; return; }
+    if (!shown()) { missed = true; reveal(); return; }
     busy = true; missed = false; again = false;
     renderMeta();
     try {
@@ -325,10 +327,12 @@
       try { lucidos.storage.local.setItem(CACHE, JSON.stringify(state)); } catch (e) { /* quota */ }
       busy = false;
       render(first);
+      reveal();
     } catch (e) {
       busy = false;
       fatal = (e && e.message) || String(e);
       render(false);
+      reveal();
     }
     if (again) soon();
   }
@@ -359,7 +363,7 @@
     if (c && Array.isArray(c.threads)) state = { accounts: Array.isArray(c.accounts) ? c.accounts : [], threads: c.threads, at: c.at || 0, errors: c.errors || {} };
   } catch (e) { /* no cache yet */ }
   render(false);
-  lucidos.ui.ready();
+  if (state.at) reveal();
 
   lucidos.widget.onSize(() => render(false));
   lucidos.widget.onVisibility(v => (v ? wake() : sleep()));
@@ -371,7 +375,7 @@
   lucidos.sse.onOpen(refresh);
   lucidos.sse.on('EmailTriageCompleted', soon);
   lucidos.sse.on('InboxImapResult', d => { const p = (d && d.payload) || d || {}; if (p.synced) soon(); });
-})();
+})().catch(() => lucidos.ui.ready());
 </script>
 </body>
 </html>

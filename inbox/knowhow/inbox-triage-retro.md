@@ -137,10 +137,11 @@ Per account, by its `fetch`:
   - Trashed: `POST /gmail/v1/users/me/messages/{id}/untrash`, then the same modify.
   - A message that is back in the inbox already (it has `INBOX` and no `TRASH`) was handled by the user: record it
     `fine` and move on.
-- **`imap`**: `imap_helper.py` reads and restores by Message-ID. Triage only ever trashes on these accounts.
+- **`imap`**: `imap_helper.py` reads and restores by Message-ID. A `delete` entry is in Trash, an `archive` entry in
+  the Archive folder: add `--from-archive` to both commands for those.
   - Read: `python data/scripts/inbox-triage/imap_helper.py peek --account "<name>" --from-trash --id '<msgid>'`.
   - Restore: `python data/scripts/inbox-triage/imap_helper.py restore --account "<name>" --id '<msgid>'` moves it from
-    Trash back to the inbox, unread. `"ok": false, "error": "not found"` means the user already emptied or moved it:
+    Trash (or, with `--from-archive`, the Archive folder) back to the inbox, unread. `"ok": false, "error": "not found"` means the user already emptied or moved it:
     record it `fine`.
 - **`imap-peek`** (OAuth IMAP such as Outlook): Inbox has no write path for these yet. Judge on the cleared log's
   `from`, `subject` and `snippet`, record a miss as `failed`, and list it in the reply so the user can pull it back

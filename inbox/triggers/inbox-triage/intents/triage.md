@@ -29,7 +29,7 @@ Triage unseen emails for the specified account.
      gets no rule, no AI verdict and no clearing.
 3. Apply rules in order — first match wins
 4. AI-categorize anything that doesn't match a rule (actionable / FYI / noise)
-5. Clear no-action emails (FYI + noise) per the account's `no_action_clear` setting: `read` (mark read, keep), `delete` (trash), or `keep` (leave, count only). Explicit `delete` rules always fire regardless.
+5. Clear no-action emails (FYI + noise) per the account's `no_action_clear` setting: `read` (mark read, keep), `archive` (out of the inbox, read, never trashed), `delete` (trash), or `keep` (leave, count only). Explicit `delete` rules always fire regardless.
    Log every message this run moved out of the inbox (archived or trashed, by a rule or by
    `no_action_clear`) to `artifacts/inbox/retro/cleared-<slug>.json`, for the triage retro. See
    "Cleared Log" in the knowhow.

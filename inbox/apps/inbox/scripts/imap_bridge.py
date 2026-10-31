@@ -27,6 +27,9 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
 sys.dont_write_bytecode = True  # no __pycache__ in the plugin's app folder, which would read as a local edit
+# The engine hands a script trigger only the credentials a file names, and each account's `credential_env` is
+# read at run time. Setup lists those names in imap_credentials.py beside this file (a workspace file the plugin
+# doesn't ship), as `# lucidos-credentials: CRED_A CRED_B`, which is what gets them injected here.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import imap_mail as I  # noqa: E402
 
@@ -359,7 +362,7 @@ def handle(name, op, p):
     try:
         M, c, block = I.connect(name)
     except KeyError as e:
-        out.update(ok=False, error=f"credential {e} is not available to this process: check `credential_env` in the account's imap block, or re-run configure_email")
+        out.update(ok=False, error=f"credential {e} is not available to this process: a script gets a credential only when a file beside it names it, so list it in apps/inbox/scripts/imap_credentials.py (re-run Inbox setup), and check `credential_env` in the account's imap block")
         return out
     except ValueError as e:  # not an IMAP account, or its imap block is incomplete
         out.update(ok=False, error=str(e))

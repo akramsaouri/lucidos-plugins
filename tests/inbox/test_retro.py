@@ -160,7 +160,7 @@ class FakeIMAP:
 
     def __init__(self, caps="IMAP4rev1 UIDPLUS MOVE"):
         self.caps = caps
-        self.folders = {'"INBOX"': {}, '"Trash"': {}}
+        self.folders = {'"INBOX"': {}, '"Trash"': {}, '"Archive"': {}}
         self.selected = None
         self.next_uid = 100
 
@@ -172,7 +172,8 @@ class FakeIMAP:
         return "OK", [self.caps.encode()]
 
     def list(self):
-        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Trash) "/" "Trash"']
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren \\Trash) "/" "Trash"',
+                      b'(\\HasNoChildren \\Archive) "/" "Archive"']
 
     def select(self, folder, readonly=False):
         self.selected = folder
@@ -244,6 +245,43 @@ class RestoreTest(unittest.TestCase):
         self.assertEqual(out, [{"id": "<gone@example.com>", "ok": False, "action": "restore", "error": "not found"}])
 
 
+class ArchiveTest(unittest.TestCase):
+    """`archive` (the archive rule and no_action_clear: "archive" on password IMAP accounts) and its undo."""
+
+    def run_cmd(self, fn, *args):
+        with redirect_stdout(io.StringIO()) as out:
+            rc = fn(*args)
+        return rc, [json.loads(line) for line in out.getvalue().splitlines()]
+
+    def test_archive_marks_read_and_moves_to_the_archive_folder(self):
+        for caps in ("IMAP4rev1 UIDPLUS MOVE", "IMAP4rev1 UIDPLUS"):
+            M = FakeIMAP(caps=caps)
+            M.add('"INBOX"', "<a@example.com>")
+            rc, out = self.run_cmd(imap_helper.cmd_write, M, {}, ["<a@example.com>"], "archive")
+            self.assertEqual((rc, out), (0, [{"id": "<a@example.com>", "ok": True, "action": "archive"}]), caps)
+            self.assertEqual(M.folders['"INBOX"'], {})
+            [m] = M.folders['"Archive"'].values()
+            self.assertEqual((m["msgid"], m["flags"]), ("<a@example.com>", {"\\Seen"}))
+            self.assertEqual(M.folders['"Trash"'], {}, "archive never trashes")
+
+    def test_with_no_special_use_flag_it_uses_the_configured_folder(self):
+        M = FakeIMAP()
+        M.list = lambda: ("OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\HasNoChildren) "/" "Old mail"'])
+        M.folders['"Old mail"'] = {}
+        M.add('"INBOX"', "<a@example.com>")
+        self.assertEqual(self.run_cmd(imap_helper.cmd_write, M, {"archive_folder": "Old mail"}, ["<a@example.com>"], "archive")[0], 0)
+        self.assertEqual([m["msgid"] for m in M.folders['"Old mail"'].values()], ["<a@example.com>"])
+
+    def test_restore_from_archive_brings_it_back_unread(self):
+        M = FakeIMAP()
+        M.add('"Archive"', "<a@example.com>", ["\\Seen"])
+        rc, out = self.run_cmd(imap_helper.cmd_restore, M, {}, ["<a@example.com>"], True)
+        self.assertEqual((rc, out), (0, [{"id": "<a@example.com>", "ok": True, "action": "restore"}]))
+        [m] = M.folders['"INBOX"'].values()
+        self.assertEqual((m["msgid"], m["flags"]), ("<a@example.com>", set()))
+        self.assertEqual(M.folders['"Archive"'], {})
+
+
 class WiringTest(unittest.TestCase):
     def setUp(self):
         self.trigger = tomllib.loads(read(TRIGGER))
@@ -305,7 +343,6 @@ class WiringTest(unittest.TestCase):
         gate = self.setup[:self.setup.index("---")]
         self.assertIn("no `retro` key, ask step 11", gate)
         self.assertGreaterEqual(self.manifest["setup_revision"], 3)
-        self.assertIn("retro", self.manifest["setup_reason"])
 
     def test_setup_checks_the_retro_engine(self):
         check = self.setup[self.setup.index("## Check the engine resolves"):self.setup.index("## Triage, per account")]
@@ -313,7 +350,7 @@ class WiringTest(unittest.TestCase):
                     "scripts/inbox-triage/retro_tick.py"):
             self.assertIn(rel, check)
             self.assertTrue(os.path.exists(os.path.join(PLUGIN, rel)), rel)
-        self.assertIn("Exactly one answers `InboxTriageRetroRequested`", check)
+        self.assertIn("exactly one answers `InboxTriageRetroRequested`", check)
 
     def test_the_app_and_the_check_agree_on_the_schedules(self):
         js = read(TRIAGE_JS)

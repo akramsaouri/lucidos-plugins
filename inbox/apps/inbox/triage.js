@@ -16,9 +16,10 @@
   const M = window.Mail;
   const A = M.ACCOUNTS;
   const CFG = 'artifacts/email-triage/config.json';
-  /* Every action the config schema knows. A rule whose action, field or operator is missing here still offers it in
-   * the editor, so opening a rule and saving it can never quietly change it. */
-  const ACTIONS = ['skip', 'read', 'archive', 'delete', 'todo', 'calendar', 'notion', 'label', 'notify', 'flag', 'triage'];
+  /* Every action the triage engine (knowhow/inbox-triage.md) carries out. A rule whose action, field or operator is
+   * missing here, such as one a workspace added for its own integration, still offers it in the editor, so opening
+   * a rule and saving it can never quietly change it. */
+  const ACTIONS = ['skip', 'read', 'archive', 'delete', 'todo', 'label', 'notify', 'flag', 'triage'];
   const FIELDS = ['from', 'to', 'cc', 'subject', 'body'];
   const OPERATORS = ['contains', 'equals', 'regex'];
   /* What triage does with mail it decides needs no action (FYI or noise), phrased as the outcome. */

@@ -25,6 +25,8 @@ const ADDRESS = { 'gmail-personal': 'me@example.com', 'gmail-work': 'work@exampl
 const ACCOUNTS = ['personal', 'work', 'mailhost-work'];
 /* The engine files Inbox ships; the triage pane warns when one is gone. */
 const ENGINE = ['triggers/inbox-triage/intents/triage.md', 'knowhow/inbox-triage.md'];
+/* The IMAP bridge's snapshot of the password IMAP account's inbox. */
+const IMAP_SNAPSHOT = 'artifacts/inbox/cache/imap-mailhost-work.json';
 
 /* Recorded values come from the jsdom realm; a JSON copy compares cleanly with this one. */
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -35,11 +37,11 @@ function memStore() {
 }
 
 /* One inbox thread in Gmail's metadata shape. */
-function gmailThread(id, from, subject) {
+function gmailThread(id, from, subject, hoursAgo = 1) {
   return {
     id, historyId: '1',
     messages: [{
-      id: id + '-m1', threadId: id, internalDate: String(Date.now() - 3600e3), labelIds: ['INBOX', 'UNREAD'], snippet: subject,
+      id: id + '-m1', threadId: id, internalDate: String(Date.now() - hoursAgo * 3600e3), labelIds: ['INBOX', 'UNREAD'], snippet: subject,
       payload: { headers: [{ name: 'From', value: from }, { name: 'To', value: 'someone@example.com' }, { name: 'Subject', value: subject }] },
     }],
   };
@@ -49,7 +51,12 @@ async function boot(opts = {}) {
   const files = new Map([[CFG, opts.config || CONFIG], ['artifacts/inbox/settings.json', SETTINGS], ...ENGINE.map(p => [p, ''])]);
   for (const p of opts.drop || []) files.delete(p);
   for (const [p, text] of Object.entries(opts.files || {})) files.set(p, text);
+  if (opts.imap) files.set(IMAP_SNAPSHOT, JSON.stringify({ synced_at: new Date().toISOString(), messages: opts.imap }));
+  /* Proxy names in `fail` reject every call, checked per call so a test can break an account mid-run. */
+  const fail = new Set(opts.fail || []);
   const triggers = (opts.triggers || (t => t))(JSON.parse(JSON.stringify(TRIGGERS)));
+  const local = memStore();
+  for (const [k, v] of Object.entries(opts.storage || {})) local.setItem(k, v);
   const calls = [], toasts = [], sse = {};
   const inbox = opts.inbox || {};
   const html = fs.readFileSync(path.join(APP, 'index.html'), 'utf8').replace(/<script\b[^>]*\bsrc=[^>]*><\/script>/g, '');
@@ -66,7 +73,7 @@ async function boot(opts = {}) {
     },
     utils: { escapeHtml, escapeHtmlAttr: escapeHtml, timeAgo: () => 'a while ago', formatDate: t => String(t) },
     sse: { connect() {}, on: (type, fn) => (sse[type] = sse[type] || []).push(fn) },
-    storage: { ready: Promise.resolve(), local: memStore(), session: memStore() },
+    storage: { ready: Promise.resolve(), local, session: memStore() },
     data: {
       read: async p => { if (files.has(p)) return files.get(p); throw new Error('not found: ' + p); },
       write: async (p, content) => { calls.push({ kind: 'data.write', path: p, content }); files.set(p, content); return { success: true }; },
@@ -74,7 +81,11 @@ async function boot(opts = {}) {
     events: {
       query: async q => (q.event_type === 'EmailTriageCompleted' ? JSON.parse(JSON.stringify(EVENTS))
         : q.event_type === 'InboxTriageRetroCompleted' ? clone(opts.retroEvents || []) : []),
-      emit: async (type, payload) => { calls.push({ kind: 'events.emit', type, payload: clone(payload) }); return { success: true }; },
+      emit: async (type, payload) => {
+        calls.push({ kind: 'events.emit', type, payload: clone(payload) });
+        if (opts.failImap && type.startsWith('InboxImap')) throw new Error('bridge offline');
+        return { success: true };
+      },
     },
     triggers: {
       list: async () => { if (opts.failList) throw new Error('refused'); return JSON.parse(JSON.stringify(triggers)); },
@@ -93,6 +104,7 @@ async function boot(opts = {}) {
     },
     proxy: name => ({
       fetch: async (p, init = {}) => {
+        if (fail.has(name)) throw new Error('token expired');
         const method = String(init.method || 'GET').toUpperCase();
         if (method !== 'GET') { calls.push({ kind: 'proxy', name, method, path: p }); return res(200, {}); }
         const rest = p.replace('/gmail/v1/users/me', ''), threads = inbox[name] || [];
@@ -109,7 +121,7 @@ async function boot(opts = {}) {
   const $ = sel => w.document.querySelector(sel);
   const click = el => { assert.ok(el, 'element to click exists'); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); };
   const app = {
-    w, $, click, calls, toasts, files, triggers,
+    w, $, click, calls, toasts, files, triggers, fail,
     writes: (p = CFG) => calls.filter(c => c.kind === 'data.write' && c.path === p),
     emits: type => calls.filter(c => c.kind === 'events.emit' && c.type === type),
     async until(fn, what) {
@@ -531,5 +543,160 @@ test('a settings file that does not parse is never overwritten', async () => {
     assert.ok(sw.disabled);
     assert.match(app.$('#triage').textContent, /Can’t read the Retro setting/);
     assert.equal(app.writes(SETTINGS_PATH).length, 0);
+  } finally { await app.close(); }
+});
+
+/* Mail in every account, newest first: the IMAP account 1h, Work 2h, Personal 3h, Personal 5h. */
+const MIXED = {
+  inbox: {
+    'gmail-personal': [gmailThread('p-new', 'Anna <anna@example.com>', 'Dinner', 3), gmailThread('p-old', 'Bank <no-reply@bank.example>', 'Statement', 5)],
+    'gmail-work': [gmailThread('z-1', 'Ops <ops@example.com>', 'Release', 2)],
+  },
+  imap: [{ id: '42', from: 'Partner <partner@example.com>', to: 'team@example.net', subject: 'Contract', date: Date.now() - 3600e3, seen: false, snippet: 'Contract' }],
+};
+const ALL_KEYS = ['mailhost-work:42', 'work:z-1', 'personal:p-new', 'personal:p-old'];
+const listKeys = app => [...app.w.document.querySelectorAll('#list .row')].map(r => r.dataset.key);
+
+test('All inboxes merges Gmail and IMAP accounts newest first, each row tagged, and remembers the pick', async () => {
+  const app = await boot(MIXED);
+  try {
+    const side = [...app.w.document.querySelectorAll('#side [data-filter]')].map(b => b.dataset.filter);
+    assert.deepEqual(side, ['all', ...ACCOUNTS]);
+    const pills = [...app.w.document.querySelectorAll('#filters [data-filter]')].map(b => b.dataset.filter);
+    assert.deepEqual(pills, ['all', ...ACCOUNTS]);
+    /* A fresh open lands on the first account, untagged. */
+    await app.until(() => listKeys(app).length === 2, 'the Personal rows');
+    assert.equal(app.$('#list .row-acct'), null);
+
+    app.click(app.$('#side [data-filter="all"]'));
+    await app.until(() => listKeys(app).length === ALL_KEYS.length, 'the merged list');
+    assert.deepEqual([...listKeys(app)].sort(), [...ALL_KEYS].sort());
+    for (const sec of app.w.document.querySelectorAll('#list .sec')) {
+      const ks = [...sec.querySelectorAll('.row')].map(r => r.dataset.key);
+      assert.deepEqual(ks, ALL_KEYS.filter(k => ks.includes(k)), 'newest first within a zone');
+    }
+    const tag = k => app.$(`#list .row[data-key="${k}"] .row-acct`).textContent;
+    assert.deepEqual(ALL_KEYS.map(tag), ['Mailhost - Work', 'Work', 'Personal', 'Personal']);
+    assert.match(app.$('#head .eyebrow-text').textContent, /All inboxes/);
+    assert.equal(app.$('#filters [data-filter="all"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(app.w.lucidos.storage.local.getItem('inbox.filter'), 'all');
+
+    app.click(app.$('#side [data-filter="work"]'));
+    await app.until(() => listKeys(app).join() === 'work:z-1', 'the Work list');
+    assert.equal(app.$('#list .row-acct'), null);
+    assert.equal(app.w.lucidos.storage.local.getItem('inbox.filter'), 'work');
+  } finally { await app.close(); }
+});
+
+test('the last mailbox picked survives a reopen; one that no longer exists falls back to the first account', async () => {
+  const again = await boot(Object.assign({ storage: { 'inbox.filter': 'all' } }, MIXED));
+  try {
+    await again.until(() => listKeys(again).length === ALL_KEYS.length, 'the merged list');
+    assert.ok(again.$('#side .mbx-all .mbx-row.sel'));
+  } finally { await again.close(); }
+  const gone = await boot(Object.assign({ storage: { 'inbox.filter': 'an-account-since-removed' } }, MIXED));
+  try {
+    await gone.until(() => listKeys(gone).length === 2, 'the Personal rows');
+    assert.ok(gone.$('#side .mbx-row.sel [data-filter="personal"]'));
+  } finally { await gone.close(); }
+});
+
+test('All inboxes acts through the row\'s own account: an IMAP row goes to the bridge, never a Gmail proxy', async () => {
+  const app = await boot(Object.assign({ storage: { 'inbox.filter': 'all' } }, MIXED));
+  try {
+    await app.until(() => listKeys(app).length === ALL_KEYS.length, 'the merged list');
+    app.click(app.$('#list .row[data-key="work:z-1"]'));
+    app.click(await app.until(() => app.$('#reader [data-act="done"]'), 'the reader'));
+    await app.until(() => app.calls.some(c => c.kind === 'proxy'), 'the archive call');
+    assert.deepEqual(app.calls.filter(c => c.kind === 'proxy').map(c => [c.name, c.method, c.path]),
+      [['gmail-work', 'POST', '/gmail/v1/users/me/threads/z-1/modify']]);
+
+    app.click(await app.until(() => app.$('#list .row[data-key="mailhost-work:42"]'), 'the IMAP row'));
+    app.click(await app.until(() => app.$('#reader [data-act="done"]'), 'the IMAP reader'));
+    const [ev] = await app.until(() => app.emits('InboxImapActionRequested').length && app.emits('InboxImapActionRequested'), 'the bridge request');
+    assert.equal(ev.payload.op, 'archive');
+    assert.deepEqual(ev.payload.ids, ['42']);
+    assert.equal(ev.payload.account, 'Mailhost - Work');
+    assert.equal(app.calls.filter(c => c.kind === 'proxy').length, 1, 'no Gmail call for the IMAP row');
+  } finally { await app.close(); }
+});
+
+test('one failing account leaves the rest of All inboxes; all failing says so', async () => {
+  const app = await boot(Object.assign({ storage: { 'inbox.filter': 'all' } }, MIXED));
+  try {
+    await app.until(() => listKeys(app).length === ALL_KEYS.length, 'the merged list');
+    app.fail.add('gmail-work');
+    app.click(app.$('[data-act="refresh"]'));
+    await app.until(() => /Work: not loaded/.test(app.$('#fresh').textContent), 'the quiet error');
+    assert.match(app.$('#side .mbx-all .mbx-err').dataset.tooltip, /Not loaded: Work/);
+    assert.ok(app.$('#list .row[data-key="personal:p-new"]'));
+    assert.ok(app.$('#list .row[data-key="mailhost-work:42"]'));
+  } finally { await app.close(); }
+
+  const dead = await boot({ fail: ['gmail-personal', 'gmail-work'], failImap: true, storage: { 'inbox.filter': 'all' } });
+  try {
+    await dead.until(() => /Mailhost - Work: not loaded/.test(dead.$('#fresh').textContent), 'the IMAP error');
+    dead.click(dead.$('#side [data-filter="all"]'));
+    await dead.until(() => /Couldn't load any mailbox/.test(dead.$('#list').textContent), 'the all-failed state');
+    assert.ok(dead.$('#list [data-act="refresh"]'));
+  } finally { await dead.close(); }
+});
+
+test('pane count follows the room in theme rems, so a larger ui-scale drops panes', async () => {
+  const app = await boot();
+  try {
+    const root = app.w.document.documentElement, body = app.w.document.body.classList;
+    let width = 1280;
+    Object.defineProperty(root, 'clientWidth', { configurable: true, get: () => width });
+    const panes = () => [body.contains('split'), body.contains('tri')];
+    root.style.fontSize = '16px';
+    app.w.dispatchEvent(new app.w.Event('resize'));
+    assert.deepEqual(panes(), [true, true], '80rem: mailboxes, list and reader');
+    width = 1000;
+    app.w.dispatchEvent(new app.w.Event('resize'));
+    assert.deepEqual(panes(), [true, false], '62.5rem: list and reader');
+    /* The same window at a larger ui-scale: the root grows, the room in rems shrinks. No resize event fires. */
+    root.style.fontSize = '20px';
+    await app.until(() => !body.contains('split'), 'the phone layout');
+    assert.deepEqual(panes(), [false, false], '50rem: one pane');
+  } finally { await app.close(); }
+});
+
+test('reason lines name the label and archive actions, and a label rule keeps the mail', async () => {
+  const cfg = JSON.parse(CONFIG);
+  cfg.accounts['Gmail - Work'].rules.unshift(
+    { action: 'label', condition: { field: 'from', operator: 'contains', value: 'ci@builds.example' }, label: 'Builds' },
+    { action: 'archive', condition: { field: 'subject', operator: 'contains', value: 'Weekly digest' } });
+  const app = await boot({
+    config: JSON.stringify(cfg, null, 2),
+    inbox: { 'gmail-work': [gmailThread('t-ci', 'CI Bot <ci@builds.example>', 'Build passed'), gmailThread('t-dg', 'News <news@example.com>', 'Weekly digest')] },
+  });
+  try {
+    app.click(app.$('[data-filter="work"]'));
+    const row = k => app.$(`#list .row[data-key="${k}"]`);
+    await app.until(() => row('work:t-ci') && row('work:t-dg'), 'the Work rows');
+    assert.match(row('work:t-ci').textContent, /Your rules would label it “Builds”/);
+    assert.match(row('work:t-dg').textContent, /Your rules would archive it/);
+  } finally { await app.close(); }
+});
+
+test('a new rule offers only actions the engine carries out; a rule using another action keeps it', async () => {
+  const cfg = JSON.parse(CONFIG);
+  cfg.accounts['Gmail - Work'].rules.unshift({ action: 'calendar', condition: { field: 'subject', operator: 'contains', value: 'Invitation' } });
+  const app = await boot({ config: JSON.stringify(cfg, null, 2) });
+  try {
+    const options = () => [...app.$('#t-ed-action').options].map(o => o.value);
+    await app.openTriage('work');
+    app.click(app.$('[data-t-add]'));
+    await app.until(() => app.$('#t-ed-action'), 'the new-rule editor');
+    for (const a of ['archive', 'label', 'read', 'delete', 'triage']) assert.ok(options().includes(a), a);
+    for (const a of ['calendar', 'notion']) assert.ok(!options().includes(a), a);
+    app.click(app.$('[data-t-cancel]') || app.$('[data-t-add]'));
+    await app.until(() => !app.$('#t-ed-action'), 'the editor closes');
+
+    app.click(await app.until(() => app.$('[data-t-edit="0"]'), 'the calendar rule'));
+    await app.until(() => app.$('#t-ed-action'), 'the editor');
+    assert.equal(app.$('#t-ed-action').value, 'calendar');
+    assert.ok(options().includes('calendar'));
   } finally { await app.close(); }
 });

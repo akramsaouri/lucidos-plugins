@@ -3,6 +3,7 @@
   "description": "How many emails need you across your accounts. Tap to open the Inbox.",
   "icon": "assets/icon.svg",
   "kind": "widget",
+  "reveal": "on-ready",
   "reusable": true,
   "origin_plugin_id": "inbox",
   "params": {
