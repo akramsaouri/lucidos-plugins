@@ -9,6 +9,12 @@
 - **Setup spots triggers that would fire twice**: an on-demand triage, IMAP bridge or scheduled retro made
   before Inbox. It asks which to keep, and changes nothing without an answer. It also moves reply voices and
   the AI model from an older hand-built Inbox's settings into the current shape.
+- **Archive works end to end.** The Triage pane offered "Archive it" for no-action mail, and archive and label
+  rules, but the triage engine had no such actions. Now it does: `archive` takes mail out of the inbox and
+  marks it read without trashing it (on Gmail and on password IMAP, through a new `imap_helper.py archive`),
+  and `label` files Gmail mail under a label, then triages it. The retro brings archived IMAP mail back too.
+  New rules no longer offer calendar or Notion, which the engine never ran; a rule that already uses one
+  still shows it, and triage now flags such mail to you instead of guessing.
 - **The layout follows your UI scale.** Inbox picks one, two or three panes from the room it has in theme
   units, so a larger UI scale drops to fewer panes instead of squeezing the reader.
 - Touch screens no longer keep a stuck hover after a tap.

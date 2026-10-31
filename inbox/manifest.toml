@@ -113,8 +113,9 @@ Per account the user wants triaged:
    it.
 
 3. **Ask what happens to mail the AI judges as needing nothing**: the account's `no_action_clear`, `read` (mark
-   read, keep), `delete` (Trash), or `keep`. Recommend `read` for a shared or work mailbox where deleting could
-   bury someone else's mail, `delete` for a personal one that gets a lot of noise.
+   read, keep), `archive` (out of the inbox and read, never trashed), `delete` (Trash), or `keep`. Recommend
+   `read` or `archive` for a shared or work mailbox where deleting could bury someone else's mail, `delete` for a
+   personal one that gets a lot of noise.
 
 4. **Ask for a schedule and create the cron trigger.** Cron is workspace state, so it is deliberately not
    shipped: you create it. First check `lucidos triggers list` for one that already runs triage for this

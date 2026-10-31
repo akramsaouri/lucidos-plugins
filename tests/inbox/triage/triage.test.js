@@ -679,3 +679,24 @@ test('reason lines name the label and archive actions, and a label rule keeps th
     assert.match(row('work:t-dg').textContent, /Your rules would archive it/);
   } finally { await app.close(); }
 });
+
+test('a new rule offers only actions the engine carries out; a rule using another action keeps it', async () => {
+  const cfg = JSON.parse(CONFIG);
+  cfg.accounts['Gmail - Work'].rules.unshift({ action: 'calendar', condition: { field: 'subject', operator: 'contains', value: 'Invitation' } });
+  const app = await boot({ config: JSON.stringify(cfg, null, 2) });
+  try {
+    const options = () => [...app.$('#t-ed-action').options].map(o => o.value);
+    await app.openTriage('work');
+    app.click(app.$('[data-t-add]'));
+    await app.until(() => app.$('#t-ed-action'), 'the new-rule editor');
+    for (const a of ['archive', 'label', 'read', 'delete', 'triage']) assert.ok(options().includes(a), a);
+    for (const a of ['calendar', 'notion']) assert.ok(!options().includes(a), a);
+    app.click(app.$('[data-t-cancel]') || app.$('[data-t-add]'));
+    await app.until(() => !app.$('#t-ed-action'), 'the editor closes');
+
+    app.click(await app.until(() => app.$('[data-t-edit="0"]'), 'the calendar rule'));
+    await app.until(() => app.$('#t-ed-action'), 'the editor');
+    assert.equal(app.$('#t-ed-action').value, 'calendar');
+    assert.ok(options().includes('calendar'));
+  } finally { await app.close(); }
+});

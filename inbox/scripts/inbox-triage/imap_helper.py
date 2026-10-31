@@ -2,8 +2,9 @@
 """IMAP helper for triage accounts with `"fetch": "imap"` (no Gmail API, no OAuth).
 
 Never marks mail read as a side effect: `list` and `peek` open the mailbox
-read-only (EXAMINE) and every fetch uses BODY.PEEK[]. Only `mark-read` sets
-\\Seen, `trash` moves mail to Trash, and `restore` (the triage retro's) moves it back.
+read-only (EXAMINE) and every fetch uses BODY.PEEK[]. Only `mark-read` and
+`archive` set \\Seen (`archive` then moves the mail to the Archive folder), `trash`
+moves it to Trash, and `restore` (the triage retro's) moves it back from either.
 
 Messages are addressed by their Message-ID header, which survives sessions and
 folder moves. IMAP UIDs are resolved inside the session, right before a write,
@@ -14,18 +15,21 @@ Usage (cwd = workspace root):
   python data/scripts/inbox-triage/imap_helper.py list      --account NAME [--since YYYY-MM-DD | --unseen]
   python data/scripts/inbox-triage/imap_helper.py peek      --account NAME --id '<abc@host>'
   python data/scripts/inbox-triage/imap_helper.py mark-read --account NAME --id '<abc@host>' [--id ...]
+  python data/scripts/inbox-triage/imap_helper.py archive   --account NAME --id '<abc@host>' [--id ...]
   python data/scripts/inbox-triage/imap_helper.py trash     --account NAME --id '<abc@host>' [--id ...]
   python data/scripts/inbox-triage/imap_helper.py peek      --account NAME --from-trash --id '<abc@host>'
-  python data/scripts/inbox-triage/imap_helper.py restore   --account NAME --id '<abc@host>' [--id ...]
+  python data/scripts/inbox-triage/imap_helper.py peek      --account NAME --from-archive --id '<abc@host>'
+  python data/scripts/inbox-triage/imap_helper.py restore   --account NAME [--from-archive] --id '<abc@host>' [--id ...]
 
 `list` prints JSON [{id, from, to, cc, subject, date, seen, snippet}], oldest
 first, capped at --limit. `peek` prints one JSON line per id with the body text.
-`mark-read` / `trash` / `restore` print one JSON line per id with `ok`, and exit 1 if any failed.
-`restore` moves a message from Trash back to the inbox and clears \\Seen, so it comes back unread.
+`mark-read` / `archive` / `trash` / `restore` print one JSON line per id with `ok`, and exit 1 if any failed.
+`restore` moves a message from Trash (or, with --from-archive, the Archive folder) back to the inbox and
+clears \\Seen, so it comes back unread.
 
 Connection settings come from the account's `imap` block in
 data/artifacts/email-triage/config.json:
-  {"host", "port", "ssl", "username", "credential_env", "mailbox", "trash_folder"}
+  {"host", "port", "ssl", "username", "credential_env", "mailbox", "trash_folder", "archive_folder"}
 Any of them can be given (or overridden) on the command line instead.
 `username` defaults to the account's `address`; `credential_env` names the env
 var holding the mailbox password.
@@ -34,7 +38,7 @@ import argparse, datetime as dt, email, imaplib, json, os, re, sys
 from email.header import decode_header, make_header
 
 CONFIG = os.path.join(os.environ.get("LUCIDOS_WORKSPACE", "."), "data/artifacts/email-triage/config.json")
-FIELDS = ("host", "port", "ssl", "username", "credential_env", "mailbox", "trash_folder")
+FIELDS = ("host", "port", "ssl", "username", "credential_env", "mailbox", "trash_folder", "archive_folder")
 
 
 def q(s):
@@ -110,14 +114,23 @@ def uids_for(M, msgid):
     return [u.decode() for u in d[0].split()] if typ == "OK" and d and d[0] else []
 
 
-def trash_folder(M, c):
-    """The \\Trash SPECIAL-USE folder (RFC 6154), else the configured fallback."""
+def special_folder(M, c, use):
+    """The folder the server flags \\Trash or \\Archive (RFC 6154 SPECIAL-USE), else the configured fallback."""
+    flag = b"\\" + use.encode()
     typ, lines = M.list()
     for line in lines if typ == "OK" else []:
         m = isinstance(line, bytes) and re.match(rb'\(([^)]*)\) (?:"[^"]*"|NIL) (.+)$', line)
-        if m and b"\\trash" in m.group(1).lower().split():
+        if m and flag in m.group(1).lower().split():
             return q(m.group(2).decode())
-    return q(c.get("trash_folder", "Trash"))
+    return q(c.get(f"{use}_folder", use.capitalize()))
+
+
+def trash_folder(M, c):
+    return special_folder(M, c, "trash")
+
+
+def archive_folder(M, c):
+    return special_folder(M, c, "archive")
 
 
 def cmd_list(M, c, criteria, limit):
@@ -140,8 +153,9 @@ def cmd_list(M, c, criteria, limit):
     return 0
 
 
-def cmd_peek(M, c, ids, from_trash=False):
-    M.select(trash_folder(M, c) if from_trash else q(c.get("mailbox", "INBOX")), readonly=True)
+def cmd_peek(M, c, ids, from_trash=False, from_archive=False):
+    folder = trash_folder(M, c) if from_trash else archive_folder(M, c) if from_archive else q(c.get("mailbox", "INBOX"))
+    M.select(folder, readonly=True)
     for i in ids:
         uids = uids_for(M, i)
         typ, r = M.uid("FETCH", uids[-1], "(BODY.PEEK[])") if uids else ("NO", None)
@@ -172,27 +186,29 @@ def move(M, caps, uids, dest):
 def cmd_write(M, c, ids, action):
     M.select(q(c.get("mailbox", "INBOX")))  # read-write
     caps = M.capability()[1][0].decode().upper().split()
-    trash = trash_folder(M, c) if action == "trash" else None
+    dest = trash_folder(M, c) if action == "trash" else archive_folder(M, c) if action == "archive" else None
     failed = 0
     for i in ids:
         uids = uids_for(M, i)
         if not uids:
             ok, err = False, "not found"
-        elif action == "mark-read":
+        elif action in ("mark-read", "archive"):
             ok, err = M.uid("STORE", ",".join(uids), "+FLAGS.SILENT", r"(\Seen)")[0] == "OK", "STORE failed"
+            if ok and action == "archive":  # read first, so a failed move still leaves it read, never lost
+                ok, err = move(M, caps, uids, dest)
         else:
-            ok, err = move(M, caps, uids, trash)
+            ok, err = move(M, caps, uids, dest)
         failed += not ok
         print(json.dumps({"id": i, "ok": ok, "action": action, **({"error": err} if not ok else {})}))
     return 1 if failed else 0
 
 
-def cmd_restore(M, c, ids):
-    """The triage retro's undo of `trash`: back to the inbox, unread."""
+def cmd_restore(M, c, ids, from_archive=False):
+    """The triage retro's undo of `trash` (or, from_archive, of `archive`): back to the inbox, unread."""
     caps = M.capability()[1][0].decode().upper().split()
-    trash, inbox = trash_folder(M, c), q(c.get("mailbox", "INBOX"))
+    source, inbox = (archive_folder if from_archive else trash_folder)(M, c), q(c.get("mailbox", "INBOX"))
     results = {}
-    M.select(trash)  # read-write
+    M.select(source)  # read-write
     for i in ids:
         uids = uids_for(M, i)
         results[i] = move(M, caps, uids, inbox) if uids else (False, "not found")
@@ -212,7 +228,7 @@ def cmd_restore(M, c, ids):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  epilog="Never use read_email on these accounts: it sets \\Seen.")
-    ap.add_argument("cmd", choices=["list", "peek", "mark-read", "trash", "restore"])
+    ap.add_argument("cmd", choices=["list", "peek", "mark-read", "archive", "trash", "restore"])
     ap.add_argument("--account", help="account name (key under `accounts` in config.json)")
     ap.add_argument("--since", help="list: YYYY-MM-DD, default today - 2 days")
     ap.add_argument("--unseen", action="store_true", help="list: every unread message instead of a date window")
@@ -226,7 +242,10 @@ def main():
     ap.add_argument("--credential-env", help="env var holding the mailbox password")
     ap.add_argument("--mailbox", help="default INBOX")
     ap.add_argument("--trash-folder", help="used only when the server has no \\Trash SPECIAL-USE folder")
+    ap.add_argument("--archive-folder", help="used only when the server has no \\Archive SPECIAL-USE folder")
     ap.add_argument("--from-trash", action="store_true", help="peek: read the message in Trash instead of the inbox")
+    ap.add_argument("--from-archive", action="store_true",
+                    help="peek: read the message in the Archive folder; restore: bring it back from there, not Trash")
     a = ap.parse_args()
     if a.cmd != "list" and not a.id:
         ap.error(f"{a.cmd} needs at least one --id")
@@ -238,9 +257,9 @@ def main():
             since = dt.date.fromisoformat(a.since) if a.since else dt.date.today() - dt.timedelta(days=2)
             return cmd_list(M, c, ["UNSEEN"] if a.unseen else ["SINCE", since.strftime("%d-%b-%Y")], a.limit)
         if a.cmd == "peek":
-            return cmd_peek(M, c, a.id, a.from_trash)
+            return cmd_peek(M, c, a.id, a.from_trash, a.from_archive)
         if a.cmd == "restore":
-            return cmd_restore(M, c, a.id)
+            return cmd_restore(M, c, a.id, a.from_archive)
         return cmd_write(M, c, a.id, a.cmd)
     finally:
         M.logout()
