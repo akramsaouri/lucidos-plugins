@@ -345,7 +345,8 @@ about it; filtering to unread is the consumer's job, not the snapshot's.
   through the script instead of `read_emails`.
 - **`oauth_provider`** — omit for password auth, where the script falls back to
   `CRED_<NAME>_PASSWORD` / `CRED_<NAME>`. With it set, the script uses XOAUTH2
-  with `OAUTH_<PROVIDER>_ACCESS_TOKEN`, which the engine injects and refreshes.
+  with `OAUTH_<PROVIDER>_ACCESS_TOKEN`, which the engine injects and refreshes once
+  `scripts/inbox-triage/imap_credentials.py` names it (see "IMAP Accounts" below).
 - **`imap_host`** is required; `imap_port` defaults to 993.
 
 ### Snapshot file
@@ -419,9 +420,17 @@ goes through the helper instead.
 
 - **`host`** and **`credential_env`** are required. Everything else is optional.
 - **`credential_env`** is the *name* of the env var that holds the mailbox password, never
-  the password itself. `configure_email` stores the password as a credential, and the
-  engine injects it into every subprocess as `CRED_<NAME>`. Copy the exact name from the
-  list of names (never values): `env | cut -d= -f1 | grep '^CRED_'`.
+  the password itself. `configure_email` stores the password as a credential named
+  `CRED_<NAME>`. Copy the exact name from `lucidos credentials list`, which prints names,
+  never values.
+- **The name must also be listed in `imap_credentials.py`.** The engine hands a script a
+  credential only when the script, or a `.py` file beside it, names it, and the helpers read
+  `credential_env` at run time. So setup writes `data/scripts/inbox-triage/imap_credentials.py`
+  and `data/apps/inbox/scripts/imap_credentials.py`, each holding one line,
+  `# lucidos-credentials: CRED_A CRED_B`, naming every IMAP account's `credential_env` (and,
+  for `imap-peek` accounts, the `OAUTH_<PROVIDER>_ACCESS_TOKEN` or `CRED_<NAME>` the snapshot
+  script reads). Both are workspace files the plugin doesn't ship, so an update leaves them
+  alone. A helper that stops with "env var … is not set" usually means a name is missing there.
 - **`port`** defaults to 993. **`ssl: false`** means STARTTLS on port 143 by default; the
   helper never logs in over plaintext.
 - **`username`** defaults to the account's `address`.

@@ -72,7 +72,8 @@ def settings(a):
 def connect(c):
     password = os.environ.get(c["credential_env"])
     if not password:
-        sys.exit(f"env var {c['credential_env']} is not set: add the mailbox password as a credential")
+        sys.exit(f"env var {c['credential_env']} is not set: add the mailbox password as a credential, and list its "
+                 "name in scripts/inbox-triage/imap_credentials.py (re-run Inbox setup) so the engine injects it")
     if c.get("ssl", True):
         M = imaplib.IMAP4_SSL(c["host"], int(c.get("port", 993)))
     else:  # never send the password in the clear: plain port means STARTTLS

@@ -305,7 +305,6 @@ class WiringTest(unittest.TestCase):
         gate = self.setup[:self.setup.index("---")]
         self.assertIn("no `retro` key, ask step 11", gate)
         self.assertGreaterEqual(self.manifest["setup_revision"], 3)
-        self.assertIn("retro", self.manifest["setup_reason"])
 
     def test_setup_checks_the_retro_engine(self):
         check = self.setup[self.setup.index("## Check the engine resolves"):self.setup.index("## Triage, per account")]
@@ -313,7 +312,7 @@ class WiringTest(unittest.TestCase):
                     "scripts/inbox-triage/retro_tick.py"):
             self.assertIn(rel, check)
             self.assertTrue(os.path.exists(os.path.join(PLUGIN, rel)), rel)
-        self.assertIn("Exactly one answers `InboxTriageRetroRequested`", check)
+        self.assertIn("exactly one answers `InboxTriageRetroRequested`", check)
 
     def test_the_app_and_the_check_agree_on_the_schedules(self):
         js = read(TRIAGE_JS)

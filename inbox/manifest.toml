@@ -1,5 +1,5 @@
 id = "inbox"
-version = "1.1.0"
+version = "1.2.0"
 name = "Inbox"
 description = "A smart inbox for all your mailboxes, with triage built in: your rules first, then AI, sort each mailbox on a schedule, and what needs you sits apart from the rest with the reason it was kept. A retro re-checks what triage cleared and brings back what you'd want. Install Inbox, that's all: setup connects your mailboxes and schedules triage."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/inbox"
@@ -7,8 +7,8 @@ engine = ">=0.48.0"
 categories = ["productivity", "communication", "automation"]
 icon = "media/icon.svg"
 screenshots = ["media/list.png", "media/all-inboxes.png", "media/reply.png", "media/triage.png"]
-setup_revision = 3
-setup_reason = "Inbox 1.1.0 adds the triage retro: setup asks whether to turn it on and how often, and adds its schedule check."
+setup_revision = 4
+setup_reason = "Inbox 1.2.0 names each IMAP account's credential where the engine finds it, so the IMAP bridge can log in, and checks for triggers made before Inbox that would fire twice."
 
 setup = """
 **Every run starts with "Check the engine resolves" below**, even when nothing else needs doing.
@@ -20,10 +20,17 @@ line and stop. If only some of it is there (an earlier setup stopped partway), t
 the user what is already in place and that you're doing only the rest. Skip steps 1-5 for an account already in
 `config.json` with its cron, run step 6 only for Gmail accounts with no recorded proxy, and skip every other step
 whose answer is already in the settings. **One exception: when the settings have no `retro` key, ask step 11 (the
-triage retro) before you stop**, even when everything else is in place. Do the same when the settings file is missing but a
+triage retro) before you stop**, even when everything else is in place. **And on every run, do "Credentials for
+IMAP accounts", "Triggers that would fire twice" and "Settings from an older Inbox" below before you stop**:
+each checks what is there and changes nothing when it is already right. Do the same when the settings file is missing but a
 `data/config/apis.json` proxy already passes step 6's check for some accounts: record those and carry on from
 there. Never ask again for what `config.json` or the settings already answer.
 
+- **Updating to 1.2.0:** The engine hands a script a credential only when a file names it, and the IMAP
+  bridge and triage helpers read each account's password by a name from `config.json`, so on current engines
+  they could not log in. Run "Credentials for IMAP accounts", which writes the names where the engine finds
+  them. Then run "Triggers that would fire twice" and "Settings from an older Inbox". Nothing else changed in
+  setup.
 - **Updating to 1.1.0:** Inbox adds the triage retro, which goes back over the mail triage archived or trashed,
   restores what the user would want to see and suggests rule changes. After the engine check, ask step 11 if the
   settings have no `retro` key, and do nothing else that is already in place. From this release triage logs every
@@ -63,8 +70,9 @@ Two rules hold throughout:
   `triggers(action="update")` to run `triggers/inbox-triage/intents/triage.md` (and `knowhow/inbox-triage.md`,
   `scripts/inbox-triage/` for any knowhow or script it names), keeping the rest of its text, its schedule, name
   and settings. Never recreate, pause or delete one.
-- Exactly one trigger answers `EmailTriageRequested`: "Inbox — triage on demand". Exactly one answers
-  `InboxTriageRetroRequested`: "Inbox — triage retro", which also ships with this plugin.
+- Exactly one unpaused trigger answers `EmailTriageRequested`, and exactly one answers
+  `InboxTriageRetroRequested`. Inbox ships "Inbox — triage on demand" and "Inbox — triage retro" for them. When
+  a trigger the user made before Inbox answers one too, "Triggers that would fire twice" settles which runs.
 - `artifacts/email-triage/config.json` is untouched. Don't rewrite it as part of this check.
 
 **If an Inbox engine file is missing** (deleted by hand, say), restore it from the workspace history:
@@ -93,7 +101,8 @@ Per account the user wants triaged:
    2. In the account's block in `artifacts/email-triage/config.json`, set `"fetch": "imap"` and add
       `"imap": {"host", "port", "ssl", "username"}` (username defaults to the address).
    3. Set `"credential_env"` in that block to the credential's env var *name*: list the names, never the values,
-      with `env | cut -d= -f1 | grep '^CRED_'`.
+      with `lucidos credentials list`.
+   4. Add that name to the credential files ("Credentials for IMAP accounts" below), or the helper can't log in.
 
    Check it with `python data/scripts/inbox-triage/imap_helper.py list --account "<name>"`, which is read-only.
    The "IMAP Accounts" section of `knowhow/inbox-triage.md` has the full schema and commands.
@@ -150,8 +159,8 @@ Per account the user wants triaged:
 
 7. **Each IMAP account** (`"fetch": "imap"`) goes through the "Inbox — IMAP bridge" trigger this plugin
    registered at install. Confirm it is live and unpaused in `lucidos triggers list`. Check that the account's
-   `imap` block names a `credential_env` that exists: list the names with `env | cut -d= -f1 | grep '^CRED_'` and
-   never print a value. Replies go out over SMTP with the same username and password. The bridge assumes SMTP at
+   `imap` block names a `credential_env` that exists: list the names with `lucidos credentials list`, which
+   never prints a value, and that "Credentials for IMAP accounts" below lists it. Replies go out over SMTP with the same username and password. The bridge assumes SMTP at
    `smtp.<domain>` when the IMAP host is `imap.<domain>`, and the IMAP host itself otherwise, on port 465. If the
    provider differs, add `smtp_host` (and `smtp_port`; 587 means STARTTLS) to that `imap` block. To prove it
    works, run
@@ -161,7 +170,59 @@ Per account the user wants triaged:
    don't test those from here.)
 
 8. **Accounts Inbox can't read yet** (`"fetch": "imap-peek"`, OAuth IMAP such as Outlook): tell the user they
-   are triaged as usual and show in the sidebar with the reason, and that nothing else is needed.
+   are triaged as usual and show in the sidebar with the reason. Their triage needs only "Credentials for IMAP
+   accounts" below.
+
+## Credentials for IMAP accounts
+
+The engine hands a script a credential only when the script, or a `.py` file beside it, names it. The IMAP
+bridge and the triage helpers read each account's password by the name in its `config.json` block, which no
+shipped file can know, so two workspace files name them. Inbox doesn't ship them, so updates leave them alone.
+
+Collect the names from `artifacts/email-triage/config.json`: every `"fetch": "imap"` account's
+`imap.credential_env`, and for every `"fetch": "imap-peek"` account `OAUTH_<PROVIDER>_ACCESS_TOKEN` (its
+`oauth_provider`, upper-cased, with `-` as `_`) or, with no `oauth_provider`, the `CRED_<NAME>` its password is
+stored under. Check each against `lucidos credentials list`, and tell the user about any that doesn't exist.
+
+Then make each of these files hold exactly one line, `# lucidos-credentials: ` and the names, space-separated
+and sorted:
+
+- `data/apps/inbox/scripts/imap_credentials.py`, beside the IMAP bridge (only `"fetch": "imap"` names)
+- `data/scripts/inbox-triage/imap_credentials.py`, beside the triage helpers (every name above)
+
+Write a file only when its line differs, and never with a credential's value. With no IMAP or imap-peek
+accounts, write neither. When an `"imap"` account exists, prove the bridge can log in: emit the sync in step 7
+and look for `ok: true`.
+
+## Triggers that would fire twice
+
+Inbox registered "Inbox — triage on demand", "Inbox — IMAP bridge" and "Inbox — triage retro" at install. A
+workspace that ran triage, an IMAP bridge or a retro before Inbox may have its own trigger for the same job,
+and then both fire. In `lucidos triggers list`, look for a trigger that is not one of those three and:
+
+- **answers `EmailTriageRequested`**: one Triage now would run two triage passes on the same mailbox. Ask
+  which to keep. Recommend theirs when it runs triage knowhow of their own (rule actions or integrations
+  `knowhow/inbox-triage.md` doesn't have), since their crons run the same; then pause "Inbox — triage on
+  demand". Otherwise recommend Inbox's, and delete theirs once they confirm.
+- **runs `apps/inbox/scripts/imap_bridge.py`, or answers `InboxImapSyncRequested` or
+  `InboxImapActionRequested`**: two bridges. The bridge answers each request once, so nothing is sent twice,
+  but every sync runs twice. Offer to delete theirs: Inbox's runs the same script, with the device-only guard
+  on writes.
+- **runs a triage retro on a schedule** (a cron whose intent goes back over mail triage archived or trashed):
+  with Inbox's retro on too, two retros run. Ask which to keep. Keeping theirs means writing
+  `"retro": {"enabled": false}` to the settings and skipping step 11's question. Keeping Inbox's means
+  deleting theirs and offering the schedule nearest to it in step 11.
+
+Change nothing without the user's answer, and never touch a per-account cron here: step 4 already reuses
+those. Tell the user in one line when nothing collides.
+
+## Settings from an older Inbox
+
+An Inbox built by hand before this plugin may have left `artifacts/inbox/settings.json` with a top-level
+`voices` map (short account keys, each with `voice`, `signature`, `from_name`) or an `ai_model`. Inbox reads
+neither. Move each `voices.<key>` into `accounts["<config account name>"]`, matching the key to the account
+whose name, slug or address it plainly means and asking the user about any you can't match, and `ai_model`
+into `ai.model`. Keep every other key, and drop the old ones only once they're moved.
 
 ## Once for the workspace
 

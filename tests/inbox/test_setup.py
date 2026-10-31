@@ -80,7 +80,8 @@ class SetupTest(unittest.TestCase):
             self.assertIn(path, check)
             self.assertTrue(os.path.exists(os.path.join(PLUGIN, path)), path)
         self.assertIn("no per-account cron names a file that is missing", check)
-        self.assertIn("Exactly one trigger answers `EmailTriageRequested`", check)
+        self.assertIn("Exactly one unpaused trigger answers `EmailTriageRequested`", check)
+        self.assertIn('"Triggers that would fire twice" settles which runs', check)
 
     def test_new_crons_run_inbox_engine(self):
         cron = self.setup[self.setup.index("create the cron trigger"):self.setup.index("**Write the account into")]
@@ -90,7 +91,47 @@ class SetupTest(unittest.TestCase):
     def test_a_raised_setup_revision_says_why(self):
         self.assertGreaterEqual(self.manifest["setup_revision"], 1)
         self.assertLessEqual(len(self.manifest["setup_reason"]), 200)
-        self.assertIn("retro", self.manifest["setup_reason"])
+        self.assertIn("credential", self.manifest["setup_reason"])
+
+    def section(self, title):
+        start = self.setup.index(f"## {title}")
+        return self.setup[start:self.setup.index(" ## ", start + 1)]
+
+    def test_imap_credentials_are_named_where_the_engine_finds_them(self):
+        # The engine injects a credential into a script only when the script or a .py beside it names it, and
+        # every IMAP account's `credential_env` is read at run time, so setup writes the names beside each script.
+        creds = self.section("Credentials for IMAP accounts")
+        for must in ("data/apps/inbox/scripts/imap_credentials.py", "data/scripts/inbox-triage/imap_credentials.py",
+                     "# lucidos-credentials: ", "imap.credential_env", "OAUTH_<PROVIDER>_ACCESS_TOKEN",
+                     "lucidos credentials list", "never with a credential's value"):
+            self.assertIn(must, creds)
+        # The shipped scripts sit beside those files, and the plugin never ships the files themselves.
+        self.assertTrue(os.path.exists(os.path.join(PLUGIN, "apps", "inbox", "scripts", "imap_bridge.py")))
+        self.assertTrue(os.path.exists(os.path.join(PLUGIN, "scripts", "inbox-triage", "imap_helper.py")))
+        for rel in ("apps/inbox/scripts/imap_credentials.py", "scripts/inbox-triage/imap_credentials.py"):
+            self.assertFalse(os.path.exists(os.path.join(PLUGIN, rel)), rel)
+        # Every run does it, and nothing tells the agent to list names with env any more: that finds none.
+        gate = self.setup[:self.setup.index("---")]
+        self.assertIn('do "Credentials for IMAP accounts"', gate)
+        self.assertNotIn("env | cut", self.setup)
+
+    def test_setup_settles_triggers_that_would_fire_twice(self):
+        twice = self.section("Triggers that would fire twice")
+        for name in ("Inbox — triage on demand", "Inbox — IMAP bridge", "Inbox — triage retro"):
+            self.assertIn(name, twice)
+            self.assertIn(f'name = "{name}"', "".join(
+                read(os.path.join(PLUGIN, "triggers", d, "trigger.toml")) for d in os.listdir(os.path.join(PLUGIN, "triggers"))
+                if os.path.exists(os.path.join(PLUGIN, "triggers", d, "trigger.toml"))))
+        for must in ("`EmailTriageRequested`", "`InboxImapActionRequested`", "apps/inbox/scripts/imap_bridge.py",
+                     '"retro": {"enabled": false}', "Change nothing without the user's answer",
+                     "never touch a per-account cron"):
+            self.assertIn(must, twice)
+
+    def test_settings_from_an_older_inbox_are_moved_not_dropped(self):
+        old = self.section("Settings from an older Inbox")
+        for must in ("`voices`", "`ai_model`", 'accounts["<config account name>"]', "`ai.model`",
+                     "drop the old ones only once they're moved"):
+            self.assertIn(must, old)
 
     def test_the_newest_update_note_is_this_minor_release(self):
         # A patch release that leaves setup alone adds no note (rewording setup would ask for a re-run), but a
