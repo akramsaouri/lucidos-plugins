@@ -114,8 +114,21 @@
     chevD: '<path d="m6 9 6 6 6-6"/>',
   };
   const ic = n => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
-  const wide = () => matchMedia('(min-width: 56rem)').matches;
-  const three = () => matchMedia('(min-width: 72rem)').matches;
+  /* Layout is decided by room in theme rems (the root font size carries ui-scale), so a scaled-up UI drops to the
+   * phone layout instead of squeezing the reader. The reader needs ~38rem beside a ~22rem list; mailboxes add 14rem. */
+  const SPLIT_REM = 60, TRI_REM = 74;
+  function layout() {
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const w = document.documentElement.clientWidth / rem;
+    const b = document.body.classList;
+    const was = [b.contains('split'), b.contains('tri')];
+    b.toggle('split', w >= SPLIT_REM);
+    b.toggle('tri', w >= TRI_REM);
+    return was[0] !== b.contains('split') || was[1] !== b.contains('tri');
+  }
+  layout();
+  const wide = () => document.body.classList.contains('split');
+  const three = () => document.body.classList.contains('tri');
   const initial = s => { const m = String(s || '').match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '•'; };
   const viewKey = () => S.view && S.view.account + '|' + S.view.id;
   const folderNow = () => (S.view && S.folderData.get(viewKey())) || null;
@@ -1295,7 +1308,17 @@
   })();
 
 
-  matchMedia('(min-width: 72rem)').addEventListener('change', () => { if (three()) closeMbx(); renderHead(); renderTriage(); });
+  /* Re-measure on resize and when ui-scale/font changes the root size; only act when the pane count changed. */
+  function relayout() {
+    const wasWide = wide();
+    if (!layout()) return;
+    if (three()) closeMbx();
+    if (wasWide !== wide()) window.scrollTo(0, 0);
+    renderHead();
+    renderTriage();
+  }
+  window.addEventListener('resize', relayout);
+  new MutationObserver(relayout).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-ui-scale', 'data-font'] });
 
   lucidos.sse.on('EmailTriageCompleted', () => setTimeout(load, 1500));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - S.loadedAt > 120e3) load(); });

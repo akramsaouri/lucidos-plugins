@@ -15,7 +15,8 @@
   /* key -> account, and the keys in config order. Filled in place by useAccounts, so app.js can hold on to them. */
   const ACCOUNTS = {};
   const ORDER = [];
-  const KEEP = new Set(['read', 'flag', 'todo', 'notify']);
+  /* Rule actions that leave the mail in the inbox, so a match explains why it is still there. */
+  const KEEP = new Set(['read', 'flag', 'label', 'calendar', 'todo', 'notify']);
   const ZW = /[\u034f\u00ad\u180e\u200b-\u200f\u2028\u2029\u2060-\u2064\ufeff]/g;
 
   async function readJson(path, fallback) {
@@ -249,14 +250,15 @@
     }
     return null;
   }
-  const VERB = { delete: 'delete it', read: 'mark it read and keep it', flag: 'flag it', todo: 'make it a reminder', notify: 'push it to you', skip: 'leave it alone' };
+  const VERB = { delete: 'delete it', archive: 'archive it', read: 'mark it read and keep it', flag: 'flag it', calendar: 'put it on your calendar', notion: 'file it in Notion', todo: 'make it a reminder', notify: 'push it to you', skip: 'leave it alone' };
   function ruleText(r, kept) {
     const c = r.condition || {};
     let v = String(c.value || '').replace(/^\(\?i\)/, '');
     if (v.length > 38) v = v.slice(0, 37) + '…';
     const what = `${c.field} ${c.operator === 'regex' ? 'matches' : c.operator} “${v}”`;
     if (r.action === 'triage') return kept ? 'Kept by triage' : 'AI triage will decide';
-    return kept ? `Kept by a rule (${r.action}): ${what}` : `Your rules would ${VERB[r.action] || r.action} (${what})`;
+    const verb = r.action === 'label' && r.label ? `label it “${r.label}”` : (VERB[r.action] || r.action);
+    return kept ? `Kept by a rule (${r.action}): ${what}` : `Your rules would ${verb} (${what})`;
   }
 
   /* Needs you (survived triage) vs Not triaged yet, from the newest message still in the inbox. */

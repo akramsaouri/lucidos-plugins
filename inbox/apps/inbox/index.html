@@ -30,7 +30,7 @@
 
   body { margin: 0; }
   /* The SDK's bare `button:hover` paints a grey fill; these buttons draw their own hover (or none on touch). */
-  .mbx-main:hover, .mbx-disc:hover, .fold:hover, .view-title:hover, .back-link:hover, .sec-toggle:hover, .draft:hover { background: none; }
+  @media (hover: hover) { .mbx-main:hover, .mbx-disc:hover, .fold:hover, .view-title:hover, .back-link:hover, .sec-toggle:hover, .draft:hover { background: none; } }
   .muted { color: var(--text-muted); }
   .ic { flex: none; width: var(--icon-size-md); height: var(--icon-size-md); }
   .btn-ic { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-sm); }
@@ -43,7 +43,7 @@
   .pill { border-radius: var(--radius-round); text-transform: none; letter-spacing: 0; }
   .acct-pill { display: inline-flex; align-items: center; gap: var(--space-xs); padding: 0.125rem var(--space-sm); border-radius: var(--radius-round); background: color-mix(in srgb, var(--acct) 14%, transparent); color: var(--acct); font-size: var(--font-size-xs); font-weight: 600; white-space: nowrap; }
 
-  /* ---------- layout: one column with push navigation, two panes from 56rem, three from 72rem ---------- */
+  /* ---------- layout: one column with push navigation, two panes when the reader fits beside the list, three when the mailboxes fit too ---------- */
   .app { display: grid; grid-template-columns: minmax(0, 1fr); }
   .pane-side { display: none; overflow-x: hidden; padding: var(--space-lg) var(--space-lg) 6rem; min-width: 0; }
   .pane-list { padding: var(--space-lg) var(--space-lg) 6rem; min-width: 0; }
@@ -54,30 +54,28 @@
   body.reading .pane-reader { display: block; }
   @keyframes push-in { from { opacity: 0; transform: translateX(1.5rem); } }
   @keyframes pop-in { from { opacity: 0; transform: translateX(-1.5rem); } }
-  @media (max-width: 55.99rem) {
-    body.reading .pane-reader { animation: push-in var(--duration-normal) ease-out; }
-    body.mbx .pane-side { animation: pop-in var(--duration-normal) ease-out; }
-  }
+  /* Pane count follows the space actually available in theme rems (ui-scale included), not the viewport in CSS px:
+   * app.js sets body.split (list + reader) and body.tri (mailboxes + list + reader). Without them it is the phone
+   * layout, where the reader covers the list. */
+  body:not(.split).reading .pane-reader { animation: push-in var(--duration-normal) ease-out; }
+  body:not(.split).mbx .pane-side { animation: pop-in var(--duration-normal) ease-out; }
   :root[data-motion="reduce"] .pane-reader, :root[data-motion="reduce"] .pane-side { animation: none; }
 
-  @media (min-width: 56rem) {
-    .app { grid-template-columns: minmax(20rem, 26rem) minmax(0, 1fr); height: 100vh; }
-    .pane-side, .pane-list, .pane-reader { box-sizing: border-box; height: 100vh; overflow-x: hidden; overflow-y: auto; grid-row: 1; }
-    .pane-side, .pane-list { grid-column: 1; }
-    .pane-reader { grid-column: 2; display: block; border-left: 1px solid var(--border-color); }
-    body.reading .pane-list { display: block; }
-    body.reading.mbx .pane-list { display: none; }
-    body.reading.mbx .pane-side { display: block; }
-    .reader-top .back { display: none; }
-    .reader-top:not(:has(.nav)) { display: none; }
-  }
-  @media (min-width: 72rem) {
-    .app { grid-template-columns: 14rem minmax(20rem, 25rem) minmax(0, 1fr); }
-    .pane-side, body.reading .pane-side, body.reading.mbx .pane-side { display: block; grid-column: 1; background: var(--bg-secondary); border-right: 1px solid var(--border-color); padding: var(--space-lg) var(--space-md) var(--space-xl); }
-    .pane-list, body.mbx .pane-list, body.reading .pane-list, body.reading.mbx .pane-list { display: block; grid-column: 2; }
-    .pane-reader { grid-column: 3; }
-    .narrow-only { display: none !important; }
-  }
+  body.split .app { grid-template-columns: minmax(20rem, 26rem) minmax(0, 1fr); height: 100vh; }
+  body.split .pane-side, body.split .pane-list, body.split .pane-reader { box-sizing: border-box; height: 100vh; overflow-x: hidden; overflow-y: auto; grid-row: 1; }
+  body.split .pane-side, body.split .pane-list { grid-column: 1; }
+  body.split .pane-reader { grid-column: 2; display: block; border-left: 1px solid var(--border-color); }
+  body.split.reading .pane-list { display: block; }
+  body.split.reading.mbx .pane-list { display: none; }
+  body.split.reading.mbx .pane-side { display: block; }
+  body.split .reader-top .back { display: none; }
+  body.split .reader-top:not(:has(.nav)) { display: none; }
+
+  body.tri .app { grid-template-columns: 14rem minmax(20rem, 25rem) minmax(0, 1fr); }
+  body.tri .pane-side, body.tri.reading .pane-side, body.tri.reading.mbx .pane-side { display: block; grid-column: 1; background: var(--bg-secondary); border-right: 1px solid var(--border-color); padding: var(--space-lg) var(--space-md) var(--space-xl); }
+  body.tri .pane-list, body.tri.mbx .pane-list, body.tri.reading .pane-list, body.tri.reading.mbx .pane-list { display: block; grid-column: 2; }
+  body.tri .pane-reader { grid-column: 3; }
+  body.tri .narrow-only { display: none !important; }
 
   /* ---------- sidebar: accounts, each with its folders folded away ---------- */
   .side-head { display: flex; align-items: center; gap: var(--space-sm); min-height: 2.25rem; margin-bottom: var(--space-md); }
@@ -166,7 +164,8 @@
   .row[data-swipe="trash"] .row-bg span:last-child { visibility: visible; }
   .row-slide { position: relative; display: grid; grid-template-columns: var(--av) minmax(0, 1fr); gap: var(--space-md); padding: var(--row-pad) var(--space-md) var(--row-pad) var(--space-lg); background: var(--bg-primary); transition: transform var(--duration-normal), background var(--duration-fast); }
   .row-slide::after { content: ''; position: absolute; left: calc(var(--space-lg) + var(--av) + var(--space-md)); right: var(--space-md); bottom: 0; height: 1px; background: var(--hairline); }
-  .row:last-child .row-slide::after, .row:hover .row-slide::after, .row.open .row-slide::after, .row.sel .row-slide::after { visibility: hidden; }
+  .row:last-child .row-slide::after, .row.open .row-slide::after, .row.sel .row-slide::after { visibility: hidden; }
+  @media (hover: hover) { .row:hover .row-slide::after { visibility: hidden; } }
   @media (hover: hover) { .row:hover .row-slide { background: var(--bg-hover); } }
   .row.sel .row-slide { background: var(--bg-hover); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); border-radius: var(--radius-surface); }
   .row.open .row-slide { background: var(--bg-selected); }
@@ -223,7 +222,8 @@
   .more-btn { min-width: 2.75rem; }
   .menu { position: absolute; right: 0; top: calc(100% + var(--space-xs)); z-index: 20; display: grid; min-width: 12rem; padding: var(--space-xs); border: 1px solid var(--border-color); border-radius: var(--radius-surface); background: var(--bg-tertiary); box-shadow: var(--shadow-lg); }
   .menu-item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); width: 100%; padding: var(--space-sm) var(--space-md); border: 0; border-radius: var(--radius-control); background: none; color: var(--text-primary); font: inherit; font-size: var(--font-size-md); text-align: left; cursor: pointer; }
-  .menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+  .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+  @media (hover: hover) { .menu-item:hover { background: var(--bg-hover); outline: none; } }
   .menu-item.danger { color: var(--accent-red); }
   .menu-label { display: inline-flex; align-items: center; gap: var(--space-sm); }
   .menu-item .ic { color: var(--text-muted); }
@@ -308,22 +308,16 @@
   .pane-triage > * { max-width: 46rem; }
   body.triage .pane-list, body.triage .pane-reader { display: none !important; }
   body.triage .pane-triage { display: block; }
-  @media (max-width: 55.99rem) {
-    body.triage.mbx .pane-triage { display: none; }
-    body.triage:not(.mbx) .pane-triage { animation: push-in var(--duration-normal) ease-out; }
-  }
+  body:not(.split).triage.mbx .pane-triage { display: none; }
+  body:not(.split).triage:not(.mbx) .pane-triage { animation: push-in var(--duration-normal) ease-out; }
   :root[data-motion="reduce"] .pane-triage { animation: none; }
-  @media (min-width: 56rem) {
-    .pane-triage { box-sizing: border-box; height: 100vh; overflow-x: hidden; overflow-y: auto; grid-row: 1; grid-column: 1 / -1; }
-    body.triage.mbx .pane-triage { grid-column: 2; }
-  }
-  @media (min-width: 72rem) {
-    .pane-triage, body.triage.mbx .pane-triage { grid-column: 2 / -1; }
-  }
+  body.split .pane-triage { box-sizing: border-box; height: 100vh; overflow-x: hidden; overflow-y: auto; grid-row: 1; grid-column: 1 / -1; }
+  body.split.triage.mbx .pane-triage { grid-column: 2; }
+  body.tri .pane-triage, body.tri.triage.mbx .pane-triage { grid-column: 2 / -1; }
   .warn { color: var(--accent-yellow); }
 
   /* Sidebar: the All accounts strip, and each account's Triage entry at the head of its folders. */
-  .tri-all:hover { background: none; }
+  @media (hover: hover) { .tri-all:hover { background: none; } }
   .tri-all { display: flex; align-items: center; gap: var(--space-sm); width: 100%; box-sizing: border-box; min-height: 2.75rem; margin-bottom: var(--space-md); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-xs); border: 1px solid var(--hairline); border-radius: var(--radius-surface); background: none; color: var(--text-secondary); font: inherit; text-align: left; cursor: pointer; }
   @media (hover: hover) { .tri-all:hover { background: var(--bg-hover); color: var(--text-primary); } }
   .tri-all.sel { background: var(--bg-selected); color: var(--text-primary); }
@@ -389,7 +383,7 @@
   .tri-act[data-action="todo"], .tri-act[data-action="label"] { --tone: var(--accent-green); }
   .tri-act[data-action="calendar"] { --tone: var(--accent-light); }
   .tri-act[data-action="notion"] { --tone: color-mix(in srgb, var(--accent-red) 45%, var(--accent)); }
-  .tri-add:hover { background: none; }
+  @media (hover: hover) { .tri-add:hover { background: none; } }
   .tri-add { width: 100%; grid-template-columns: 1.75rem minmax(0, 1fr); align-items: center; border: 0; border-radius: 0; background: none; color: var(--accent); font: inherit; font-size: var(--font-size-sm); text-align: left; cursor: pointer; }
   @media (hover: hover) { .tri-add:hover { background: var(--bg-hover); } }
   .tri-add:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
