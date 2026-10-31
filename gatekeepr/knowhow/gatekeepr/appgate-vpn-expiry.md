@@ -1,6 +1,6 @@
 ---
 name: Appgate VPN session expiry (gatekeepr)
-description: How to answer "when does my VPN expire?", "how long until Appgate logs me out?", "is my Appgate session still active?" or "when did I sign in to the VPN?" by running the gatekeepr CLI, what its JSON states mean (active, expiringSoon, expired, signedOut, noSession, error), where the binary is found, and how to install it. Load for any question about Appgate, Appgate SDP, the VPN session, VPN expiry or sign-in time, or the gatekeepr command.
+description: "How to answer \"when does my VPN expire?\", \"is my Appgate session active?\" or \"when did I sign in?\" by running the gatekeepr CLI: its JSON states, where the binary is, and how to install it. Load for any question about Appgate, Appgate SDP, the VPN session, VPN expiry or sign-in time, or the gatekeepr command."
 ---
 
 # Appgate VPN session expiry

@@ -1,6 +1,6 @@
 ---
 name: Gatekeepr VPN expiry alerts and background check
-description: How the Gatekeepr plugin's VPN expiry notifications work: the background-check script trigger and its interval, alert thresholds and their settings.json schema, per-session dedup in state.json, the GatekeeprStatusChecked and GatekeeprRefreshRequested events, and what to check when an Appgate expiry alert didn't arrive, fired twice, or the widget looks stale. Load when setting up, changing or debugging Gatekeepr alerts, its trigger, or the VPN expiry widget.
+description: "How Gatekeepr's VPN expiry alerts work: the background-check trigger and interval, thresholds in settings.json, per-session dedup in state.json, and its events. Load when an Appgate alert didn't arrive or fired twice, the widget looks stale, or when setting up, changing or forwarding alerts."
 ---
 
 # Gatekeepr: expiry alerts and the background check
@@ -89,6 +89,19 @@ Notifications go out through `lucidos notify --app-id gatekeepr`, titled like "A
 "Appgate VPN session expired", with the local clock time in the message. The tap opens the notification, whose
 **Open Gatekeepr** button opens the app.
 
+### Forwarding alerts to another channel
+
+Once an alert's notification is delivered, check.py also emits **`GatekeeprAlertSent`** with the same title and
+message (schema under "Files and events"). To get alerts on Telegram, Slack, a phone or anywhere else, add a
+workspace **script** trigger on that event that sends `title` and `message` on. The forwarder reads the payload
+from `TRIGGER_EVENT_PAYLOAD` (unwrap a `payload` envelope if present, as check.py's `request_payload()` does)
+and names the credential it uses in its own text (`os.environ["CRED_…"]` or a `# lucidos-credentials:` header),
+since the engine sets a credential only for a script that names it. Keep the forwarder and its trigger in the
+workspace, outside the plugin's folders, so a plugin update never overwrites them.
+
+The event rides the same dedup, so each alert is forwarded once per session. Forwarding is best effort: a failed
+emit or a failing forwarder never blocks or re-queues the inbox notification.
+
 ## Dedup: once per session
 
 `data/artifacts/gatekeepr/state.json` keeps a ledger keyed on the session's `sessionStart`:
@@ -137,6 +150,19 @@ and keeps a `.gitignore` beside them that leaves them out of the workspace repo.
 ```
 
 `error` and `error_kind` appear on failure. A quiet scheduled run (nothing changed) emits nothing.
+
+**`GatekeeprAlertSent`** (emitted by check.py) fires once for each alert whose `lucidos notify` succeeded, right
+after it, and never for an alert that failed to send:
+
+```json
+{"summary": "Appgate VPN: 25m left. Your session ends at 23:18. ...", "alert_id": "warn",
+ "title": "Appgate VPN: 25m left", "message": "Your session ends at 23:18. ...", "state": "expiringSoon",
+ "session_start": "...", "expires_at": "...", "time_left": "25m"}
+```
+
+`alert_id` is the settings.json alert id, or `problem` for the can't-read notice. The session fields appear
+only when the check read them.
+See "Forwarding alerts to another channel" above.
 
 **`GatekeeprRefreshRequested`** asks for a check right away: `{"summary": "...", "request_id": "<any string>",
 "source": "app" | "widget" | "agent"}`. The answer is a `GatekeeprStatusChecked` with the same `request_id`.
