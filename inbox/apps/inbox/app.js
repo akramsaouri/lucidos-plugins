@@ -845,11 +845,15 @@
     const ms = S.thread.messages, last = ms.length - 1;
     const blocked = ms.some(m => m.html && REMOTE.test(m.html)) && !S.images.has(t.key);
     el.innerHTML = (blocked ? `<div class="img-banner"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="7" r="1.2"/><path d="M3 12l3.5-3.5 2.5 2.5 2-2 2 2"/></svg><span>Images hidden to block tracking</span><button class="accent-link" data-act="images">Show</button></div>` : '') +
-      ms.map((m, i) => {
-        /* The last and unread messages start open; a click on any header overrides that either way. */
-        const id = t.key + '#' + m.id, f = M.parseAddr(m.from);
-        const open = S.expanded.has(id) ? S.expanded.get(id) : i === last || !!m.unread;
-        return `<article class="msg">
+      ms.map((m, i) => msgHtml(t, m, i, last)).join('');
+    mountFrames(t);
+  }
+
+  function msgHtml(t, m, i, last) {
+    /* The last and unread messages start open; a click on any header overrides that either way. */
+    const id = t.key + '#' + m.id, f = M.parseAddr(m.from);
+    const open = S.expanded.has(id) ? S.expanded.get(id) : i === last || !!m.unread;
+    return `<article class="msg" data-msg="${attr(id)}">
           <div class="msg-head" data-act="toggle" data-id="${attr(id)}" data-open="${open}">
             <span class="av${m.mine ? ' mine' : ''}" data-acct="${slot(t.account)}" aria-hidden="true">${esc(initial(f.name || f.addr))}</span>
             <span class="msg-from">${esc(f.name || f.addr)} ${m.mine ? '<span class="muted">(you)</span>' : f.name ? `<span class="muted">${esc(f.addr)}</span>` : ''}</span>
@@ -858,8 +862,26 @@
           </div>
           ${open ? `<div class="msg-body">${bodyHtml(m, id)}</div>${attsHtml(m)}` : ''}
         </article>`;
-      }).join('');
-    mountFrames(t);
+  }
+
+  /* Expanding or collapsing one message swaps only that <article>. A full renderMsgs() rebuilds every
+   * HTML mail iframe at its default height, the thread shrinks for a frame, the scroller clamps to the top,
+   * and a long thread jumps back up. Patching one node keeps the other frames (and the scroll) where they are. */
+  function toggleMsg(id) {
+    const t = S.open && byKey(S.open), el = $('msgs');
+    if (!t || !el || !S.thread) { renderMsgs(); return; }
+    const ms = S.thread.messages, i = ms.findIndex(m => t.key + '#' + m.id === id);
+    const node = Array.from(el.querySelectorAll('article[data-msg]')).find(a => a.dataset.msg === id);
+    if (i < 0 || !node) { renderMsgs(); return; }
+    const head = node.querySelector('.msg-head'), before = head ? head.getBoundingClientRect().top : 0;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = msgHtml(t, ms[i], i, ms.length - 1);
+    const fresh = tmp.firstElementChild;
+    node.replaceWith(fresh);
+    mountFrames(t, fresh);
+    /* Keep the clicked header pinned under the pointer, whichever element is the scroller. */
+    const h2 = fresh.querySelector('.msg-head'), delta = h2 ? h2.getBoundingClientRect().top - before : 0;
+    if (delta) { if (wide()) readerEl.scrollTop += delta; else window.scrollBy(0, delta); }
   }
 
   function mailDoc(html, images, quotes, tok) {
@@ -895,8 +917,8 @@
   }
 
   let frameTok = 0;
-  function mountFrames(t) {
-    readerEl.querySelectorAll('iframe[data-frame]').forEach(f => {
+  function mountFrames(t, root) {
+    (root || readerEl).querySelectorAll('iframe[data-frame]').forEach(f => {
       const id = f.dataset.frame, mid = id.slice(t.key.length + 1);
       const m = S.thread && S.thread.messages.find(x => x.id === mid);
       if (!m) return;
@@ -1195,7 +1217,7 @@
       case 'summarize': summarize(); break;
       case 'summary-close': S.summary = null; renderSummary(); break;
       case 'images': if (t) { S.images.add(t.key); renderMsgs(); } break;
-      case 'toggle': S.expanded.set(id, b.dataset.open !== 'true'); renderMsgs(); break;
+      case 'toggle': S.expanded.set(id, b.dataset.open !== 'true'); toggleMsg(id); break;
       case 'quoted': S.quoted.has(id) ? S.quoted.delete(id) : S.quoted.add(id); renderMsgs(); break;
       case 'att': openAtt(b.dataset.mid, Number(b.dataset.i)); break;
       case 'send': send(); break;

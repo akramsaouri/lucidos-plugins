@@ -1,5 +1,12 @@
 # Inbox changelog
 
+## 1.2.1
+
+- **Expanding a message in a long thread keeps your place.** Opening or collapsing a message near the bottom
+  of a thread used to jump the reader back to the top, because every message was rebuilt and every mail frame
+  shrank back to its default height. Now only the message you clicked is redrawn, and its header stays where
+  it was on screen.
+
 ## 1.2.0
 
 - **IMAP accounts log in again on current engines.** The engine hands a script a credential only when a file
