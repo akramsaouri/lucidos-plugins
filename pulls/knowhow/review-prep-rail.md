@@ -168,6 +168,7 @@ produced no valid block. A partial pass still saves what it has.
 ## Own PRs: the pass without a review
 
 `own_prep.py` runs at the end of `mine.py`. For each of my non-draft PRs in a listed repo
+of a group whose `prep` is not false (a `prep: false` group is lane-only, own PRs included)
 whose head is at least 10 minutes old, it emits one `OwnPrPrepRequested` per head unless a
 lanes file for that key exists or a request is younger than 3 hours. The payload matches
 `ReviewPrepRequested` plus `own_pr: true` and `login`; `head_sha` is null (my-prs.json

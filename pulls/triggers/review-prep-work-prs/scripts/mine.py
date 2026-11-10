@@ -37,6 +37,7 @@ was asked without a trip to GitHub.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -95,16 +96,16 @@ query($q: String!) {
       } } }
       reviewThreads(first: 100) { nodes {
         id isResolved isOutdated path line originalLine
-        comments(first: 10) { nodes { author { login } bodyText createdAt url } }
+        comments(first: 10) { nodes { author { login __typename } body bodyText createdAt url } }
       } }
       comments(last: 50) { nodes {
-        author { login __typename } bodyText createdAt url
+        author { login __typename } body bodyText createdAt url
       } }
       latestReviews(first: 20) { nodes {
         author { login } state submittedAt commit { oid } bodyText url
       } }
       reviews(last: 30) { nodes {
-        author { login } state submittedAt commit { oid }
+        author { login __typename } state submittedAt commit { oid } body bodyText url
       } }
       reviewRequests(first: 20) { nodes { requestedReviewer {
         ... on User { login }
@@ -686,6 +687,127 @@ def issue_comments(pr, me):
     return out
 
 
+FEEDBACK_EXCERPT = 280
+FEEDBACK_MAX = 12
+
+
+def _excerpt(node):
+    """The reviewer's own words, one line. Works from the markdown `body` so a
+    reply that quotes me first (`> ...`) doesn't lead with my text — `bodyText`
+    flattens the quote into the prose and the excerpt read as my own sentence.
+    Images and HTML go, links keep their text. Falls back to `bodyText`."""
+    md = node.get("body") or ""
+    lines = [l for l in md.splitlines() if not l.lstrip().startswith(">")]
+    t = "\n".join(lines)
+    t = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", t)
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)
+    t = re.sub(r"<[^>]+>", " ", t)
+    b = " ".join(t.split()) or " ".join((node.get("bodyText") or "").split())
+    return b if len(b) <= FEEDBACK_EXCERPT else b[:FEEDBACK_EXCERPT - 1] + "…"
+
+
+def feedback(pr, me):
+    """Every piece of reviewer feedback on the PR, handled or not, with a flag.
+
+    WHY THIS EXISTS BESIDE open_threads(). open_threads() answers "what blocks
+    me" and, on purpose, lets an approval clear that reviewer's own comments and
+    ignores APPROVED review bodies — so an approved, green PR lands in Merge.
+    That was right about blocking and wrong about "ready": on 2026-11-07 a
+    reviewer approved with "Approving with a minor comment still!" plus a
+    Conversation-tab suggestion, and two other approvals came with inline
+    comments. The board said all of them were clean. Nothing was blocking, but
+    there was feedback I had never answered — merging over it unread is not
+    what "ready" means.
+
+    So this reads all three surfaces with NO approval rule:
+      * review bodies, ANY state (APPROVED included), from `reviews` (every
+        submission, not just the latest per author) — empty bodies are the plain
+        button click or the wrapper of inline comments, and are skipped;
+      * Conversation-tab comments;
+      * inline review threads, resolved and outdated ones included.
+
+    HANDLED means one of two things, and nothing else:
+      * the thread was resolved (inline threads only — the other two surfaces
+        have no Resolve button);
+      * I replied after it: in the same thread for inline comments; on the
+        Conversation tab or in a review body of mine for the other two.
+    An approval does NOT count as handled here — that is the whole point.
+
+    Bots and my own comments are skipped. Newest feedback first, capped at
+    FEEDBACK_MAX with unhandled items kept ahead of handled ones.
+    """
+    out = []
+    # My replies on the unanchored surfaces: Conversation tab + my review bodies.
+    mine = [c.get("createdAt") or "" for c in (pr.get("comments") or {}).get("nodes") or []
+            if (c.get("author") or {}).get("login") == me]
+    mine += [r.get("submittedAt") or "" for r in (pr.get("reviews") or {}).get("nodes") or []
+             if (r.get("author") or {}).get("login") == me and (r.get("bodyText") or "").strip()]
+    last_mine = max(mine) if mine else ""
+
+    for r in (pr.get("reviews") or {}).get("nodes") or []:
+        author = r.get("author") or {}
+        login = author.get("login")
+        if not login or login == me or is_bot(author):
+            continue
+        body = (r.get("bodyText") or "").strip()
+        if not body:
+            continue
+        at = r.get("submittedAt") or ""
+        replied = bool(last_mine and last_mine > at)
+        out.append({
+            "author": login, "kind": "review_body", "review_state": r.get("state"),
+            "excerpt": _excerpt(r), "url": r.get("url") or pr["url"],
+            "created_at": at, "resolved": None, "replied_by_me": replied,
+            "handled": replied,
+        })
+
+    for c in (pr.get("comments") or {}).get("nodes") or []:
+        author = c.get("author") or {}
+        login = author.get("login")
+        if not login or login == me or is_bot(author):
+            continue
+        body = (c.get("bodyText") or "").strip()
+        if not body:
+            continue
+        at = c.get("createdAt") or ""
+        replied = bool(last_mine and last_mine > at)
+        out.append({
+            "author": login, "kind": "issue_comment", "excerpt": _excerpt(c),
+            "url": c.get("url") or pr["url"], "created_at": at,
+            "resolved": None, "replied_by_me": replied, "handled": replied,
+        })
+
+    for t in (pr.get("reviewThreads") or {}).get("nodes") or []:
+        cs = (t.get("comments") or {}).get("nodes") or []
+        theirs = [c for c in cs
+                  if (c.get("author") or {}).get("login")
+                  and (c.get("author") or {}).get("login") != me
+                  and not is_bot(c.get("author"))
+                  and (c.get("bodyText") or "").strip()]
+        if not theirs:
+            continue
+        # The thread's ask is its first reviewer comment; "replied after" is
+        # measured against their LAST word, so a follow-up re-opens it.
+        last_theirs = max(c.get("createdAt") or "" for c in theirs)
+        replied = any((c.get("author") or {}).get("login") == me
+                      and (c.get("createdAt") or "") > last_theirs for c in cs)
+        resolved = bool(t.get("isResolved"))
+        first = theirs[0]
+        out.append({
+            "author": first["author"]["login"], "kind": "inline",
+            "excerpt": _excerpt(first),
+            "path": t.get("path"), "line": t.get("line") or t.get("originalLine"),
+            "outdated": bool(t.get("isOutdated")),
+            "url": first.get("url") or pr["url"], "created_at": first.get("createdAt") or "",
+            "resolved": resolved, "replied_by_me": replied,
+            "handled": resolved or replied,
+        })
+
+    out.sort(key=lambda f: f["created_at"], reverse=True)
+    out.sort(key=lambda f: f["handled"])  # stable: unhandled first, each newest-first
+    return out[:FEEDBACK_MAX], sum(1 for f in out if not f["handled"]), len(out)
+
+
 def classify(pr, me):
     """Return (state, reason). State is what the morning needs to know.
 
@@ -749,6 +871,13 @@ def collect(ident):
         state, reason = classify(pr, me)
         commit = (pr["commits"]["nodes"] or [{}])[0].get("commit", {})
         threads = open_threads(pr, me)
+        fb, fb_open, fb_total = feedback(pr, me)
+        approved = review_decision(pr, me) == "APPROVED"
+        # `state` is left alone on purpose: other rails gate on it. Only the
+        # human sentence says the approval came with something unanswered.
+        if approved and fb_open and state in ("mergeable", "approved"):
+            reason = (f"approved with {fb_open} unanswered comment"
+                      f"{'s' if fb_open > 1 else ''} — read before merging")
         out.append({
             "identity": ident["name"],
             "repo": pr["repository"]["nameWithOwner"],
@@ -779,6 +908,14 @@ def collect(ident):
             # have questions waiting, and after the rebase nothing would
             # re-surface them. The app renders them and the resolver reads them.
             "threads": threads,
+            # Reviewer feedback with no approval rule (see feedback()). Additive:
+            # nothing that reads `state` or `threads` sees a difference.
+            # `approved_with_comments` is true when the PR is approved and any
+            # feedback exists; `feedback_unhandled` is what still needs a look.
+            "approved_with_comments": approved and fb_total > 0,
+            "feedback_unhandled": fb_open,
+            "feedback_total": fb_total,
+            "feedback": fb,
             "approvals": [
                 r["author"]["login"] for r in pr["latestReviews"]["nodes"]
                 if r["state"] == "APPROVED"
@@ -918,6 +1055,8 @@ def main():
             "rerequest": sum(1 for p in prs if p["stale_reviewers"]),
             "comments": sum(1 for p in prs if p["unresolved_threads"]),
             "mergeable": sum(1 for p in prs if p["state"] == "mergeable"),
+            "approved_with_unhandled": sum(1 for p in prs
+                                           if p["approved_with_comments"] and p["feedback_unhandled"]),
         },
         "prs": prs,
     }

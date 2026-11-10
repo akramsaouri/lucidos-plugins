@@ -78,7 +78,7 @@ All other Pulls state (findings, sweeps, lanes, drafts, avatars) lives beside it
 | `groups[].repos[].auto_resolve_conflicts` | Start the conflict resolver on your own PRs here as soon as GitHub reports a conflict. | `false` |
 | `groups[].any_repo` | Also show review requests from any other repo of this owner. Those PRs show in Pulls but are never review-prepped. | `false` |
 | `groups[].discovery` | `search`: find PRs with `review-requested:@me` / `mentions:@me` (scales to big repos). `list`: list each repo's open PRs (no search-index lag; best for small, fast repos). Either way the per-PR request check is the gate. | `search` |
-| `groups[].prep` | Run the deep review prep on PRs here that you are asked to review. | `true` |
+| `groups[].prep` | Run the deep review prep on PRs here that you are asked to review, and the own-PR prep pass on your own PRs here. | `true` |
 | `groups[].in_app_merge` | Merge from inside Pulls through `github.proxy`, after a live pre-flight (open, not draft, same head, clean, checks green, approved on this head). Needs `github.proxy`. | `false` |
 | `groups[].shipped_lane` | Show a "Shipped by me" lane (your merges in the last 7 days) on this tab. | `false` |
 | `groups[].app_tagged` | Tag each row with its repo name, for an owner whose repos are separate apps. | `false` |
