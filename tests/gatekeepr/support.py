@@ -112,5 +112,10 @@ class Sandbox(unittest.TestCase):
         return [c for c in calls if c[:1] == ["notify"]]
 
     @staticmethod
-    def events(calls):
-        return [json.loads(c[c.index("--payload") + 1]) for c in calls if c[:2] == ["events", "emit"]]
+    def events(calls, event_type="GatekeeprStatusChecked"):
+        """Payloads of the `event_type` events emitted in `calls` (check.py also emits GatekeeprAlertSent)."""
+        return [json.loads(c[c.index("--payload") + 1]) for c in calls if c[:3] == ["events", "emit", event_type]]
+
+    @classmethod
+    def alert_events(cls, calls):
+        return cls.events(calls, "GatekeeprAlertSent")
