@@ -174,6 +174,31 @@ class CheckTest(Sandbox):
         calls, _ = self.run_check()
         self.assertEqual(self.alert_ids(calls), ["Appgate VPN: 25m left"])
 
+    def test_a_delivered_alert_emits_alert_sent_with_the_same_text(self):
+        self.status("status-active.json")
+        self.run_check()
+        self.status("status-expiring-soon.json", **soon(1534, "25m"))
+        calls, _ = self.run_check()
+        [notify] = self.notifications(calls)
+        [alert] = self.alert_events(calls)
+        title, message = notify[notify.index("--title") + 1], notify[notify.index("--message") + 1]
+        self.assertEqual(alert["alert_id"], "warn")
+        self.assertEqual((alert["title"], alert["message"]), (title, message))
+        self.assertEqual(alert["summary"], f"{title}. {message}")
+        self.assertEqual(alert["state"], "expiringSoon")
+        self.assertEqual(alert["session_start"], SESSION)
+        self.assertEqual(alert["time_left"], "25m")
+        emits = [c[2] for c in calls if c[:2] == ["events", "emit"]]
+        self.assertEqual(emits, ["GatekeeprAlertSent", "GatekeeprStatusChecked"])
+        self.status("status-expiring-soon.json", **soon(1234, "20m"))
+        calls, _ = self.run_check()
+        self.assertEqual(self.alert_events(calls), [])
+
+    def test_an_undelivered_alert_emits_no_alert_sent(self):
+        self.status("status-expiring-soon.json", **soon(1534, "25m"))
+        calls, _ = self.run_check(extra_env={"FAKE_LUCIDOS_FAIL": "notify"})
+        self.assertEqual(self.alert_events(calls), [])
+
     # -- problems ----------------------------------------------------------------------------------------------
 
     def test_a_problem_alerts_once_until_it_clears(self):
