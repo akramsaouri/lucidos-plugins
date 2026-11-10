@@ -560,6 +560,29 @@
 
       /* The review threads on a PR of mine: a disclosure whose count is what
          you scan, and one clipped line per thread in a hairline list. */
+      /* Approved with comments: the unanswered excerpts, under the row's
+         meta line and lined up with the title. A yellow rule on the left,
+         the row's own tone, rather than a second box inside the band's box. */
+      .row > .fb { grid-column: 2 / -1; }
+      .fb { margin-top: var(--space-sm); padding-left: var(--space-md);
+            border-left: 0.125rem solid color-mix(in srgb, var(--accent-yellow) 60%, var(--border-color));
+            font-size: var(--font-size-sm); line-height: 1.5; min-width: 0; }
+      .fb-head { margin: 0 0 var(--space-xs); color: var(--text-secondary); font-weight: 500; }
+      .fb-list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-sm); }
+      .fb-item { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-sm);
+                 row-gap: 0.125rem; min-width: 0; }
+      .fb-meta { display: flex; flex-wrap: wrap; column-gap: var(--space-xs); min-width: 0; }
+      .fb-who { color: var(--text-primary); font-weight: 500; }
+      .fb-where { color: var(--text-muted); overflow-wrap: anywhere; }
+      .fb-text { flex: 1 1 100%; color: var(--text-secondary); overflow-wrap: anywhere; }
+      .fb-link, .fb-done a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+      @media (hover: hover) { :is(.fb-link, .fb-done a):hover { text-decoration: underline; } }
+      .fb-more { margin: var(--space-xs) 0 0; color: var(--text-muted); }
+      .fb-done { margin-top: var(--space-sm); font-size: var(--font-size-sm); color: var(--text-muted); }
+      .fb-done-head { display: flex; align-items: center; gap: var(--space-xs); margin: 0; }
+      .fb-done-head .oi, .fb-done-head svg { width: 0.875rem; height: 0.875rem; color: var(--text-muted); }
+      .fb-done-list { margin: 0.125rem 0 0; padding-left: calc(0.875rem + var(--space-xs)); list-style: none;
+                      overflow-wrap: anywhere; }
       .thr { margin-top: var(--space-sm); }
       .thr-head { display: flex; align-items: center; gap: var(--space-sm);
                   background: none; border: 0; padding: var(--space-xs) 0; margin: 0;
@@ -1514,6 +1537,26 @@ const REFRESH_POLL_MS = 3000;
  * covers the sub-second interleave where a scheduled sweep lands in the same
  * instant as the click, which is a fresh reading either way. */
 const CLOCK_SLACK_MS = 2000;
+
+/* When the in-flight manual refresh was clicked (ms), or 0 when none is.
+ * A refresh is DONE only when BOTH halves it runs (mine.py, then queue.py) have
+ * written a snapshot newer than the click. mine.py emits MyPrStatusSnapshotted
+ * ~10–20s before queue.py finishes, and the freshness label reads the OLDER of
+ * the two, so ending the spinner on the first half left "updated n ago" stale
+ * after the button had already gone back to Refresh. */
+let refreshAskedAt = 0;
+function refreshLanded() {
+  if (!refreshAskedAt) return false;
+  const fresh = t => { const ms = Date.parse(t || ''); return !Number.isNaN(ms) && ms >= refreshAskedAt - CLOCK_SLACK_MS; };
+  return fresh(MINE?.generated_at) && fresh(QUEUE?.generated_at);
+}
+function finishRefresh() {
+  clearTimeout(refreshTimer);
+  clearInterval(refreshPoll);
+  refreshing = false;
+  refreshAskedAt = 0;
+  lucidos.ui.dismissToast('prrefresh');
+}
 
 /* In-flight conflict resolvers, keyed `${repo}#${pr}@${sha7}`.
  *
@@ -2778,20 +2821,18 @@ async function requestRefresh() {
 
   /* The click's wall clock, so the timeout below can ask the one question that
    * separates a sweep that never ran from a frame that never arrived. */
-  const askedAt = Date.now();
+  refreshAskedAt = Date.now();
 
   clearTimeout(refreshTimer);
   clearInterval(refreshPoll);
 
-  /* Did a sweep newer than the click land on disk? Shared by the poll and the
-   * timeout, so both answer the question the same way. */
+  /* Did BOTH snapshots newer than the click land on disk? Shared by the poll and
+   * the timeout, so both answer the question the same way. */
   const sweepLanded = async () => {
     await loadMine();
     await loadShipped();
     await loadQueue();
-    const at = [MINE?.generated_at, QUEUE?.generated_at]
-      .filter(Boolean).map(t => Date.parse(t)).filter(t => !Number.isNaN(t));
-    return !!at.length && Math.max(...at) >= askedAt - CLOCK_SLACK_MS;
+    return refreshLanded();
   };
 
   /* Poll the artifact rather than trusting the frame. The SSE handler still
@@ -2801,13 +2842,10 @@ async function requestRefresh() {
     if (!refreshing) { clearInterval(refreshPoll); return; }
     try {
       if (!(await sweepLanded())) return;
-      clearInterval(refreshPoll);
-      clearTimeout(refreshTimer);
-      refreshing = false;
-      render();
       /* Silent, like the SSE path: the rows updating in front of the user is
        * the acknowledgement, and the lost frame is not their problem. */
-      lucidos.ui.dismissToast('prrefresh');
+      finishRefresh();
+      render();
     } catch (e) {
       /* Engine unreachable or a half-written file. Keep polling — the timeout
        * below is the backstop, and one bad read says nothing. */
@@ -2817,6 +2855,7 @@ async function requestRefresh() {
   refreshTimer = setTimeout(async () => {
     clearInterval(refreshPoll);
     refreshing = false;
+    const askedAt = refreshAskedAt;
     /* DON'T TRUST THE TIMEOUT ON ITS OWN. It fires when no `MyPrStatusSnapshotted`
      * REACHED THIS TAB, which is not the same fact as "the sweep didn't finish" —
      * and on 2026-09-09 the difference was the whole bug. The sweep ran, wrote
@@ -2829,8 +2868,12 @@ async function requestRefresh() {
      * means two minutes passed and no newer sweep ever appeared on disk. Ask
      * once more anyway, since the last poll may have lost a race with the
      * write, and only warn when the answer is still no. */
+    let mineOnly = false;
     try {
       const landed = await sweepLanded();
+      const ms = Date.parse(MINE?.generated_at || '');
+      mineOnly = !landed && !Number.isNaN(ms) && ms >= askedAt - CLOCK_SLACK_MS;
+      refreshAskedAt = 0;
       render();
       if (landed) {
         lucidos.ui.dismissToast('prrefresh');
@@ -2839,9 +2882,12 @@ async function requestRefresh() {
     } catch (e) {
       /* Couldn't read the artifacts either — fall through to the warning, which
        * is now the honest answer rather than a guess. */
+      refreshAskedAt = 0;
       render();
     }
-    lucidos.ui.toast('No result came back — the sweep may be queued or GitHub unreachable',
+    lucidos.ui.toast(mineOnly
+      ? 'Your PRs refreshed, but the review queue didn\u2019t come back'
+      : 'No result came back — the sweep may be queued or GitHub unreachable',
       'warning', { key: 'prrefresh' });
   }, REFRESH_TIMEOUT_MS);
 
@@ -2856,6 +2902,7 @@ async function requestRefresh() {
     clearTimeout(refreshTimer);
     clearInterval(refreshPoll);
     refreshing = false;
+    refreshAskedAt = 0;
     render();
     lucidos.ui.toast('Failed to reach the refresher', 'error', { key: 'prrefresh' });
   }
@@ -3012,6 +3059,7 @@ const NEXT_ACTIONS = {
   rereview:     { label: 'Re-review',         tone: 'accent' },
   review:       { label: 'Review',            tone: 'accent' },
   merge:        { label: 'Merge',             tone: 'green'  },
+  feedback:     { label: 'Approved with comments', tone: 'yellow' },
   rerequest:    { label: 'Re-request review', tone: 'yellow' },
   findreviewer: { label: 'Find a reviewer',   tone: 'yellow' },
   mergeunreviewed: { label: 'Merge unreviewed', tone: 'yellow' },
@@ -3066,6 +3114,10 @@ function mineAction(p) {
   if (ciOf(p) === 'failed') return 'ci';
   if ((p.unresolved_threads || p.threads?.length || 0) > 0) return 'comments';
   if (p.stale_reviewers?.length) return 'rerequest';
+  /* Approved, but the approval came with feedback I never answered (mine.py's
+   * `feedback`, which — unlike `threads` — gives an approval no power to clear
+   * a comment). Not blocking, so not `comments`; not clean, so not `merge`. */
+  if (hasOpenFeedback(p)) return 'feedback';
   if (decisionOf(p) === 'APPROVED'
       && ciOf(p) !== 'failed' && p.mergeable === 'MERGEABLE') return 'merge';
   /* An unreviewed PR is deliberately NOT a `merge` here: merging with nobody's
@@ -3095,7 +3147,10 @@ function isUnreviewed(p) {
 function mineTurn(p, act) {
   if (act) return 'mine';
   if (p.on_me) return 'mine';                                  // the sweep says so
-  if (p.draft || p.state === 'draft') return 'theirs';         // mine to write, nobody blocked
+  /* A draft is mine to finish, but it asks nothing of me today, so it gets its
+   * own band rather than "Waiting on others" (nobody else owes it a move) or
+   * "Your turn" (it must not inflate the badge). */
+  if (p.draft || p.state === 'draft') return 'draft';
   if (p.waiting_on?.length) return 'theirs';
   return 'nobody';                                             // open, and not one person asked
 }
@@ -3232,6 +3287,7 @@ function boardBands(wsId) {
     reviewsTurn: reviews.filter(r => r.turn === 'mine').sort(byActivity),
     waiting:     all.filter(r => r.turn === 'theirs').sort(byActivity),
     nobody:      all.filter(r => r.turn === 'nobody').sort(byActivity),
+    drafts:      mine.filter(r => r.turn === 'draft').sort(byActivity),
     briefs:      s.briefs,
     /* Like briefs: a record, not a queue. Absent from wsLoad() for the same
      * reason — nothing here wants a decision, so it must never inflate a badge. */
@@ -3730,11 +3786,10 @@ function scope(wsId) {
      * others" is false). Assigning a reviewer is the action, and it's mine. */
     stalled: mine.filter(p => !p.on_me && !p.draft && p.state !== 'draft'
                               && !(p.waiting_on?.length)),
-    /* Genuinely parked on a named reviewer, plus drafts. Drafts used to be
-     * excluded from BOTH lanes, so a draft PR of mine rendered nowhere at all —
-     * invisible in an app whose whole claim is "every PR that's on you". */
-    waiting: mine.filter(p => !p.on_me
-                              && ((p.waiting_on?.length) || p.draft || p.state === 'draft')),
+    /* Genuinely parked on a named reviewer. Drafts have their own band. */
+    waiting: mine.filter(p => !p.on_me && !p.draft && p.state !== 'draft'
+                              && p.waiting_on?.length),
+    drafts: mine.filter(p => !p.on_me && (p.draft || p.state === 'draft')),
     /* Membership comes from the live queue, NOT from which artifacts happen to
      * exist on disk. See reviewQueue() for why that inversion matters. */
     toReview: reviewQueue(wsId),
@@ -4110,6 +4165,7 @@ const BAND_META = {
   turn:    { title: 'Your turn',          why: 'Nothing here moves without you' },
   waiting: { title: 'Waiting on others',  why: 'A named person owes the next move' },
   nobody:  { title: "Nobody's turn",      why: 'Nobody was asked — name a reviewer, or merge without one' },
+  drafts:  { title: 'Drafts',             why: 'Yours to finish — nobody is asked yet' },
   briefs:  { title: 'Shipped without me', why: 'Merged in the last 7 days — reading, not a decision' },
   shipped: { title: 'Shipped by me',      why: 'Merged in the last 7 days — done, not a decision' },
 };
@@ -4134,7 +4190,7 @@ const BANDS_WRITE_DELAY_MS = 1500;
  * is slow, and then the defaults paint. One shared cap, not one each, so a slow
  * start costs this once. */
 const UI_READ_WAIT_MS = 300;
-let COLLAPSED = new Set(['waiting', 'nobody', 'briefs', 'shipped']);
+let COLLAPSED = new Set(['waiting', 'nobody', 'drafts', 'briefs', 'shipped']);
 
 /* The whole file as last read or written, kept so a write replaces only
  * `collapsedBands` and leaves every other key alone. Stays null when the read
@@ -4187,7 +4243,7 @@ async function restoreBands() {
  * survives, because then some earlier band was non-empty and this returns
  * before reaching theirs. */
 function openLeadingBand(bands) {
-  for (const key of ['waiting', 'nobody', 'briefs', 'shipped']) {
+  for (const key of ['waiting', 'nobody', 'drafts', 'briefs', 'shipped']) {
     const rows = key === 'briefs' ? bands.briefs
       : key === 'shipped' ? bands.shipped
         : bands[key];
@@ -4250,12 +4306,13 @@ function todayHtml() {
   const revRows = b.reviewsTurn.filter(matchesQuery);
   const waitRows = b.waiting.filter(matchesQuery);
   const nobodyRows = b.nobody.filter(matchesQuery);
+  const draftRows = b.drafts.filter(matchesQuery);
   const briefRows = b.briefs.filter(briefMatchesQuery);
   const shipRows = b.shipped.filter(shippedMatchesQuery);
   const shown = mineRows.length + revRows.length + waitRows.length
-    + nobodyRows.length + briefRows.length + shipRows.length;
+    + nobodyRows.length + draftRows.length + briefRows.length + shipRows.length;
   const total = b.mineTurn.length + b.reviewsTurn.length + b.waiting.length
-    + b.nobody.length + b.briefs.length + b.shipped.length;
+    + b.nobody.length + b.drafts.length + b.briefs.length + b.shipped.length;
 
   /* Filtered to nothing is NOT the cleared state and must not borrow its copy:
    * one says you are done, the other says your filter is too narrow. */
@@ -4297,6 +4354,7 @@ function todayHtml() {
       ${turnBandHtml(mineRows, revRows, trusted, zeroFilter)}
       ${bandHtml('waiting', waitRows, trusted)}
       ${bandHtml('nobody', nobodyRows, trusted)}
+      ${bandHtml('drafts', draftRows, trusted)}
       ${briefBandHtml(briefRows)}
       ${/* Last on the page. The order is the recommendation, and what I already
            shipped is the least urgent thing on a board about what needs me. */
@@ -4611,6 +4669,7 @@ function rowHtml(row) {
       ${sig ? `<span class="row-sig">${sig}</span>` : ''}
     </div>
     <div class="row-sub">${rowSubHtml(row)}</div>
+    ${row.kind === 'mine' && row.action === 'feedback' ? openFeedbackHtml(row.pr) : ''}
     ${open ? `<div class="row-drawer" id="${did}">${drawerHtml(row)}</div>`
       : `<div id="${did}" hidden></div>`}
   </div>`;
@@ -4705,7 +4764,7 @@ function rowTone(row) {
  * oi() marks it `aria-hidden`, and the label's words carry the meaning. */
 const ACTION_ICON = {
   conflicts: 'alert', ci: 'x', comments: 'comment', review: 'eye', rereview: 'eye',
-  merge: 'merge', mergeunreviewed: 'merge', rerequest: 'sync', findreviewer: 'personAdd', nudge: 'bell',
+  merge: 'merge', mergeunreviewed: 'merge', feedback: 'comment', rerequest: 'sync', findreviewer: 'personAdd', nudge: 'bell',
 };
 
 function labelBody(action, label) {
@@ -4767,6 +4826,16 @@ function actionHtml(row) {
         data-tooltip="Squash-merge into ${esc(p.base_ref || 'main')} from here. Checks GitHub first.">${labelBody(row.action, a.label)}</button>`;
     }
     return ghBadge(row, cls, a.label, '', 'Green and mergeable — merge it on GitHub');
+  }
+  if (row.action === 'feedback') {
+    /* Answering happens on GitHub (this app never replies as me), so the badge
+     * goes straight to the newest comment still waiting. */
+    const first = openFeedback(p)[0];
+    const href = first?.url || row.url;
+    const tip = 'Approved, but the reviewer left comments you haven’t answered. Reply or resolve them on GitHub, then merge.';
+    return href ? `<a class="${cls}" href="${esc(href)}" target="${LINK_TARGET}" rel="noopener"
+      ${openAttrs(p)} data-tooltip="${esc(tip)}">${labelBody(row.action, a.label)}</a>`
+      : `<span class="${cls}">${labelBody(row.action, a.label)}</span>`;
   }
   if (row.action === 'rerequest') {
     const who = (p.stale_reviewers || []).map(s => s.login).join(', ');
@@ -4918,6 +4987,7 @@ function drawerHtml(row) {
         ${p.approvals?.length ? `<span>✓ ${esc(p.approvals.join(', '))}</span>` : ''}
       </div>
       ${threadsHtml(p)}
+      ${handledFeedbackHtml(p)}
       ${resolveRowHtml(p, mineMenuHtml(row))}`;
   }
   const src = { id: row.id, q: row.q, entry: row.entry, prep: row.prepState, action: row.action };
@@ -5319,6 +5389,78 @@ function threadsHtml(p) {
         </button>
       </div>
     </div>` : ''}
+  </div>`;
+}
+
+/* ---------- approved, with comments ----------
+ *
+ * mine.py's `feedback` list reads every reviewer comment (review bodies of any
+ * state, the Conversation tab, inline threads resolved or not) and flags each
+ * one `handled` when the thread is resolved or I replied after it. An approval
+ * does not count — that is what kept an approved PR with "Approving with a
+ * minor comment still!" in the plain Merge pile. Older sweeps carry no
+ * `feedback` at all, and every helper here reads that as "nothing to say". */
+function openFeedback(p) {
+  return (p?.feedback || []).filter(f => !f.handled);
+}
+
+function hasOpenFeedback(p) {
+  return decisionOf(p) === 'APPROVED' && (p?.feedback_unhandled || 0) > 0;
+}
+
+/* Where the comment sits, in words: the review it came with, the
+ * conversation, or the file. */
+function feedbackWhere(f) {
+  if (f.kind === 'inline') return f.path ? `${f.path}${f.line ? `:${f.line}` : ''}` : 'on a line';
+  if (f.kind === 'issue_comment') return 'in the conversation';
+  if (f.review_state === 'APPROVED') return 'with their approval';
+  if (f.review_state === 'CHANGES_REQUESTED') return 'asking for changes';
+  return 'in their review';
+}
+
+function feedbackLinkHtml(p, f, text) {
+  return `<a class="fb-link" href="${esc(f.url || p.url)}" target="${LINK_TARGET}" rel="noopener"
+    ${openAttrs(p)}>${esc(text)}</a>`;
+}
+
+/* Always visible, not behind the drawer: the excerpts ARE the reason the row
+ * isn't a Merge, and on a phone "approved with comments" with nothing under it
+ * sends you to GitHub just to learn whether it's a nit. Newest first, at most
+ * three; the count says if there are more. */
+const FB_SHOWN = 3;
+
+function openFeedbackHtml(p) {
+  const fs = openFeedback(p);
+  if (!fs.length) return '';
+  const n = p.feedback_unhandled || fs.length;
+  const more = n - Math.min(fs.length, FB_SHOWN);
+  return `<div class="fb" role="group" aria-label="Comments that came with the approval">
+    <p class="fb-head">${n === 1 ? 'A comment you haven’t answered yet' : `${n} comments you haven’t answered yet`}</p>
+    <ul class="fb-list">${fs.slice(0, FB_SHOWN).map(f => `
+      <li class="fb-item">
+        <span class="fb-meta"><span class="fb-who">${esc(f.author)}</span>
+          <span class="fb-where">${esc(feedbackWhere(f))}</span></span>
+        <span class="fb-text">${esc(f.excerpt || '')}</span>
+        ${feedbackLinkHtml(p, f, 'Open on GitHub')}
+      </li>`).join('')}
+    </ul>
+    ${more > 0 ? `<p class="fb-more">…and ${more} more on GitHub.</p>` : ''}
+  </div>`;
+}
+
+/* The quiet half: comments that were resolved or answered. One muted line per
+ * comment in the drawer — proof the approval's feedback was looked at, not a
+ * reason to do anything. */
+function handledFeedbackHtml(p) {
+  const fs = (p?.feedback || []).filter(f => f.handled);
+  if (!fs.length) return '';
+  return `<div class="fb-done">
+    <p class="fb-done-head">${oi('check')}${fs.length === 1 ? 'One comment already handled'
+      : `${fs.length} comments already handled`}</p>
+    <ul class="fb-done-list">${fs.map(f => `
+      <li>${esc(f.author)} ${f.kind === 'inline' ? 'on ' : ''}${esc(feedbackWhere(f))} · ${
+        f.resolved ? 'resolved' : 'you replied'} · ${feedbackLinkHtml(p, f, 'view')}</li>`).join('')}
+    </ul>
   </div>`;
 }
 
@@ -9452,6 +9594,9 @@ async function composeComment() {
    * PR merged. Silent: it fires on the same hourly cadence as the status sweep. */
   lucidos.sse.on('ReviewQueueSnapshotted', async () => {
     await loadQueue();
+    /* queue.py runs second, so this is usually the frame that completes a
+     * manual refresh. */
+    if (refreshing && refreshLanded()) finishRefresh();
     render();
   });
   /* The my-PRs sweep overwrites one artifact, so this event carries no data —
@@ -9470,14 +9615,10 @@ async function composeComment() {
     /* The refresh trigger runs both sweeps; the queue's own event may land
      * first or second, so re-read it here too rather than racing them. */
     await loadQueue();
-    const wasManual = refreshing;
-    if (wasManual) {
-      clearTimeout(refreshTimer);
-      /* The frame won the race, so the artifact poll has nothing left to watch
-       * for. Leaving it running would re-read three files every 3s forever. */
-      clearInterval(refreshPoll);
-      refreshing = false;
-    }
+    /* Only half the sweep is done when this lands (queue.py runs after it), so
+     * keep the spinner until BOTH snapshots are newer than the click — else the
+     * button reads "Refresh" while "updated n ago" still shows the old run. */
+    if (refreshing && refreshLanded()) finishRefresh();
     render();
     /* No success toast. The refreshed rows ARE the result, and they're already
      * on screen the instant this render lands — a banner announcing that the

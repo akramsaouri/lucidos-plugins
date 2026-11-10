@@ -7,7 +7,8 @@ on my own PR was a to-do nobody ran. See knowhow/review-prep-rail.md § "Own PRs
 
 Gate, per PR in my-prs.json:
   1. not a draft
-  2. repo is listed in the Pulls config (a registered repo + artifact slug)
+  2. repo is listed in the Pulls config (a registered repo + artifact slug), in a group
+     whose `prep` is not false (lane-only groups never get own-PR prep either)
   3. no lanes file for <slug>-<pr>-<sha7> yet  -> terminal
   4. head pushed >= DEBOUNCE_MIN ago           -> a push sequence collapses to one pass
   5. no OwnPrPrepRequested for that key younger than STALE_HOURS -> in flight
@@ -36,6 +37,8 @@ def repo_table():
     """'org/repo' -> (rail, folder, slug)."""
     out = {}
     for rail in RAILS:
+        if rail.get("prep") is False:
+            continue  # lane-only group: never prepped, own PRs included
         for gh_repo, (folder, slug) in rail["repos"].items():
             out[f"{rail['org']}/{gh_repo}"] = (rail, folder, slug)
     return out
