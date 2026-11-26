@@ -11,7 +11,7 @@ an event and a trigger does the work natively.
 | Button | Event | Trigger | Does |
 |---|---|---|---|
 | Resolve conflicts | `PrConflictResolutionRequested` | Resolve PR conflicts on demand (intent) | `resolve-pr-conflicts/scripts/run.py --prepare`, then a coding agent |
-| Ask / Discuss | `ReviewQuestionAsked` | Ask about a PR on demand (intent) | `ask-about-a-pr-on-demand/scripts/run.py --prepare`, then a coding agent |
+| Ask / Discuss | — | none (trigger deleted 2026-11-25) | app calls `lucidos.ui.startThread({prompt, coding_agent:'claude-code', folder})` directly; the user presses Send |
 | Prep / Re-prep | `ReviewPrepManualRequested` | Prep a PR for review on demand (script) | emits `ReviewPrepRequested` (see `review-prep-rail`) |
 | Refresh | `PrStatusRefreshRequested` | Refresh PR status on demand (script) | runs `mine.py` and `queue.py` |
 | Open PR (every GitHub link) | `PrOpenRequested` | Open PR in browser (script) | opens the URL natively, in the config's browser |
@@ -127,6 +127,13 @@ exists upstream is the resolved copy; one with no namesake is real local work. I
 never runs it).
 
 ## Ask / Discuss
+
+**Since Pulls 0.5.0 this is no longer a rail.** The "Ask about a PR on demand" trigger is
+gone: the app opens a new thread itself with `lucidos.ui.startThread`, aimed at Claude Code
+on the PR's registered repo, with the composed prompt prefilled. Apps can't auto-submit, so
+the user presses Send. `ReviewQuestionAsked` / `ReviewQuestionThreadStarted` are no longer
+emitted, and the plugin no longer ships the trigger or its script. The notes below describe
+the old rail, for anyone reading an older workspace.
 
 The app composes the prompt (the anchor is the finding, map section or PR the user pointed
 at, already loaded in the app) and sends it with `repo` (owner/name), `number`, `sha7`,

@@ -17,8 +17,8 @@ read-only multi-agent review has usually already run, so the findings are waitin
   evidence. Pick findings and Pulls composes one submitted review for you to paste. It never posts for you.
 - **Quick reads**: a lanes triage of each PR, and the skills it recommends (why, story, behaviour, a quiz),
   on your own PRs too.
-- **Buttons**: resolve a conflict with a coding agent (rebase or merge, per repo), ask a coding agent a
-  question about a finding or a whole PR, get quizzed or drilled on a PR, refresh status, open the PR in
+- **Buttons**: resolve a conflict with a coding agent (rebase or merge, per repo), open a Claude Code
+  thread with a question about a finding or a whole PR prefilled, get quizzed or drilled on a PR, refresh status, open the PR in
   the browser you choose, and optionally merge from the row after a live pre-flight.
 - **Recall cards**: when a PR you reviewed merges, a few one-line cards on how the code works now, flagged
   the next time a PR touches the same code.

@@ -138,8 +138,8 @@ carries:
   between its shell calls), and to run `GH_CONFIG_DIR=<dir> gh api user --jq .login` first.
   If that doesn't print `payload.login`, stop and report "identity unpinned". **Never**
   `gh auth switch`. An unattended, trigger-rooted session has every command containing a
-  command substitution refused, and every `gh` call needs the trigger's **Use cloud CLIs**
-  side-effect grant;
+  command substitution refused, and every `gh` call needs the trigger's `Bash(gh:*)`
+  program grant (the user approves it on the trigger's card);
 - expand `~` from `echo $HOME` before writing any literal path into the prompt;
 - the head, `payload.head_sha`. Each skill resolves the head itself: if it differs, the PR
   moved, so **still save**, under the SHA the skill pinned (its `pr.head_sha`), and say so;
@@ -402,11 +402,11 @@ resolver is the one shipped rail that writes, and it is scoped separately (see
 - Leave the session worktree parked and clean.
 - Unattended: **no questions**. Record what you'd ask as an `observations` entry.
 
-## Side-effect grants (Command Safety)
+## Program grants (Command Safety)
 
-When Settings → Permissions → Command safety is on, the review rails need **Use cloud CLIs**
-(`cloud_cli`) for their `gh` calls; the shipped trigger.toml files declare it, and setup asks
-the user to grant it. Reads, `git fetch`, the worktree reset and `lucidos data write` are
+Category grants ended in 2026-11. The review rails need a `Bash(gh:*)` program grant for their
+`gh` calls, which the user approves on the trigger's permission card (only they can). A program grant
+never covers a write outside the workspace; that would need a folder grant. Reads, `git fetch`, the worktree reset and `lucidos data write` are
 otherwise everything they do. A run that fails naming any other grant has drifted into
 mutation: treat it as a bug, not a reason to widen the grant.
 

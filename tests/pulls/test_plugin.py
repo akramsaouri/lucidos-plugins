@@ -55,7 +55,7 @@ class ManifestTest(unittest.TestCase):
     def test_setup_covers_identity_repos_skills_grants_and_proof(self):
         for must in ("request_credential", "manage_repositories", "artifacts/review-cockpit/config.json",
                      "pr-lanes", "pr-check", "pr-recall", "~/.claude/workflows/review-prep.js",
-                     "Use cloud CLIs", "PrStatusRefreshRequested", "review-cockpit"):
+                     "Bash(gh:*)", "PrStatusRefreshRequested", "review-cockpit"):
             self.assertIn(must, self.setup)
 
 
@@ -74,7 +74,7 @@ class TriggersTest(unittest.TestCase):
             self.assertTrue(t["on"], slug)
             if t["run"]["type"] == "script":
                 self.assertTrue(os.path.exists(os.path.join(PLUGIN, t["run"]["path"])), slug)
-        self.assertEqual(found, 11)
+        self.assertEqual(found, 10)
 
     def test_every_script_compiles(self):
         for path in plugin_files():
@@ -86,7 +86,7 @@ class TriggersTest(unittest.TestCase):
         # The engine hands a script a CRED_* only when the script's own file names it.
         for rel in ("review-prep-work-prs/scripts/detect.py", "review-prep-work-prs/scripts/queue.py",
                     "review-prep-work-prs/scripts/mine.py", "refresh-pr-status-on-demand/scripts/run.py",
-                    "prep-a-pr-for-review-on-demand/scripts/run.py", "ask-about-a-pr-on-demand/scripts/run.py",
+                    "prep-a-pr-for-review-on-demand/scripts/run.py",
                     "resolve-pr-conflicts/scripts/run.py", "resolve-pr-conflicts/scripts/check_worktree.py",
                     "pr-recall-merge-watch/scripts/detect.py"):
             self.assertIn("# lucidos-credentials: CRED_GITHUB", read(os.path.join(TRIGGERS, rel)), rel)
