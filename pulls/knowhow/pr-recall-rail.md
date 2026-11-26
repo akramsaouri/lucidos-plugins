@@ -67,7 +67,7 @@ is the bare GitHub name and `folder` the registered repository.
 2. **Prefetch the PR yourself, BEFORE spawning: the child never calls `gh`.** The child is
    a trigger-rooted, unattended session: any command containing `$(...)` (or a `mktemp`
    capture, or a redirect outside the workspace) is refused outright, and every `gh` call
-   needs the trigger's **Use cloud CLIs** grant. The worker (this intent thread) does the
+   needs the trigger's `Bash(gh:*)` program grant. The worker (this intent thread) does the
    reads with `run_python`, identity pinned through `data/scripts/pulls/pulls_config.py`
    (`gh_env(payload.login, payload.gh_config_dir, payload.credential)`; the token stays in
    the subprocess env, never in a prompt or an event):

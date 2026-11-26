@@ -1,5 +1,5 @@
 id = "pulls"
-version = "0.4.0"
+version = "0.5.0"
 name = "Pulls"
 description = "Every pull request that's on you, in one place: what's blocking your own PRs (conflicts, comments, red CI, re-requests) and what's waiting for your review, with a read-only multi-agent review already prepped for each PR you're asked to review. Buttons resolve conflicts, ask a coding agent about a PR, quiz you on it and open it in your browser, and merged PRs you reviewed become recall cards. Setup asks for your GitHub login and the repos to watch, and offers the cron schedules for the PR watch and the status, queue and recall sweeps on your own cadence. Includes the Pulls Home widget."
 source = "https://github.com/akramsaouri/lucidos-plugins/tree/main/pulls"
@@ -35,10 +35,14 @@ explain the rails if the user asks how something works. All Pulls state lives un
 - These exist in `data/`: `scripts/pulls/pulls_config.py`, `scripts/pulls/harness/review-prep.js`,
   `triggers/review-prep-work-prs/scripts/detect.py`, `.../queue.py`, `.../mine.py`,
   `triggers/pr-recall-merge-watch/scripts/detect.py`, `triggers/resolve-pr-conflicts/scripts/run.py`.
-- In `lucidos triggers list`, the eleven Pulls triggers that ship with this plugin are live, and exactly one
+- In `lucidos triggers list`, the ten Pulls triggers that ship with this plugin are live, and exactly one
   trigger answers each of `ReviewPrepRequested`, `OwnPrPrepRequested`, `ReviewPrepManualRequested`,
-  `PrStatusRefreshRequested`, `PrOpenRequested`, `PrConflictResolutionRequested`, `ReviewQuestionAsked`,
+  `PrStatusRefreshRequested`, `PrOpenRequested`, `PrConflictResolutionRequested`,
   `PrConflictResolutionFinished`, `PrRecallRequested`, `PrCheckAnswersSubmitted`, `PrDrillRequested`.
+- **Updating from 0.4.x or earlier:** the "Ask about a PR on demand" trigger is gone. Ask / Discuss in the app
+  now opens a new Claude Code thread on the PR's repo with the question prefilled, and the user presses Send.
+  Nothing answers `ReviewQuestionAsked` any more; if a hand-made trigger in this workspace still does, tell the
+  user it is unused.
 - No cron trigger names a Pulls script path that is missing. If one does, update its script path with
   `triggers(action="update")`, keeping its schedule, name and settings. Never recreate or delete one.
 
@@ -119,10 +123,12 @@ the first Workflow prompt, or you add the line once they agree).
 ## 5. Command safety
 
 If Settings → Permissions → Command safety is on (ask the user if you can't tell), unattended rails can only
-run `gh` with the **Use cloud CLIs** grant. Ask the user to tick it in the Triggers panel on Review prep - PRs,
-Own PR prep, Resolve PR conflicts on demand, PR check - grade answers and PR check - drill, and **Call external
-APIs** too on PR check - grade answers. You can't set grants yourself. If command safety is off, say nothing
-about grants.
+run `gh` with a `Bash(gh:*)` program grant on the trigger. The triggers that need it are Review prep - PRs,
+Own PR prep, Resolve PR conflicts on demand, PR check - grade answers, PR check - drill and PR recall cards on
+merge. Only the user can approve a grant: either they answer **Always allow** on the permission card the first
+run raises, or you ask ahead with `lucidos ask-permission grant-trigger-programs --trigger <id> --program
+"Bash(gh:*)" --reason "<why>"` for each trigger and put the printed request id on a question card. Never
+widen it past `Bash(gh:*)`. If command safety is off, say nothing about grants.
 
 ## 6. Prove it
 

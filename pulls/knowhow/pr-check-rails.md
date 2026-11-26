@@ -41,8 +41,8 @@ child's shell calls), and first run, as its own plain command,
 unpinned"; never `gh auth switch`. **No `$(...)` anywhere in the child's commands**
 (2026-10-14): these children are trigger-rooted and unattended, so Lucidos always refuses
 command substitution there (whatever the Command guard toggle says) and refuses every
-`gh` call unless the trigger's side-effect grant has **Use cloud CLIs** ticked. The shipped
-trigger.toml files declare it; with Command safety on, the user grants it at setup. The
+`gh` call unless the trigger holds a `Bash(gh:*)` program grant. Category grants ended in 2026-11;
+The user approves the program grant on the trigger's permission card. The
 `export GH_TOKEN=$(gh auth token …)` form can never run in these sessions. An org with an IP
 allow list answers 403 "IP allow list" off its network: unreachable, not a wrong answer.
 

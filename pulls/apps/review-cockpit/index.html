@@ -143,8 +143,8 @@
                             text-decoration: none; }
       }
       .btn-inline:focus-visible { outline: 0.125rem solid transparent; box-shadow: var(--focus-ring); }
-      /* A Discuss control while its agent is starting: it reads `Starting…` and
-         takes no clicks, so it recedes rather than inviting one. */
+      /* A disabled inline control takes no clicks, so it recedes rather than
+         inviting one. */
       .btn-inline:disabled { color: var(--text-muted); cursor: default; }
       @media (hover: hover) {
         .btn-inline:disabled:hover { background-color: transparent; border-color: var(--border-color); }
@@ -1712,17 +1712,6 @@ async function saveTriage() {
 function prKey(pr) { return `${pr.repo_slug}-${pr.number}`; }
 function locKey(f) { return `${f.file}:${f.line}`; }
 /* Identity. Falls back to location only for a pre-id artifact. */
-/* The Ask / Discuss click currently in flight, or null — `{ ref, at, anchor,
- * src }`, `src` naming the PR (see discussTarget). Deliberately in-memory and NOT
- * replayed from events like RESOLVING/ADDRESSING: those lock a button for 90
- * minutes because a second click would put two agents on one branch. A question
- * is read-only and asking twice is legitimate, so the only lock is a short one —
- * that PR's Discuss controls read `Starting…` until the thread lands or
- * ASK_PATIENCE_MS runs out, so a double tap can't spawn two. Mostly it exists so
- * the tab that asked can open the thread when it lands, and a reload that
- * forgets it costs a notification, not a duplicate agent. */
-let ASKING = null;
-
 function idKey(f) { return f.id || `loc:${locKey(f)}`; }
 
 function prState(key) {
@@ -8338,24 +8327,17 @@ function tickSkillPanels() {
  * thing. A coding agent starts where the question already lives: a worktree of
  * the registered repo, toolchain present, the head's blobs local.
  *
- * SO THE CLICK IS AN EVENT, NOT A NAVIGATION. An iframe cannot spawn a process,
- * so `askAbout` emits `ReviewQuestionAsked` carrying the composed prompt, and the
- * `Ask about a PR on demand` trigger runs `spawn-thread --cc` against the
- * registered repo. Same emit -> SSE -> scheduler -> exec chain as Rebase and
- * Address comments; this is the third rail on it, and the only read-only one.
+ * SO THE CLICK OPENS A THREAD, NOT A TRIGGER. `askAbout` calls
+ * `lucidos.ui.startThread` with `coding_agent: 'claude-code'` and the PR's
+ * registered repo as `folder`, so the new chat is aimed at a coding agent on the
+ * right clone with the composed prompt prefilled. Nothing is auto-submitted: the
+ * user reads the prompt and presses Send. The prompt forbids commits, pushes and
+ * PR conversation, and the session is an ordinary interactive one, so anything
+ * reaching outside its worktree raises a permission card.
  *
- * WHAT THAT COSTS, SAID PLAINLY: the session starts on its own. There is no
- * compose box to read first, which `startThread` did give us. That is the right
- * trade only because this rail cannot write — the prompt forbids commits, pushes
- * and PR conversation, and the session is spawned `--relation top` so it is not
- * in the trigger's privilege tree: it stays interactive and anything reaching
- * outside its worktree raises a permission card. A rail that could push would
- * still need the human beat before Send.
- *
- * THE APP COMPOSES THE PROMPT, the trigger owns the repo routing. The anchor is
- * *content* — one finding with its evidence and my triage — and it lives in an
- * artifact this app has already parsed. Rebuilding that in the trigger would
- * mean a second parser for the findings schema, kept in step by hope.
+ * THE APP COMPOSES THE PROMPT. The anchor is *content* — one finding with its
+ * evidence and my triage — and it lives in an artifact this app has already
+ * parsed, so nothing else has to parse the findings schema.
  *
  * THE ANCHOR RULE — exactly one referent, never a set:
  *
@@ -8516,12 +8498,10 @@ function anchorBlock(t, anchor) {
  *   rev:<repo>#<n>     someone else's, from the review queue
  *
  * The `mine:` / `rev:` keys ARE the board row ids, so a row's ⋯ item, the
- * comments page and the panels-only page about it all name the same PR — and the
- * busy state below follows it from one surface to the next.
+ * comments page and the panels-only page about it all name the same PR.
  *
- * `repoFull` is owner/name, never the registered folder: the trigger refuses
- * anything without a slash, and resolves the gh identity and the repo table from
- * it. A findings `pr.repo` is the BARE name (`storefront`) and carries no
+ * `repoFull` is owner/name, never the registered folder: the prompt names the PR
+ * by it, and canDiscuss refuses anything without a slash. A findings `pr.repo` is the BARE name (`storefront`) and carries no
  * `repo_name`, so the PR's own URL is the source, with the review-queue row as
  * the fallback. Sweep and queue rows carry owner/name in `repo` already. Null
  * when the PR has gone from its source. */
@@ -8562,16 +8542,6 @@ function canDiscuss(src) {
   return !!t && t.repoFull.includes('/') && /^[0-9a-f]{7,40}$/.test(t.pr.sha7 || '');
 }
 
-/* How long a Discuss control stays in its `Starting…` state waiting for the
- * Started event. The spawn is usually seconds; past this it has most likely
- * failed in the trigger, which emits nothing back, and a control that stays dead
- * forever is worse than one that lets you try again. */
-const ASK_PATIENCE_MS = 2 * 60 * 1000;
-
-function discussBusy(src) {
-  return !!ASKING && ASKING.src === src && Date.now() - ASKING.at < ASK_PATIENCE_MS;
-}
-
 const DISCUSS_TITLE = 'Start a coding agent you can talk to about this PR — it reads and can run the code at this head, and it can\'t write to the PR.';
 
 /* The inline control, for the pages: the findings page's toolbar, the
@@ -8580,24 +8550,19 @@ const DISCUSS_TITLE = 'Start a coding agent you can talk to about this PR — it
  * discussion is starting, from any surface. */
 function discussBtnHtml(src, { cls = 'btn-inline', label = 'Discuss' } = {}) {
   if (!canDiscuss(src)) return '';
-  const busy = discussBusy(src);
-  return `<button type="button" class="${cls} btn-discuss" data-discuss="${esc(src)}"${
-    busy ? ' disabled aria-busy="true"' : ''} data-tooltip="${esc(DISCUSS_TITLE)}">
-    ${ICON_ASK}<span>${busy ? 'Starting…' : esc(label)}</span></button>`;
+  return `<button type="button" class="${cls} btn-discuss" data-discuss="${esc(src)}"
+    data-tooltip="${esc(DISCUSS_TITLE)}">${ICON_ASK}<span>${esc(label)}</span></button>`;
 }
 
 /* The ⋯ item, for the board's cards. It spends an agent, so it follows Address
  * and Re-prep into the menu rather than sitting inline at the weight of the read
- * routes. A menu item can't be `disabled` — the menu's arrow keys would stop on
- * a control that can't take focus — so a busy one is aria-disabled and the click
- * handler turns it away. */
+ * routes. */
 function discussMenuItem(src) {
   if (!canDiscuss(src)) return null;
-  const busy = discussBusy(src);
   return {
-    attrs: `data-discuss="${esc(src)}"${busy ? ' aria-disabled="true"' : ''}`,
+    attrs: `data-discuss="${esc(src)}"`,
     title: esc(DISCUSS_TITLE),
-    label: busy ? 'Starting a discussion…' : 'Discuss this PR…',
+    label: 'Discuss this PR…',
   };
 }
 
@@ -8607,7 +8572,6 @@ function discussMenuItem(src) {
  * reads the ask. `src` names the PR (see discussTarget); the finding-anchored Ask
  * only ever comes from the findings page. */
 async function askAbout(anchor, src = `find:${view.key}`) {
-  if (discussBusy(src)) return;
   const t = discussTarget(src);
   if (!t) {
     lucidos.ui.toast('That PR is gone from the board — nothing was sent', 'error');
@@ -8638,9 +8602,6 @@ async function askAbout(anchor, src = `find:${view.key}`) {
     multiline: true,
   });
   if (q === null || !q.trim()) return;
-  /* A second surface for the same PR may have started one while this prompt
-   * was open. */
-  if (discussBusy(src)) return;
 
   const prompt = [
     q.trim(),
@@ -8654,37 +8615,17 @@ async function askAbout(anchor, src = `find:${view.key}`) {
     readInstructions(pr),
   ].join('\n');
 
-  /* One id per click, minted here. The spawn is asynchronous and every open tab
-   * sees the Started event, so this is how the tab that ASKED recognises its own
-   * question and opens the thread, while a second window stays where it is. */
-  const ref = `${t.key}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-
-  /* Busy BEFORE the emit, so a double tap during the round trip can't send two;
-   * re-rendered so every control naming this PR shows it. The timer re-renders
-   * once patience runs out, which is what re-enables a control whose spawn never
-   * reported back. */
-  ASKING = { ref, at: Date.now(), anchor: anchor.kind, src };
-  render();
-  setTimeout(() => { if (ASKING?.ref === ref) render(); }, ASK_PATIENCE_MS + 100);
-
+  /* DIRECT SPAWN (Pulls 0.5.0): no trigger in between. The
+   * "Ask about a PR on demand" trigger is gone; the app opens a new thread
+   * itself, aimed at a Claude Code agent on the PR's registered repo, with the
+   * composed prompt prefilled. The host never auto-submits an app's prompt, so
+   * the last step is Send in the compose box. */
   try {
-    await lucidos.events.emit('ReviewQuestionAsked', {
-      summary: `${t.key} — asked about ${anchor.kind === 'finding' ? anchor.id : 'the PR'}`,
-      pr: t.key, anchor: anchor.kind, ref: anchor.id || '',
-      sha7: pr.sha7, question: q.trim(),
-      /* What the trigger needs to spawn: the repo it routes on (owner/name — see
-       * repoFull above), the PR the session is about, and the prompt itself —
-       * which only this app can build, because the anchor is content out of
-       * artifacts it has already parsed. */
-      repo: repoFull, number: pr.number,
-      head_sha: pr.head_sha || pr.sha7, folder: repoFolder(pr),
-      url: pr.url || '', client_ref: ref, prompt,
+    await lucidos.ui.startThread({
+      prompt, coding_agent: 'claude-code', folder: repoFolder(pr),
     });
-    lucidos.ui.toast('Starting a coding agent on your question…', 'info',
-      { key: 'ask', spinning: true });
   } catch (err) {
-    if (ASKING?.ref === ref) { ASKING = null; render(); }
-    lucidos.ui.toast('Failed to start the agent', 'error', { key: 'ask' });
+    lucidos.ui.toast('Failed to open a thread for the question', 'error', { key: 'ask' });
   }
 }
 
@@ -9190,10 +9131,9 @@ function wire() {
 
   /* `Discuss` — the PR-as-a-whole anchor, from every surface (see
    * discussTarget). The source rides on the control and is resolved at click
-   * time; a busy one (aria-disabled in a ⋯ menu) is turned away here. */
+   * time. */
   root.querySelectorAll('[data-discuss]').forEach(el => el.addEventListener('click', async (ev) => {
     ev.stopPropagation();
-    if (el.getAttribute('aria-disabled') === 'true') return;
     await askAbout({ kind: 'pr' }, el.dataset.discuss);
   }));
 
@@ -9704,32 +9644,6 @@ async function composeComment() {
         source: 'review-cockpit',
       });
     } catch (err) { /* the hourly sweep will catch up */ }
-  });
-  /* The Ask rail's only lifecycle event: the coding agent is up. The tab that
-   * asked navigates straight into it — a question you just typed should land you
-   * in the answer, not in a toast you have to go looking for. Every OTHER open
-   * tab matches no `client_ref` and stays put, which is the whole reason the id
-   * is minted at click time rather than derived from the PR. */
-  lucidos.sse.on('ReviewQuestionThreadStarted', async (data) => {
-    const mine = ASKING && data?.client_ref && data.client_ref === ASKING.ref;
-    if (!mine) return;
-    ASKING = null;
-    render();
-    if (!data.thread_id && data.sc_worktree) {
-      lucidos.ui.toast(`Agent started in an external worktree (${data.sc_worktree})`,
-        'success', { key: 'ask' });
-      return;
-    }
-    if (!data.thread_id) {
-      /* Spawned, but the CLI's link didn't parse — the session is real and
-       * running, so this is a navigation failure, not a spawn failure. Say
-       * exactly that rather than implying nothing happened. */
-      lucidos.ui.toast('The agent started, but I couldn\'t link the thread — it\'s in your thread list',
-        'warning', { key: 'ask' });
-      return;
-    }
-    lucidos.ui.dismissToast('ask');
-    await lucidos.ui.navigate('thread', { id: data.thread_id });
   });
   /* The stranded-worktree verdict arrives a beat after Finished — the checker is
    * its own trigger, and it fetches before it can answer. Silent: the card grows
